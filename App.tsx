@@ -26,6 +26,7 @@ import {
   HelperText,
   Icon,
   List,
+  Menu,
   PaperProvider,
   Portal,
   SegmentedButtons,
@@ -36,6 +37,13 @@ import {
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  I18nProvider,
+  languageLabel,
+  languageOptions,
+  useI18n,
+  type Translate,
+} from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import {
   KhieProviderSession,
@@ -58,13 +66,18 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={walletTheme}>
-        <WalletApp />
+        <I18nProvider>
+          <WalletApp />
+        </I18nProvider>
       </PaperProvider>
     </SafeAreaProvider>
   );
 }
 
 function WalletApp() {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const vault = useMemo(() => new SecureStoreWalletVault(), []);
   const approvalQueue = useMemo(() => new ApprovalQueue(), []);
   const clients = useRef({
@@ -97,7 +110,7 @@ function WalletApp() {
     void vault
       .loadProfile()
       .then(setProfile)
-      .catch((cause: unknown) => setNotice(errorMessage(cause)))
+      .catch((cause: unknown) => setNotice(errorMessage(cause, tRef.current)))
       .finally(() => setLoading(false));
   }, [vault]);
 
@@ -154,7 +167,7 @@ function WalletApp() {
       },
     });
     sessionRef.current = session;
-    void session.start().catch((cause: unknown) => setNotice(errorMessage(cause)));
+    void session.start().catch((cause: unknown) => setNotice(errorMessage(cause, tRef.current)));
     return () => {
       approvalQueue.cancelAll("Khie session closed");
       sessionRef.current = undefined;
@@ -225,7 +238,7 @@ function WalletApp() {
           vault={vault}
           onMode={setOnboarding}
           onComplete={finishOnboarding}
-          onError={(cause) => setNotice(errorMessage(cause))}
+          onError={(cause) => setNotice(errorMessage(cause, t))}
         />
       </SafeAreaView>
     );
@@ -264,7 +277,7 @@ function WalletApp() {
             vault={vault}
             onRecovered={(next) => {
               setProfile(next);
-              setNotice("钱包密钥已恢复");
+              setNotice(t("walletKeyRecovered"));
             }}
           />
         ) : null}
@@ -290,10 +303,11 @@ function WalletApp() {
 }
 
 function LoadingScreen() {
+  const { t } = useI18n();
   return (
     <SafeAreaView style={[styles.safe, styles.center]}>
       <ActivityIndicator size="large" />
-      <Text variant="bodyLarge">正在读取钱包资料…</Text>
+      <Text variant="bodyLarge">{t("loadingWallet")}</Text>
     </SafeAreaView>
   );
 }
@@ -311,6 +325,7 @@ function OnboardingScreen({
   onComplete: (profile: WalletProfile) => void;
   onError: (cause: unknown) => void;
 }) {
+  const { t } = useI18n();
   const [mnemonic, setMnemonic] = useState("");
   const [word3, setWord3] = useState("");
   const [word9, setWord9] = useState("");
@@ -342,13 +357,14 @@ function OnboardingScreen({
   if (mode === "start") {
     return (
       <View style={[styles.page, styles.center]}>
+        <LanguageMenu />
         <Icon source="wallet" size={64} color={walletTheme.colors.primary} />
         <Text variant="displaySmall">Khie Wallet</Text>
-        <Text variant="bodyLarge" style={styles.centerText}>一个简单的 CKB 钱包与 Khie Provider</Text>
-        <PrimaryButton label="创建新钱包" onPress={() => void beginCreate()} disabled={busy} />
-        <SecondaryButton label="恢复钱包" onPress={() => onMode("restore")} />
+        <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
+        <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
+        <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
         <HelperText type="error" visible style={styles.centerText}>
-          开发版本，未经安全审计。主网使用风险由使用者承担。
+          {t("developmentWarning")}
         </HelperText>
       </View>
     );
@@ -358,19 +374,19 @@ function OnboardingScreen({
     return (
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <BackButton onPress={() => onMode("start")} />
-        <Text variant="headlineMedium">恢复钱包</Text>
-        <Text variant="bodyMedium">输入 12 或 24 词英文 BIP-39 助记词。</Text>
+        <Text variant="headlineMedium">{t("restoreWallet")}</Text>
+        <Text variant="bodyMedium">{t("enterMnemonic")}</Text>
         <WalletTextInput
           style={styles.mnemonicInput}
           multiline
-          label="助记词"
+          label={t("mnemonic")}
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="word1 word2 …"
           value={mnemonic}
           onChangeText={setMnemonic}
         />
-        <PrimaryButton label={busy ? "正在保存…" : "恢复"} onPress={() => void save(mnemonic)} disabled={busy} />
+        <PrimaryButton label={busy ? t("saving") : t("restore")} onPress={() => void save(mnemonic)} disabled={busy} />
       </ScrollView>
     );
   }
@@ -380,9 +396,9 @@ function OnboardingScreen({
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <BackButton onPress={() => onMode("start")} />
-      <Text variant="headlineMedium">备份助记词</Text>
+      <Text variant="headlineMedium">{t("backupMnemonic")}</Text>
       <HelperText type="error" visible>
-        按顺序抄写。任何人拿到这些词都可以控制钱包。
+        {t("backupWarning")}
       </HelperText>
       <View style={styles.words}>
         {words.map((word, index) => (
@@ -391,9 +407,9 @@ function OnboardingScreen({
           </Chip>
         ))}
       </View>
-      <WalletTextInput label="输入第 3 个词" autoCapitalize="none" value={word3} onChangeText={setWord3} />
-      <WalletTextInput label="输入第 9 个词" autoCapitalize="none" value={word9} onChangeText={setWord9} />
-      <PrimaryButton label={busy ? "正在保存…" : "确认并创建"} onPress={() => void save(mnemonic)} disabled={!confirmed || busy} />
+      <WalletTextInput label={t("enterWord3")} autoCapitalize="none" value={word3} onChangeText={setWord3} />
+      <WalletTextInput label={t("enterWord9")} autoCapitalize="none" value={word9} onChangeText={setWord9} />
+      <PrimaryButton label={busy ? t("saving") : t("confirmCreate")} onPress={() => void save(mnemonic)} disabled={!confirmed || busy} />
     </ScrollView>
   );
 }
@@ -407,7 +423,8 @@ function HomeScreen({
   network: Network;
   onNavigate: (screen: Screen) => void;
 }) {
-  const [address, setAddress] = useState("正在生成地址…");
+  const { t } = useI18n();
+  const [address, setAddress] = useState(() => t("addressGenerating"));
   const [balance, setBalance] = useState("—");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -425,34 +442,34 @@ function HomeScreen({
       try {
         setAddress(await signer.getRecommendedAddress());
       } catch {
-        setAddress("地址读取失败");
+        setAddress(t("addressReadFailed"));
       }
-      setBalance("读取失败");
+      setBalance(t("readFailed"));
     } finally {
       setRefreshing(false);
     }
-  }, [signer]);
+  }, [signer, t]);
 
   useEffect(() => void refresh(), [refresh, network]);
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.balanceBlock}>
-        <Text variant="labelLarge">{network === "testnet" ? "CKB 测试网" : "CKB 主网"}</Text>
+        <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
         <Text variant="displayMedium">{balance}</Text>
         <Text variant="titleMedium">CKB</Text>
       </View>
       <PaperCard mode="outlined">
-        <PaperCard.Title title="钱包地址" left={(props) => <Icon {...props} source="identifier" />} />
+        <PaperCard.Title title={t("walletAddress")} left={(props) => <Icon {...props} source="identifier" />} />
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
         <PaperCard.Actions>
           <PaperButton icon="refresh" loading={refreshing} disabled={refreshing} onPress={() => void refresh()}>
-            刷新
+            {t("refresh")}
           </PaperButton>
           <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
-            收款
+            {t("receive")}
           </PaperButton>
         </PaperCard.Actions>
       </PaperCard>
@@ -461,6 +478,7 @@ function HomeScreen({
 }
 
 function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void }) {
+  const { t } = useI18n();
   const [address, setAddress] = useState("");
   useEffect(() => {
     void signer?.getRecommendedAddress().then(setAddress);
@@ -468,7 +486,7 @@ function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <BackButton onPress={onBack} />
-      <Text variant="headlineMedium">收款</Text>
+      <Text variant="headlineMedium">{t("receive")}</Text>
       <PaperCard mode="elevated">
         <PaperCard.Content style={styles.qrContent}>
           {address ? <QRCode value={address} size={230} /> : <ActivityIndicator />}
@@ -496,6 +514,7 @@ function KhieScreen({
   onRetryRelay: () => Promise<boolean>;
   onUnpair: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [endpoint, setEndpoint] = useState("");
   const pair = async () => {
     if (await onPair(endpoint)) {
@@ -506,27 +525,27 @@ function KhieScreen({
   const remoteActive = state.remotePeer?.active === true;
   const connectionPath = remoteActive
     ? state.remotePeer?.direct
-      ? "WebRTC 直连"
-      : "Relay 连接"
-    : "等待网页重连";
+      ? t("webRtcDirect")
+      : t("relayConnection")
+    : t("waitingWebReconnect");
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <View style={styles.screenTitleRow}>
         <View style={styles.flex}>
           <Text variant="headlineMedium">Khie</Text>
-          <Text variant="bodyMedium">P2P 钱包连接</Text>
+          <Text variant="bodyMedium">{t("p2pWalletConnection")}</Text>
         </View>
         <ConnectionState
           ready={state.paired ? remoteActive : state.ready && state.relayConnected}
           label={
             state.paired
               ? remoteActive
-                ? "已连接"
-                : "已配对"
+                ? t("connected")
+                : t("paired")
               : state.relayConnected
-                ? "可连接"
-                : "准备中"
+                ? t("available")
+                : t("preparing")
           }
         />
       </View>
@@ -535,29 +554,29 @@ function KhieScreen({
         <PaperCard mode="elevated">
           <PaperCard.Content style={styles.pairingProgress}>
             <ActivityIndicator size="large" />
-            <Text variant="titleLarge">正在建立安全连接</Text>
-            <Text variant="bodyMedium">请保持当前页面打开</Text>
-            <PaperButton mode="text" onPress={onCancelPairing}>取消配对</PaperButton>
+            <Text variant="titleLarge">{t("establishingSecureConnection")}</Text>
+            <Text variant="bodyMedium">{t("keepPageOpen")}</Text>
+            <PaperButton mode="text" onPress={onCancelPairing}>{t("cancelPairing")}</PaperButton>
           </PaperCard.Content>
         </PaperCard>
       ) : state.paired ? (
         <PaperCard mode="elevated">
           <PaperCard.Title
-            title={state.remotePeer?.name ?? "网页 Connector"}
+            title={state.remotePeer?.name ?? t("webConnector")}
             subtitle={connectionPath}
             left={(props) => <Icon {...props} source="web" />}
           />
           <PaperCard.Content style={styles.cardContent}>
             <List.Item
-              title={remoteActive ? "网页在线" : "网页离线"}
-              description={remoteActive ? "可以发起查询和签名请求" : "Connector 重拨后会自动恢复"}
+              title={remoteActive ? t("webOnline") : t("webOffline")}
+              description={remoteActive ? t("canRequest") : t("reconnectsAutomatically")}
               left={(props) => <List.Icon {...props} icon={remoteActive ? "check-circle" : "progress-clock"} />}
             />
             <Divider />
             <View style={styles.metadataBlock}>
               <Text variant="labelMedium">Peer ID</Text>
               <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
-                {state.remotePeer?.id ?? "正在读取 peer 信息…"}
+                {state.remotePeer?.id ?? t("readingPeer")}
               </Text>
               {state.remotePeer?.agentVersion ? (
                 <Text variant="labelSmall" numberOfLines={1}>{state.remotePeer.agentVersion}</Text>
@@ -565,26 +584,26 @@ function KhieScreen({
             </View>
             <Divider />
             <List.Item
-              title="等待网页请求"
-              description="连接、消息和交易签名都会单独确认"
+              title={t("waitingWebRequest")}
+              description={t("requestsConfirmedSeparately")}
               left={(props) => <List.Icon {...props} icon="shield-check" />}
             />
           </PaperCard.Content>
           <PaperCard.Actions>
             <PaperButton icon="link-off" textColor={walletTheme.colors.error} onPress={() => void onUnpair()}>
-              解除配对
+              {t("unpair")}
             </PaperButton>
           </PaperCard.Actions>
         </PaperCard>
       ) : (
         <PaperCard mode="elevated">
           <PaperCard.Title
-            title="连接网页"
-            subtitle="选择任意一种方式，结果完全相同"
+            title={t("connectWeb")}
+            subtitle={t("pairingMethodsEqual")}
             left={(props) => <Icon {...props} source="connection" />}
           />
           <PaperCard.Content style={styles.cardContent}>
-            <Text variant="titleSmall">网页扫描手机</Text>
+            <Text variant="titleSmall">{t("webScansPhone")}</Text>
             {state.endpoint ? (
               <>
                 <View style={styles.qrFrame}>
@@ -598,21 +617,21 @@ function KhieScreen({
               <View style={styles.qrPlaceholder}>
                 <ActivityIndicator />
                 <Text variant="bodyMedium">
-                  {state.relayConnected ? "正在生成配对码…" : "正在连接 Relay…"}
+                  {state.relayConnected ? t("generatingPairingCode") : t("connectingRelay")}
                 </Text>
                 {state.ready && !state.relayConnected ? (
-                  <PaperButton icon="refresh" onPress={() => void onRetryRelay()}>重试 Relay</PaperButton>
+                  <PaperButton icon="refresh" onPress={() => void onRetryRelay()}>{t("retryRelay")}</PaperButton>
                 ) : null}
               </View>
             )}
             <Divider />
-            <Text variant="titleSmall">手机扫描网页</Text>
+            <Text variant="titleSmall">{t("phoneScansWeb")}</Text>
             <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
-              扫描 Connector 配对码
+              {t("scanConnectorCode")}
             </PaperButton>
             <WalletTextInput
               dense
-              label="Connector 配对地址"
+              label={t("connectorEndpoint")}
               autoCapitalize="none"
               autoCorrect={false}
               value={endpoint}
@@ -631,7 +650,7 @@ function KhieScreen({
 
       {state.error && !pairing ? (
         <HelperText type="error" visible>
-          {formatKhieError(state.error)}
+          {formatKhieError(state.error, t)}
         </HelperText>
       ) : null}
     </ScrollView>
@@ -639,6 +658,7 @@ function KhieScreen({
 }
 
 function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanned: (value: string) => void }) {
+  const { t } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const scanned = useRef(false);
   if (!permission) {
@@ -648,10 +668,10 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
     return (
       <View style={[styles.page, styles.center]}>
         <Icon source="camera" size={48} color={walletTheme.colors.primary} />
-        <Text variant="titleLarge" style={styles.centerText}>需要相机权限</Text>
-        <Text variant="bodyMedium" style={styles.centerText}>用于扫描 Khie 配对二维码。</Text>
-        <PrimaryButton label="允许相机" onPress={() => void requestPermission()} />
-        <SecondaryButton label="返回" onPress={onCancel} />
+        <Text variant="titleLarge" style={styles.centerText}>{t("cameraPermissionRequired")}</Text>
+        <Text variant="bodyMedium" style={styles.centerText}>{t("cameraPermissionReason")}</Text>
+        <PrimaryButton label={t("allowCamera")} onPress={() => void requestPermission()} />
+        <SecondaryButton label={t("back")} onPress={onCancel} />
       </View>
     );
   }
@@ -669,8 +689,8 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
       />
       <View style={styles.scanGuide} />
       <View style={styles.scanFooter}>
-        <Text variant="titleMedium" style={styles.scanText}>扫描 role=connector 的 Khie 二维码</Text>
-        <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>取消</PaperButton>
+        <Text variant="titleMedium" style={styles.scanText}>{t("scanConnectorQr")}</Text>
+        <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancel")}</PaperButton>
       </View>
     </View>
   );
@@ -687,6 +707,7 @@ function SettingsScreen({
   vault: SecureStoreWalletVault;
   onRecovered: (profile: WalletProfile) => void;
 }) {
+  const { t } = useI18n();
   const [secret, setSecret] = useState<{ label: string; value: string }>();
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
@@ -694,32 +715,38 @@ function SettingsScreen({
   const reveal = async (kind: "mnemonic" | "privateKey") => {
     try {
       setSecret({
-        label: kind === "mnemonic" ? "助记词" : "私钥",
+        label: kind === "mnemonic" ? t("mnemonic") : t("privateKey"),
         value: kind === "mnemonic" ? await backend.exportMnemonic() : await backend.exportPrivateKey(),
       });
     } catch (cause) {
-      Alert.alert("无法显示", errorMessage(cause));
+      Alert.alert(t("unableToDisplay"), errorMessage(cause, t));
     }
   };
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Text variant="headlineMedium">设置与导出</Text>
+      <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
       <PaperCard mode="outlined">
-        <PaperCard.Title title="账户信息" left={(props) => <Icon {...props} source="account-key" />} />
+        <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
+        <PaperCard.Content>
+          <LanguageMenu />
+        </PaperCard.Content>
+      </PaperCard>
+      <PaperCard mode="outlined">
+        <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
         <PaperCard.Content style={styles.cardContent}>
           <View style={styles.metadataBlock}>
-            <Text variant="labelMedium">派生路径</Text>
+            <Text variant="labelMedium">{t("derivationPath")}</Text>
             <Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text>
           </View>
           <Divider />
           <View style={styles.metadataBlock}>
-            <Text variant="labelMedium">公钥</Text>
+            <Text variant="labelMedium">{t("publicKey")}</Text>
             <Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text>
           </View>
         </PaperCard.Content>
         <PaperCard.Actions>
-          <PaperButton icon="eye-lock" onPress={() => void reveal("privateKey")}>查看私钥</PaperButton>
-          <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>查看助记词</PaperButton>
+          <PaperButton icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
+          <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton>
         </PaperCard.Actions>
       </PaperCard>
       {secret ? (
@@ -729,27 +756,27 @@ function SettingsScreen({
             <Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text>
           </PaperCard.Content>
           <PaperCard.Actions>
-            <PaperButton icon="eye-off" onPress={() => setSecret(undefined)}>隐藏</PaperButton>
+            <PaperButton icon="eye-off" onPress={() => setSecret(undefined)}>{t("hide")}</PaperButton>
           </PaperCard.Actions>
         </PaperCard>
       ) : null}
       <HelperText type="error" visible>
-        导出内容只保留在当前页面；离开前请隐藏。
+        {t("exportWarning")}
       </HelperText>
       <PaperCard mode="outlined">
         <PaperCard.Title
-          title="密钥恢复"
+          title={t("keyRecovery")}
           left={(props) => <Icon {...props} source="backup-restore" />}
         />
         <PaperCard.Content style={styles.cardContent}>
           <Text variant="bodyMedium">
-            系统认证条目失效时，用原助记词重新写入 Android Keystore。
+            {t("keyRecoveryDescription")}
           </Text>
           {showRecovery ? (
             <WalletTextInput
               style={styles.mnemonicInput}
               multiline
-              label="助记词"
+              label={t("mnemonic")}
               autoCapitalize="none"
               autoCorrect={false}
               value={recoveryMnemonic}
@@ -765,7 +792,7 @@ function SettingsScreen({
               setRecoveryMnemonic("");
             }}
           >
-            {showRecovery ? "取消" : "用助记词恢复"}
+            {showRecovery ? t("cancel") : t("recoverWithMnemonic")}
           </PaperButton>
           {showRecovery ? (
             <PaperButton
@@ -782,11 +809,11 @@ function SettingsScreen({
                     setShowRecovery(false);
                     onRecovered(next);
                   })
-                  .catch((cause: unknown) => Alert.alert("恢复失败", errorMessage(cause)))
+                  .catch((cause: unknown) => Alert.alert(t("recoveryFailed"), errorMessage(cause, t)))
                   .finally(() => setRecovering(false));
               }}
             >
-              验证并恢复
+              {t("verifyAndRecover")}
             </PaperButton>
           ) : null}
         </PaperCard.Actions>
@@ -806,6 +833,7 @@ function ApprovalModal({
   signer?: Signer;
   onRespond: (approved: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [fee, setFee] = useState<string>();
   useEffect(() => {
     setFee(undefined);
@@ -814,30 +842,30 @@ function ApprovalModal({
     void item.request.transaction
       .getFee(signer.client)
       .then((value) => active && setFee(`${fixedPointToString(value)} CKB`))
-      .catch(() => active && setFee("无法解析"));
+      .catch(() => active && setFee(t("unableToParse")));
     return () => {
       active = false;
     };
-  }, [item, signer]);
+  }, [item, signer, t]);
   if (!item) return null;
   return (
     <Portal>
       <Dialog visible onDismiss={() => onRespond(false)}>
         <Dialog.Icon icon={approvalIcon(item.request)} />
-        <Dialog.Title>{approvalTitle(item.request)}</Dialog.Title>
+        <Dialog.Title>{approvalTitle(item.request, t)}</Dialog.Title>
         <Dialog.ScrollArea style={styles.dialogScrollArea}>
           <ScrollView contentContainerStyle={styles.dialogContent}>
             <View style={styles.metadataBlock}>
-              <Text variant="labelMedium">网络</Text>
-              <Text variant="bodyLarge">{approvalNetwork(item.request, network)}</Text>
+              <Text variant="labelMedium">{t("network")}</Text>
+              <Text variant="bodyLarge">{approvalNetwork(item.request, network, t)}</Text>
             </View>
             <Divider />
           <ApprovalDetails request={item.request} fee={fee} />
           </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>
-          <PaperButton textColor={walletTheme.colors.error} onPress={() => onRespond(false)}>拒绝</PaperButton>
-          <PaperButton mode="contained" onPress={() => onRespond(true)}>允许</PaperButton>
+          <PaperButton textColor={walletTheme.colors.error} onPress={() => onRespond(false)}>{t("deny")}</PaperButton>
+          <PaperButton mode="contained" onPress={() => onRespond(true)}>{t("allow")}</PaperButton>
         </Dialog.Actions>
       </Dialog>
     </Portal>
@@ -845,13 +873,14 @@ function ApprovalModal({
 }
 
 function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation; fee?: string }) {
+  const { t } = useI18n();
   if (request.method === "connect") {
-    return <Text variant="bodyMedium">网页将可以读取地址，并继续发起需要单独确认的签名请求。</Text>;
+    return <Text variant="bodyMedium">{t("connectApprovalDescription")}</Text>;
   }
   if (request.method === "sign_message") {
     return (
       <PaperCard mode="contained">
-        <PaperCard.Title title="消息" />
+        <PaperCard.Title title={t("message")} />
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{request.message.value}</Text>
         </PaperCard.Content>
@@ -861,14 +890,14 @@ function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation;
   const tx = request.transaction;
   return (
     <PaperCard mode="contained">
-      <PaperCard.Title title="交易摘要" />
+      <PaperCard.Title title={t("transactionSummary")} />
       <PaperCard.Content style={styles.cardContent}>
         <View style={styles.metadataBlock}>
-          <Text variant="labelMedium">交易哈希</Text>
+          <Text variant="labelMedium">{t("transactionHash")}</Text>
           <Text variant="bodySmall" selectable style={styles.mono}>{tx.hash()}</Text>
         </View>
-        <List.Item title={`${tx.inputs.length} 个输入`} left={(props) => <List.Icon {...props} icon="import" />} />
-        <List.Item title={`${tx.outputs.length} 个输出`} left={(props) => <List.Icon {...props} icon="export" />} />
+        <List.Item title={t("inputCount", { count: tx.inputs.length })} left={(props) => <List.Icon {...props} icon="import" />} />
+        <List.Item title={t("outputCount", { count: tx.outputs.length })} left={(props) => <List.Icon {...props} icon="export" />} />
         {tx.outputs.slice(0, 6).map((output, index) => (
           <Text key={index} variant="bodySmall" style={styles.mono}>
             #{index + 1} {fixedPointToString(output.capacity)} CKB · {output.lock.codeHash.slice(0, 14)}…
@@ -876,8 +905,8 @@ function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation;
         ))}
         <Divider />
         <View style={styles.metadataBlock}>
-          <Text variant="labelMedium">手续费</Text>
-          <Text variant="bodyLarge">{fee ?? "正在解析…"}</Text>
+          <Text variant="labelMedium">{t("fee")}</Text>
+          <Text variant="bodyLarge">{fee ?? t("parsing")}</Text>
         </View>
       </PaperCard.Content>
     </PaperCard>
@@ -890,30 +919,31 @@ function approvalIcon(request: SignerJsonRpcConfirmation) {
   return "file-sign";
 }
 
-function approvalTitle(request: SignerJsonRpcConfirmation) {
-  if (request.method === "connect") return "网页请求连接";
-  if (request.method === "sign_message") return "确认消息签名";
-  return "确认交易签名";
+function approvalTitle(request: SignerJsonRpcConfirmation, t: Translate) {
+  if (request.method === "connect") return t("webRequestsConnection");
+  if (request.method === "sign_message") return t("confirmMessageSignature");
+  return t("confirmTransactionSignature");
 }
 
-function approvalNetwork(request: SignerJsonRpcConfirmation, fallback: Network) {
+function approvalNetwork(request: SignerJsonRpcConfirmation, fallback: Network, t: Translate) {
   if (request.method === "connect") {
-    if (request.networkId === "ckb-mainnet") return "CKB 主网";
-    if (request.networkId === "ckb-testnet") return "CKB 测试网";
+    if (request.networkId === "ckb-mainnet") return t("ckbMainnet");
+    if (request.networkId === "ckb-testnet") return t("ckbTestnet");
     return request.networkId;
   }
-  return fallback === "mainnet" ? "CKB 主网" : "CKB 测试网";
+  return fallback === "mainnet" ? t("ckbMainnet") : t("ckbTestnet");
 }
 
 function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network: Network) => void }) {
+  const { t } = useI18n();
   return (
     <SegmentedButtons
       density="small"
       value={value}
       onValueChange={(next) => onChange(next as Network)}
       buttons={[
-        { value: "testnet", label: "测试网", showSelectedCheck: false },
-        { value: "mainnet", label: "主网", showSelectedCheck: false },
+        { value: "testnet", label: t("testnet"), showSelectedCheck: false },
+        { value: "mainnet", label: t("mainnet"), showSelectedCheck: false },
       ]}
       style={styles.networkSwitch}
     />
@@ -921,10 +951,11 @@ function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network
 }
 
 function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (screen: Screen) => void }) {
+  const { t } = useI18n();
   const routes = [
-    { key: "home", title: "账户", focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
+    { key: "home", title: t("account"), focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
     { key: "khie", title: "Khie", focusedIcon: "connection", unfocusedIcon: "connection" },
-    { key: "settings", title: "设置", focusedIcon: "cog", unfocusedIcon: "cog-outline" },
+    { key: "settings", title: t("settings"), focusedIcon: "cog", unfocusedIcon: "cog-outline" },
   ];
   const selected = current === "receive" ? "home" : current;
   const index = Math.max(0, routes.findIndex(({ key }) => key === selected));
@@ -936,6 +967,42 @@ function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (scre
       safeAreaInsets={{ bottom: 0 }}
       onTabPress={({ route }) => onNavigate(route.key as Screen)}
     />
+  );
+}
+
+function LanguageMenu() {
+  const { preference, setPreference, t } = useI18n();
+  const [visible, setVisible] = useState(false);
+  const choose = (next: Parameters<typeof setPreference>[0]) => {
+    setVisible(false);
+    setPreference(next);
+  };
+
+  return (
+    <Menu
+      visible={visible}
+      onDismiss={() => setVisible(false)}
+      anchor={
+        <PaperButton mode="outlined" icon="translate" onPress={() => setVisible(true)}>
+          {languageLabel(preference, t)}
+        </PaperButton>
+      }
+    >
+      <Menu.Item
+        leadingIcon={preference === "system" ? "check" : "cellphone-cog"}
+        title={t("followSystem")}
+        onPress={() => choose("system")}
+      />
+      <Divider />
+      {languageOptions.map((option) => (
+        <Menu.Item
+          key={option.value}
+          leadingIcon={preference === option.value ? "check" : undefined}
+          title={option.label}
+          onPress={() => choose(option.value)}
+        />
+      ))}
+    </Menu>
   );
 }
 
@@ -965,7 +1032,8 @@ function WalletTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
-  return <PaperButton compact icon="arrow-left" onPress={onPress} style={styles.backButton}>返回</PaperButton>;
+  const { t } = useI18n();
+  return <PaperButton compact icon="arrow-left" onPress={onPress} style={styles.backButton}>{t("back")}</PaperButton>;
 }
 
 function ConnectionState({ label, ready }: { label: string; ready: boolean }) {
@@ -977,12 +1045,13 @@ function ConnectionState({ label, ready }: { label: string; ready: boolean }) {
 }
 
 function Notice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  const { t } = useI18n();
   return (
     <Portal>
       <Snackbar
         visible
         onDismiss={onDismiss}
-        action={{ label: "关闭", onPress: onDismiss }}
+        action={{ label: t("close"), onPress: onDismiss }}
         wrapperStyle={styles.snackbar}
       >
         {text}
@@ -991,22 +1060,35 @@ function Notice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   );
 }
 
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : "操作失败";
+function errorMessage(cause: unknown, t: Translate): string {
+  if (!(cause instanceof Error)) return t("operationFailed");
+  const exactErrors: Partial<Record<string, Parameters<Translate>[0]>> = {
+    "请输入有效的 12 或 24 词英文 BIP-39 助记词": "invalidMnemonic",
+    "新钱包需要 128 位安全随机熵": "invalidEntropy",
+    "无法从助记词派生 CKB 账户": "derivationFailed",
+    "助记词与当前账户不匹配": "mnemonicMismatch",
+    "请先在 Android 系统中启用生物识别认证": "biometricRequired",
+    "Invalid profile": "invalidProfile",
+  };
+  const key = exactErrors[cause.message];
+  if (key) return t(key);
+  const unsupported = cause.message.match(/^不支持的网络：(.+)$/);
+  if (unsupported) return t("unsupportedNetwork", { network: unsupported[1] ?? "" });
+  return cause.message;
 }
 
-function formatKhieError(message: string): string {
+function formatKhieError(message: string, t: Translate): string {
   if (message.startsWith("Expected a connector pairing endpoint")) {
-    return "这不是网页 Connector 的配对码，请扫描网页端生成的二维码。";
+    return t("wrongPairingRole");
   }
   if (message === "Pairing endpoint is not a valid URL") {
-    return "配对地址不是有效链接。";
+    return t("invalidPairingUrl");
   }
   if (message === "Pairing endpoint is incomplete") {
-    return "配对地址不完整，请重新扫描或粘贴。";
+    return t("incompletePairingUrl");
   }
   if (message === "Pairing endpoint contains invalid compressed addresses") {
-    return "配对地址已损坏或与当前 Khie 版本不兼容。";
+    return t("damagedPairingUrl");
   }
   return message;
 }

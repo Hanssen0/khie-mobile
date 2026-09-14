@@ -5,8 +5,10 @@
     "scheme": "khie-wallet",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.example.khiewallet",
+      "icon": "./assets/icon.png",
       "permissions": [
         "CAMERA",
         "USE_BIOMETRIC",
@@ -21,11 +23,24 @@
         "android.permission.VIBRATE"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#111827"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#fef4f7"
       }
     },
     "plugins": [
       "./plugins/withAndroidAbiSplits",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant",
+            "hak"
+          ]
+        }
+      ],
       [
         "expo-camera",
         {

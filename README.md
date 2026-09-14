@@ -11,6 +11,7 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 - Derive one CKB account at `m/44'/309'/0'/0/0`.
 - Testnet/mainnet address and balance, receive QR, authenticated mnemonic/private-key export.
 - Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
+- System-aware and manually selectable UI languages: English, 简体中文, 正體中文 and 客家語.
 - A deliberately small React Native Paper MD3 presentation layer, with wallet-specific theme tokens and replaceable wrapper components.
 - Replaceable internal `SigningBackend`; Khie never reads or exposes a private-key field.
 
