@@ -1,0 +1,59 @@
+# Khie Wallet
+
+Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khie `SignerJsonRpc` protocol.
+
+## Included
+
+- Create a 12-word BIP-39 wallet or restore a 12/24-word English mnemonic.
+- Derive one CKB account at `m/44'/309'/0'/0/0`.
+- Testnet/mainnet address and balance, receive QR, authenticated mnemonic/private-key export.
+- Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
+- Replaceable internal `SigningBackend`; Khie never reads or exposes a private-key field.
+
+This MVP intentionally excludes in-app transfers, tokens, history, persistent dapp authorization and release signing.
+
+## Android development build
+
+Prerequisites: Node.js 24, pnpm 12, JDK 17 or newer, Android Studio/SDK, an emulator or USB device with biometric authentication enrolled.
+
+Make sure Gradle can find the SDK through `ANDROID_HOME`/`ANDROID_SDK_ROOT`, or set `sdk.dir` in `android/local.properties` after prebuild.
+
+```sh
+pnpm install
+pnpm prebuild --platform android
+pnpm android
+```
+
+Expo Go cannot run this app because `react-native-webrtc` requires native modules. The generated `android/` directory is intentionally ignored and should be regenerated from `app.json`.
+
+For a local development APK after prebuild:
+
+```sh
+cd android
+./gradlew assembleDebug
+```
+
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+## Checks
+
+```sh
+pnpm typecheck
+pnpm test
+pnpm doctor:expo
+```
+
+Golden tests verify the mobile zlib pairing endpoint codec in both directions against `@ckb-ccc/libp2p`.
+
+## Khie behavior
+
+- Default relay: `/dns4/relay.ckbccc.com/tcp/443/wss`
+- Pairing protocol: `/nervos-ckb/khie/pairing/0.0.1`
+- RPC protocol: `/nervos-ckb/khie/json-rpc/0.0.1`
+- 1 MiB request limit, 120 second approval timeout and 30 minute disconnected pairing expiry.
+- Pairings are process-scoped. Restarting the app requires pairing again.
+- Entering the background cancels pending approvals. Returning to the foreground performs one lightweight relay/direct-address check; the connector's retry and inbound dialing remain the main recovery path.
+
+## Limitations and risk
+
+This is a development MVP, not a production wallet. It has not received a security audit, release hardening or Play Store review. Testnet is the default. Mainnet use and asset risk are the user's responsibility. Real-device acceptance still requires testing both QR directions, relay-only operation and an observed `direct === true` WebRTC connection against the current CCC Connector page.

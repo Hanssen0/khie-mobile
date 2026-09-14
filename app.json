@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Khie Wallet",
+    "slug": "khie-wallet",
+    "scheme": "khie-wallet",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "android": {
+      "package": "com.example.khiewallet",
+      "permissions": [
+        "CAMERA",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "INTERNET",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.VIBRATE"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#111827"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 Khie Wallet 扫描配对二维码。",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "允许 Khie Wallet 验证身份后使用钱包。"
+        }
+      ]
+    ],
+    "extra": {
+      "relayMultiaddr": "/dns4/relay.ckbccc.com/tcp/443/wss"
+    },
+    "ios": {
+      "bundleIdentifier": "com.example.khiewallet"
+    }
+  }
+}

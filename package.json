@@ -1,0 +1,62 @@
+{
+  "name": "khie-wallet",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "packageManager": "pnpm@12.3.4",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "doctor:expo": "EXPO_NO_TELEMETRY=1 pnpm dlx expo-doctor@latest"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "17.0.0",
+    "@chainsafe/libp2p-yamux": "8.0.1",
+    "@ckb-ccc/core": "1.21.0",
+    "@ckb-ccc/libp2p": "0.2.1",
+    "@craftzdog/react-native-buffer": "6.1.0",
+    "@libp2p/circuit-relay-v2": "4.2.13",
+    "@libp2p/identify": "4.1.13",
+    "@libp2p/interface": "3.3.0",
+    "@libp2p/interface-internal": "3.1.13",
+    "@libp2p/utils": "7.4.1",
+    "@libp2p/webrtc": "6.0.32",
+    "@libp2p/websockets": "10.1.21",
+    "@multiformats/multiaddr": "13.0.3",
+    "@scure/bip32": "2.0.1",
+    "@scure/bip39": "2.0.1",
+    "event-target-shim": "6.0.2",
+    "expo": "57.0.22",
+    "expo-camera": "57.0.4",
+    "expo-crypto": "57.0.3",
+    "expo-secure-store": "57.0.4",
+    "expo-status-bar": "57.0.1",
+    "fflate": "0.8.2",
+    "it-length-prefixed": "11.0.1",
+    "libp2p": "3.3.11",
+    "process": "0.11.10",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-qrcode-svg": "6.3.24",
+    "react-native-svg": "15.15.5",
+    "react-native-url-polyfill": "3.0.0",
+    "react-native-webrtc": "124.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.7",
+    "typescript": "6.0.3",
+    "vitest": "4.0.18"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": ["react-native-webrtc"]
+      }
+    }
+  }
+}

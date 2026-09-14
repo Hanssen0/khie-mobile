@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+android/
+ios/
+dist/
+coverage/
+*.jks
+*.keystore
+*.mobileprovision
+.DS_Store
+*.log
