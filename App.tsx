@@ -27,6 +27,7 @@ import {
   Divider,
   HelperText,
   Icon,
+  IconButton,
   List,
   Menu,
   PaperProvider,
@@ -476,7 +477,16 @@ function HomeScreen({
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.balanceBlock}>
         <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
-        <Text variant="displayMedium">{balance}</Text>
+        <View style={styles.balanceValue}>
+          <Text variant="displayMedium">{balance}</Text>
+          <IconButton
+            icon="refresh"
+            loading={refreshing}
+            disabled={refreshing}
+            accessibilityLabel={t("refresh")}
+            onPress={() => void refresh()}
+          />
+        </View>
         <Text variant="titleMedium">CKB</Text>
       </View>
       <PaperCard mode="outlined">
@@ -485,9 +495,6 @@ function HomeScreen({
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
         <PaperCard.Actions>
-          <PaperButton icon="refresh" loading={refreshing} disabled={refreshing} onPress={() => void refresh()}>
-            {t("refresh")}
-          </PaperButton>
           <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
             {t("receive")}
           </PaperButton>
@@ -1123,6 +1130,7 @@ const styles = StyleSheet.create({
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
+  balanceValue: { flexDirection: "row", alignItems: "center", gap: 4 },
   cardContent: { gap: 12 },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
