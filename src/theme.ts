@@ -1,6 +1,10 @@
-import { MD3LightTheme, type MD3Theme } from "react-native-paper";
+import {
+  MD3DarkTheme,
+  MD3LightTheme,
+  type MD3Theme,
+} from "react-native-paper";
 
-export const walletTheme: MD3Theme = {
+export const walletLightTheme: MD3Theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
@@ -39,6 +43,49 @@ export const walletTheme: MD3Theme = {
       level3: "#E6E9F4",
       level4: "#E4E7F2",
       level5: "#E0E4F0",
+    },
+  },
+};
+
+export const walletDarkTheme: MD3Theme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: "#AFC6FF",
+    onPrimary: "#002E69",
+    primaryContainer: "#16447F",
+    onPrimaryContainer: "#D9E2FF",
+    secondary: "#BEC6DC",
+    onSecondary: "#283141",
+    secondaryContainer: "#3E4759",
+    onSecondaryContainer: "#DAE2F9",
+    tertiary: "#DDBCE1",
+    onTertiary: "#3F2845",
+    tertiaryContainer: "#573E5D",
+    onTertiaryContainer: "#FAD8FD",
+    error: "#FFB4AB",
+    onError: "#690005",
+    errorContainer: "#93000A",
+    onErrorContainer: "#FFDAD6",
+    background: "#111318",
+    onBackground: "#E2E2E9",
+    surface: "#111318",
+    onSurface: "#E2E2E9",
+    surfaceVariant: "#44464F",
+    onSurfaceVariant: "#C5C6D0",
+    outline: "#8F909A",
+    outlineVariant: "#44464F",
+    inverseSurface: "#E2E2E9",
+    inverseOnSurface: "#2F3036",
+    inversePrimary: "#315DA8",
+    elevation: {
+      ...MD3DarkTheme.colors.elevation,
+      level0: "transparent",
+      level1: "#191B22",
+      level2: "#1D2029",
+      level3: "#222633",
+      level4: "#242936",
+      level5: "#272C3A",
     },
   },
 };

@@ -5,6 +5,7 @@
     "scheme": "khie-wallet",
     "version": "0.1.0",
     "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.example.khiewallet",

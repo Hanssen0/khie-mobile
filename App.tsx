@@ -12,6 +12,7 @@ import {
   AppState,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -34,6 +35,7 @@ import {
   Snackbar,
   Text,
   TextInput as PaperTextInput,
+  useTheme,
 } from "react-native-paper";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -59,7 +61,7 @@ import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
 import { clientForNetwork, networkFromId } from "./src/wallet/network";
 import type { Network, WalletProfile } from "./src/wallet/types";
 import { generateMnemonic, persistWallet } from "./src/wallet/walletService";
-import { walletTheme } from "./src/theme";
+import { walletDarkTheme, walletLightTheme } from "./src/theme";
 
 type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "restore";
@@ -67,9 +69,12 @@ type Onboarding = "start" | "create" | "restore";
 const endpointUrl = "https://app.ckbccc.com/khie";
 
 export default function App() {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === "dark" ? walletDarkTheme : walletLightTheme;
+
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={walletTheme}>
+      <PaperProvider theme={theme}>
         <I18nProvider>
           <WalletApp />
         </I18nProvider>
@@ -80,6 +85,7 @@ export default function App() {
 
 function WalletApp() {
   const { t } = useI18n();
+  const theme = useTheme();
   const tRef = useRef(t);
   tRef.current = t;
   const vault = useMemo(
@@ -240,8 +246,8 @@ function WalletApp() {
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar style="auto" />
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+        <StatusBar style={theme.dark ? "light" : "dark"} />
         {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
         <OnboardingScreen
           mode={onboarding}
@@ -255,8 +261,8 @@ function WalletApp() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar style="auto" />
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+      <StatusBar style={theme.dark ? "light" : "dark"} />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
       <Appbar.Header statusBarHeight={0}>
         <Appbar.Content title="Khie Wallet" />
@@ -314,8 +320,11 @@ function WalletApp() {
 
 function LoadingScreen() {
   const { t } = useI18n();
+  const theme = useTheme();
   return (
-    <SafeAreaView style={[styles.safe, styles.center]}>
+    <SafeAreaView
+      style={[styles.safe, styles.center, { backgroundColor: theme.colors.background }]}
+    >
       <ActivityIndicator size="large" />
       <Text variant="bodyLarge">{t("loadingWallet")}</Text>
     </SafeAreaView>
@@ -336,6 +345,7 @@ function OnboardingScreen({
   onError: (cause: unknown) => void;
 }) {
   const { t } = useI18n();
+  const theme = useTheme();
   const [mnemonic, setMnemonic] = useState("");
   const [word3, setWord3] = useState("");
   const [word9, setWord9] = useState("");
@@ -368,7 +378,7 @@ function OnboardingScreen({
     return (
       <View style={[styles.page, styles.center]}>
         <LanguageMenu />
-        <Icon source="wallet" size={64} color={walletTheme.colors.primary} />
+        <Icon source="wallet" size={64} color={theme.colors.primary} />
         <Text variant="displaySmall">Khie Wallet</Text>
         <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
         <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
@@ -525,6 +535,7 @@ function KhieScreen({
   onUnpair: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const theme = useTheme();
   const { width } = useWindowDimensions();
   const [endpoint, setEndpoint] = useState("");
   const qrSize = Math.max(180, Math.min(420, width - 64));
@@ -572,7 +583,7 @@ function KhieScreen({
       ) : state.paired ? (
         <View style={styles.khieContent}>
           <View style={styles.khieSectionHeader}>
-            <Icon source="web" size={32} color={walletTheme.colors.primary} />
+            <Icon source="web" size={32} color={theme.colors.primary} />
             <View style={styles.flex}>
               <Text variant="titleLarge">{state.remotePeer?.name ?? t("webConnector")}</Text>
               <Text variant="bodyMedium">{connectionPath}</Text>
@@ -601,7 +612,7 @@ function KhieScreen({
           />
           <PaperButton
             icon="link-off"
-            textColor={walletTheme.colors.error}
+            textColor={theme.colors.error}
             onPress={() => void onUnpair()}
             style={styles.khieAction}
           >
@@ -611,7 +622,7 @@ function KhieScreen({
       ) : (
         <View style={styles.khieContent}>
           <View style={styles.khieSectionHeader}>
-            <Icon source="connection" size={32} color={walletTheme.colors.primary} />
+            <Icon source="connection" size={32} color={theme.colors.primary} />
             <View style={styles.flex}>
               <Text variant="titleLarge">{t("connectWeb")}</Text>
               <Text variant="bodyMedium">{t("pairingMethodsEqual")}</Text>
@@ -676,6 +687,7 @@ function KhieScreen({
 
 function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanned: (value: string) => void }) {
   const { t } = useI18n();
+  const theme = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const scanned = useRef(false);
   if (!permission) {
@@ -684,7 +696,7 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
   if (!permission.granted) {
     return (
       <View style={[styles.page, styles.center]}>
-        <Icon source="camera" size={48} color={walletTheme.colors.primary} />
+        <Icon source="camera" size={48} color={theme.colors.primary} />
         <Text variant="titleLarge" style={styles.centerText}>{t("cameraPermissionRequired")}</Text>
         <Text variant="bodyMedium" style={styles.centerText}>{t("cameraPermissionReason")}</Text>
         <PrimaryButton label={t("allowCamera")} onPress={() => void requestPermission()} />
@@ -851,6 +863,7 @@ function ApprovalModal({
   onRespond: (approved: boolean) => void;
 }) {
   const { t } = useI18n();
+  const theme = useTheme();
   const [fee, setFee] = useState<string>();
   useEffect(() => {
     setFee(undefined);
@@ -881,7 +894,7 @@ function ApprovalModal({
           </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>
-          <PaperButton textColor={walletTheme.colors.error} onPress={() => onRespond(false)}>{t("deny")}</PaperButton>
+          <PaperButton textColor={theme.colors.error} onPress={() => onRespond(false)}>{t("deny")}</PaperButton>
           <PaperButton mode="contained" onPress={() => onRespond(true)}>{t("allow")}</PaperButton>
         </Dialog.Actions>
       </Dialog>
@@ -1032,12 +1045,13 @@ function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: (
 }
 
 function SecondaryButton({ label, onPress, disabled, danger }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
+  const theme = useTheme();
   return (
     <PaperButton
       mode="outlined"
       disabled={disabled}
       onPress={onPress}
-      textColor={danger ? walletTheme.colors.error : undefined}
+      textColor={danger ? theme.colors.error : undefined}
     >
       {label}
     </PaperButton>
@@ -1129,7 +1143,7 @@ function formatKhieError(message: string, t: Translate): string {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: walletTheme.colors.background },
+  safe: { flex: 1 },
   body: { flex: 1 },
   page: { padding: 20, gap: 16 },
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
@@ -1149,13 +1163,13 @@ const styles = StyleSheet.create({
   khieMethod: { gap: 12 },
   khieAction: { alignSelf: "flex-start" },
   qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
-  qrFrame: { alignSelf: "center", padding: 12, borderRadius: walletTheme.roundness * 2, backgroundColor: "white" },
+  qrFrame: { alignSelf: "center", padding: 12, borderRadius: 12, backgroundColor: "white" },
   qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
   dialogScrollArea: { maxHeight: 480, paddingHorizontal: 0 },
   dialogContent: { gap: 16, paddingHorizontal: 24, paddingVertical: 16 },
   snackbar: { marginBottom: 88 },
   scanner: { flex: 1, backgroundColor: "black" },
-  scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: walletTheme.roundness * 5, alignSelf: "center", top: "25%" },
+  scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: 30, alignSelf: "center", top: "25%" },
   scanFooter: { position: "absolute", left: 20, right: 20, bottom: 30, gap: 12 },
   scanText: { color: "white", textAlign: "center" },
   flex: { flex: 1 },
