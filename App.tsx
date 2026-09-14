@@ -8,30 +8,30 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   AppState,
-  Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
 import {
+  ActivityIndicator,
   Appbar,
   BottomNavigation,
   Button as PaperButton,
   Card as PaperCard,
   Chip,
+  Dialog,
+  Divider,
   HelperText,
+  Icon,
+  List,
   PaperProvider,
   Portal,
   SegmentedButtons,
   Snackbar,
-  Surface,
   Text,
   TextInput as PaperTextInput,
-  useTheme,
 } from "react-native-paper";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -47,7 +47,7 @@ import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
 import { clientForNetwork, networkFromId } from "./src/wallet/network";
 import type { Network, WalletProfile } from "./src/wallet/types";
 import { generateMnemonic, persistWallet } from "./src/wallet/walletService";
-import { walletSemanticColors, walletTheme } from "./src/theme";
+import { walletTheme } from "./src/theme";
 
 type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "restore";
@@ -235,8 +235,8 @@ function WalletApp() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="auto" />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-      <Appbar.Header statusBarHeight={0} style={styles.appHeader}>
-        <Appbar.Content title="Khie Wallet" titleStyle={styles.appTitle} />
+      <Appbar.Header statusBarHeight={0}>
+        <Appbar.Content title="Khie Wallet" />
         <NetworkSwitch value={network} onChange={changeNetwork} />
       </Appbar.Header>
       <View style={styles.body}>
@@ -293,7 +293,7 @@ function LoadingScreen() {
   return (
     <SafeAreaView style={[styles.safe, styles.center]}>
       <ActivityIndicator size="large" />
-      <Text style={styles.muted}>正在读取钱包资料…</Text>
+      <Text variant="bodyLarge">正在读取钱包资料…</Text>
     </SafeAreaView>
   );
 }
@@ -342,11 +342,14 @@ function OnboardingScreen({
   if (mode === "start") {
     return (
       <View style={[styles.page, styles.center]}>
-        <Text style={styles.hero}>Khie Wallet</Text>
-        <Text style={styles.subtitle}>一个简单的 CKB 钱包与 Khie Provider</Text>
+        <Icon source="wallet" size={64} color={walletTheme.colors.primary} />
+        <Text variant="displaySmall">Khie Wallet</Text>
+        <Text variant="bodyLarge" style={styles.centerText}>一个简单的 CKB 钱包与 Khie Provider</Text>
         <PrimaryButton label="创建新钱包" onPress={() => void beginCreate()} disabled={busy} />
         <SecondaryButton label="恢复钱包" onPress={() => onMode("restore")} />
-        <Text style={styles.warning}>开发版本，未经安全审计。主网使用风险由使用者承担。</Text>
+        <HelperText type="error" visible style={styles.centerText}>
+          开发版本，未经安全审计。主网使用风险由使用者承担。
+        </HelperText>
       </View>
     );
   }
@@ -355,11 +358,12 @@ function OnboardingScreen({
     return (
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <BackButton onPress={() => onMode("start")} />
-        <Text style={styles.heading}>恢复钱包</Text>
-        <Text style={styles.muted}>输入 12 或 24 词英文 BIP-39 助记词。</Text>
+        <Text variant="headlineMedium">恢复钱包</Text>
+        <Text variant="bodyMedium">输入 12 或 24 词英文 BIP-39 助记词。</Text>
         <WalletTextInput
-          style={[styles.input, styles.mnemonicInput]}
+          style={styles.mnemonicInput}
           multiline
+          label="助记词"
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="word1 word2 …"
@@ -376,20 +380,19 @@ function OnboardingScreen({
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <BackButton onPress={() => onMode("start")} />
-      <Text style={styles.heading}>备份助记词</Text>
-      <Text style={styles.warning}>按顺序抄写。任何人拿到这些词都可以控制钱包。</Text>
+      <Text variant="headlineMedium">备份助记词</Text>
+      <HelperText type="error" visible>
+        按顺序抄写。任何人拿到这些词都可以控制钱包。
+      </HelperText>
       <View style={styles.words}>
         {words.map((word, index) => (
-          <View key={`${word}-${index}`} style={styles.word}>
-            <Text style={styles.wordIndex}>{index + 1}</Text>
-            <Text>{word}</Text>
-          </View>
+          <Chip key={`${word}-${index}`} compact mode="flat">
+            {index + 1}. {word}
+          </Chip>
         ))}
       </View>
-      <Text style={styles.label}>输入第 3 个词</Text>
-      <WalletTextInput style={styles.input} autoCapitalize="none" value={word3} onChangeText={setWord3} />
-      <Text style={styles.label}>输入第 9 个词</Text>
-      <WalletTextInput style={styles.input} autoCapitalize="none" value={word9} onChangeText={setWord9} />
+      <WalletTextInput label="输入第 3 个词" autoCapitalize="none" value={word3} onChangeText={setWord3} />
+      <WalletTextInput label="输入第 9 个词" autoCapitalize="none" value={word9} onChangeText={setWord9} />
       <PrimaryButton label={busy ? "正在保存…" : "确认并创建"} onPress={() => void save(mnemonic)} disabled={!confirmed || busy} />
     </ScrollView>
   );
@@ -434,15 +437,25 @@ function HomeScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.networkLabel}>{network === "testnet" ? "CKB 测试网" : "CKB 主网"}</Text>
-      <Text style={styles.balance}>{balance}</Text>
-      <Text style={styles.unit}>CKB</Text>
-      <Card>
-        <Text style={styles.label}>地址</Text>
-        <Text selectable style={styles.mono}>{address}</Text>
-      </Card>
-      <PrimaryButton label="收款" onPress={() => onNavigate("receive")} />
-      <SecondaryButton label={refreshing ? "刷新中…" : "刷新余额"} onPress={() => void refresh()} disabled={refreshing} />
+      <View style={styles.balanceBlock}>
+        <Text variant="labelLarge">{network === "testnet" ? "CKB 测试网" : "CKB 主网"}</Text>
+        <Text variant="displayMedium">{balance}</Text>
+        <Text variant="titleMedium">CKB</Text>
+      </View>
+      <PaperCard mode="outlined">
+        <PaperCard.Title title="钱包地址" left={(props) => <Icon {...props} source="identifier" />} />
+        <PaperCard.Content>
+          <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
+        </PaperCard.Content>
+        <PaperCard.Actions>
+          <PaperButton icon="refresh" loading={refreshing} disabled={refreshing} onPress={() => void refresh()}>
+            刷新
+          </PaperButton>
+          <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
+            收款
+          </PaperButton>
+        </PaperCard.Actions>
+      </PaperCard>
     </ScrollView>
   );
 }
@@ -453,11 +466,15 @@ function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void
     void signer?.getRecommendedAddress().then(setAddress);
   }, [signer]);
   return (
-    <ScrollView contentContainerStyle={[styles.page, styles.center]}>
+    <ScrollView contentContainerStyle={styles.page}>
       <BackButton onPress={onBack} />
-      <Text style={styles.heading}>收款</Text>
-      {address ? <QRCode value={address} size={230} /> : <ActivityIndicator />}
-      <Text selectable style={[styles.mono, styles.centerText]}>{address}</Text>
+      <Text variant="headlineMedium">收款</Text>
+      <PaperCard mode="elevated">
+        <PaperCard.Content style={styles.qrContent}>
+          {address ? <QRCode value={address} size={230} /> : <ActivityIndicator />}
+          <Text variant="bodyMedium" selectable style={[styles.mono, styles.centerText]}>{address}</Text>
+        </PaperCard.Content>
+      </PaperCard>
     </ScrollView>
   );
 }
@@ -486,18 +503,25 @@ function KhieScreen({
     }
   };
 
+  const remoteActive = state.remotePeer?.active === true;
+  const connectionPath = remoteActive
+    ? state.remotePeer?.direct
+      ? "WebRTC 直连"
+      : "Relay 连接"
+    : "等待网页重连";
+
   return (
-    <ScrollView contentContainerStyle={styles.khiePage} keyboardShouldPersistTaps="handled">
-      <View style={styles.khieTitleRow}>
+    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <View style={styles.screenTitleRow}>
         <View style={styles.flex}>
-          <Text style={styles.heading}>Khie</Text>
-          <Text style={styles.muted}>P2P 钱包连接</Text>
+          <Text variant="headlineMedium">Khie</Text>
+          <Text variant="bodyMedium">P2P 钱包连接</Text>
         </View>
         <ConnectionState
-          ready={state.paired ? state.remotePeer?.active === true : state.ready && state.relayConnected}
+          ready={state.paired ? remoteActive : state.ready && state.relayConnected}
           label={
             state.paired
-              ? state.remotePeer?.active
+              ? remoteActive
                 ? "已连接"
                 : "已配对"
               : state.relayConnected
@@ -508,125 +532,105 @@ function KhieScreen({
       </View>
 
       {pairing ? (
-        <Surface elevation={1} style={[styles.khieCard, styles.pairingProgress]}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.khieSectionTitle}>正在建立安全连接…</Text>
-          <Text style={[styles.muted, styles.centerText]}>请保持当前页面打开</Text>
-          <SecondaryButton label="取消配对" onPress={onCancelPairing} />
-        </Surface>
+        <PaperCard mode="elevated">
+          <PaperCard.Content style={styles.pairingProgress}>
+            <ActivityIndicator size="large" />
+            <Text variant="titleLarge">正在建立安全连接</Text>
+            <Text variant="bodyMedium">请保持当前页面打开</Text>
+            <PaperButton mode="text" onPress={onCancelPairing}>取消配对</PaperButton>
+          </PaperCard.Content>
+        </PaperCard>
       ) : state.paired ? (
-        <Surface elevation={1} style={styles.khieCard}>
-          <View style={styles.khieSectionHeader}>
-            <View style={styles.flex}>
-              <Text style={styles.khieSectionTitle}>已连接</Text>
-              <Text style={styles.muted}>网页可以发起查询与签名请求</Text>
-            </View>
-            <PaperButton compact mode="text" textColor={walletTheme.colors.error} onPress={() => void onUnpair()}>
-              解除
-            </PaperButton>
-          </View>
-
-          <View style={styles.peerDetails}>
-            <View style={styles.peerSummary}>
-              <ConnectionState
-                ready={state.remotePeer?.active === true}
-                label={state.remotePeer?.active ? "在线" : "离线"}
-              />
-              <Text style={styles.peerPath}>
-                {state.remotePeer?.active
-                  ? state.remotePeer.direct
-                    ? "WebRTC 直连"
-                    : "Relay 连接"
-                  : "等待网页重连"}
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title={state.remotePeer?.name ?? "网页 Connector"}
+            subtitle={connectionPath}
+            left={(props) => <Icon {...props} source="web" />}
+          />
+          <PaperCard.Content style={styles.cardContent}>
+            <List.Item
+              title={remoteActive ? "网页在线" : "网页离线"}
+              description={remoteActive ? "可以发起查询和签名请求" : "Connector 重拨后会自动恢复"}
+              left={(props) => <List.Icon {...props} icon={remoteActive ? "check-circle" : "progress-clock"} />}
+            />
+            <Divider />
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">Peer ID</Text>
+              <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
+                {state.remotePeer?.id ?? "正在读取 peer 信息…"}
               </Text>
+              {state.remotePeer?.agentVersion ? (
+                <Text variant="labelSmall" numberOfLines={1}>{state.remotePeer.agentVersion}</Text>
+              ) : null}
             </View>
-            <Text numberOfLines={1} style={styles.peerName}>
-              {state.remotePeer?.name ?? "网页 Connector"}
-            </Text>
-            <Text selectable numberOfLines={2} style={styles.monoSmall}>
-              {state.remotePeer?.id ?? "正在读取 peer 信息…"}
-            </Text>
-            {state.remotePeer?.agentVersion ? (
-              <Text numberOfLines={1} style={styles.peerAgent}>{state.remotePeer.agentVersion}</Text>
-            ) : null}
-          </View>
-
-          <Surface elevation={0} style={styles.requestIdle}>
-            <View style={styles.requestDot} />
-            <View style={styles.flex}>
-              <Text style={styles.requestTitle}>等待网页请求…</Text>
-              <Text style={styles.requestHint}>连接、消息和交易签名都会单独确认</Text>
-            </View>
-          </Surface>
-        </Surface>
+            <Divider />
+            <List.Item
+              title="等待网页请求"
+              description="连接、消息和交易签名都会单独确认"
+              left={(props) => <List.Icon {...props} icon="shield-check" />}
+            />
+          </PaperCard.Content>
+          <PaperCard.Actions>
+            <PaperButton icon="link-off" textColor={walletTheme.colors.error} onPress={() => void onUnpair()}>
+              解除配对
+            </PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
       ) : (
-        <Surface elevation={1} style={styles.khieCard}>
-          <View>
-            <Text style={styles.khieSectionTitle}>连接网页</Text>
-            <Text style={styles.muted}>以下两种配对方式完全等价</Text>
-          </View>
-
-          <View style={styles.pairingMethod}>
-            <Text style={styles.methodEyebrow}>方式一 · 网页扫手机</Text>
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title="连接网页"
+            subtitle="选择任意一种方式，结果完全相同"
+            left={(props) => <Icon {...props} source="connection" />}
+          />
+          <PaperCard.Content style={styles.cardContent}>
+            <Text variant="titleSmall">网页扫描手机</Text>
             {state.endpoint ? (
               <>
-                <View style={styles.compactQrCard}>
+                <View style={styles.qrFrame}>
                   <QRCode value={state.endpoint} size={142} />
                 </View>
-                <Text selectable numberOfLines={2} style={styles.endpointCopy}>
+                <Text variant="labelSmall" selectable numberOfLines={2} style={[styles.mono, styles.centerText]}>
                   {state.endpoint}
                 </Text>
               </>
             ) : (
-              <View style={styles.qrPendingCard}>
+              <View style={styles.qrPlaceholder}>
                 <ActivityIndicator />
-                <Text style={styles.muted}>
+                <Text variant="bodyMedium">
                   {state.relayConnected ? "正在生成配对码…" : "正在连接 Relay…"}
                 </Text>
                 {state.ready && !state.relayConnected ? (
-                  <Pressable onPress={() => void onRetryRelay()}>
-                    <Text style={styles.retryText}>重试 Relay</Text>
-                  </Pressable>
+                  <PaperButton icon="refresh" onPress={() => void onRetryRelay()}>重试 Relay</PaperButton>
                 ) : null}
               </View>
             )}
-          </View>
-
-          <View style={styles.orDivider}>
-            <View style={styles.orLine} />
-            <Text style={styles.orText}>或</Text>
-            <View style={styles.orLine} />
-          </View>
-
-          <View style={styles.pairingMethod}>
-            <Text style={styles.methodEyebrow}>方式二 · 手机扫网页</Text>
-            <PrimaryButton label="扫描 Connector 配对码" onPress={onScan} />
-            <View style={styles.pasteRow}>
-              <WalletTextInput
-                dense
-                style={styles.pasteInput}
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="或粘贴 role=connector 配对地址"
-                value={endpoint}
-                onChangeText={setEndpoint}
-              />
-              <PaperButton
-                compact
-                mode="contained-tonal"
-                style={styles.pasteButton}
-                disabled={!endpoint.trim()}
-                onPress={() => void pair()}
-              >
-                连接
-              </PaperButton>
-            </View>
-          </View>
-        </Surface>
+            <Divider />
+            <Text variant="titleSmall">手机扫描网页</Text>
+            <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
+              扫描 Connector 配对码
+            </PaperButton>
+            <WalletTextInput
+              dense
+              label="Connector 配对地址"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={endpoint}
+              onChangeText={setEndpoint}
+              right={
+                <PaperTextInput.Icon
+                  icon="arrow-right"
+                  disabled={!endpoint.trim()}
+                  onPress={() => void pair()}
+                />
+              }
+            />
+          </PaperCard.Content>
+        </PaperCard>
       )}
 
       {state.error && !pairing ? (
-        <HelperText type="error" visible style={styles.khieError}>
+        <HelperText type="error" visible>
           {formatKhieError(state.error)}
         </HelperText>
       ) : null}
@@ -643,7 +647,9 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
   if (!permission.granted) {
     return (
       <View style={[styles.page, styles.center]}>
-        <Text style={styles.centerText}>需要相机权限扫描 Khie 配对二维码。</Text>
+        <Icon source="camera" size={48} color={walletTheme.colors.primary} />
+        <Text variant="titleLarge" style={styles.centerText}>需要相机权限</Text>
+        <Text variant="bodyMedium" style={styles.centerText}>用于扫描 Khie 配对二维码。</Text>
         <PrimaryButton label="允许相机" onPress={() => void requestPermission()} />
         <SecondaryButton label="返回" onPress={onCancel} />
       </View>
@@ -663,8 +669,8 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
       />
       <View style={styles.scanGuide} />
       <View style={styles.scanFooter}>
-        <Text style={styles.scanText}>扫描 role=connector 的 Khie 二维码</Text>
-        <SecondaryButton label="取消" onPress={onCancel} />
+        <Text variant="titleMedium" style={styles.scanText}>扫描 role=connector 的 Khie 二维码</Text>
+        <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>取消</PaperButton>
       </View>
     </View>
   );
@@ -697,61 +703,94 @@ function SettingsScreen({
   };
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.heading}>设置与导出</Text>
-      <Card>
-        <Text style={styles.label}>派生路径</Text>
-        <Text selectable style={styles.mono}>{profile.derivationPath}</Text>
-        <Text style={styles.label}>公钥</Text>
-        <Text selectable style={styles.mono}>{profile.publicKey}</Text>
-      </Card>
-      <PrimaryButton label="认证并查看助记词" onPress={() => void reveal("mnemonic")} />
-      <SecondaryButton label="认证并查看私钥" onPress={() => void reveal("privateKey")} />
+      <Text variant="headlineMedium">设置与导出</Text>
+      <PaperCard mode="outlined">
+        <PaperCard.Title title="账户信息" left={(props) => <Icon {...props} source="account-key" />} />
+        <PaperCard.Content style={styles.cardContent}>
+          <View style={styles.metadataBlock}>
+            <Text variant="labelMedium">派生路径</Text>
+            <Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text>
+          </View>
+          <Divider />
+          <View style={styles.metadataBlock}>
+            <Text variant="labelMedium">公钥</Text>
+            <Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text>
+          </View>
+        </PaperCard.Content>
+        <PaperCard.Actions>
+          <PaperButton icon="eye-lock" onPress={() => void reveal("privateKey")}>查看私钥</PaperButton>
+          <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>查看助记词</PaperButton>
+        </PaperCard.Actions>
+      </PaperCard>
       {secret ? (
-        <Card>
-          <Text style={styles.label}>{secret.label}</Text>
-          <Text selectable style={styles.secret}>{secret.value}</Text>
-          <SecondaryButton label="隐藏" onPress={() => setSecret(undefined)} />
-        </Card>
+        <PaperCard mode="contained">
+          <PaperCard.Title title={secret.label} left={(props) => <Icon {...props} source="shield-key" />} />
+          <PaperCard.Content>
+            <Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text>
+          </PaperCard.Content>
+          <PaperCard.Actions>
+            <PaperButton icon="eye-off" onPress={() => setSecret(undefined)}>隐藏</PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
       ) : null}
-      <Text style={styles.warning}>导出内容不会持久化到页面状态之外；离开本页前请隐藏。</Text>
-      <Text style={styles.sectionTitle}>密钥恢复</Text>
-      <Text style={styles.muted}>系统认证条目失效时，可用原助记词重新写入 Android Keystore。</Text>
-      <SecondaryButton
-        label={showRecovery ? "取消恢复" : "用助记词恢复密钥"}
-        onPress={() => {
-          setShowRecovery((value) => !value);
-          setRecoveryMnemonic("");
-        }}
-      />
-      {showRecovery ? (
-        <>
-          <WalletTextInput
-            style={[styles.input, styles.mnemonicInput]}
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="输入 12 或 24 词英文助记词"
-            value={recoveryMnemonic}
-            onChangeText={setRecoveryMnemonic}
-          />
-          <PrimaryButton
-            label={recovering ? "恢复中…" : "验证并恢复"}
-            disabled={recovering || !recoveryMnemonic.trim()}
+      <HelperText type="error" visible>
+        导出内容只保留在当前页面；离开前请隐藏。
+      </HelperText>
+      <PaperCard mode="outlined">
+        <PaperCard.Title
+          title="密钥恢复"
+          left={(props) => <Icon {...props} source="backup-restore" />}
+        />
+        <PaperCard.Content style={styles.cardContent}>
+          <Text variant="bodyMedium">
+            系统认证条目失效时，用原助记词重新写入 Android Keystore。
+          </Text>
+          {showRecovery ? (
+            <WalletTextInput
+              style={styles.mnemonicInput}
+              multiline
+              label="助记词"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={recoveryMnemonic}
+              onChangeText={setRecoveryMnemonic}
+            />
+          ) : null}
+        </PaperCard.Content>
+        <PaperCard.Actions>
+          <PaperButton
+            icon={showRecovery ? "close" : "key-variant"}
             onPress={() => {
-              setRecovering(true);
-              void persistWallet(vault, recoveryMnemonic)
-                .then((next) => {
-                  setSecret(undefined);
-                  setRecoveryMnemonic("");
-                  setShowRecovery(false);
-                  onRecovered(next);
-                })
-                .catch((cause: unknown) => Alert.alert("恢复失败", errorMessage(cause)))
-                .finally(() => setRecovering(false));
+              setShowRecovery((value) => !value);
+              setRecoveryMnemonic("");
             }}
-          />
-        </>
-      ) : null}
+          >
+            {showRecovery ? "取消" : "用助记词恢复"}
+          </PaperButton>
+          {showRecovery ? (
+            <PaperButton
+              mode="contained"
+              icon="restore"
+              loading={recovering}
+              disabled={recovering || !recoveryMnemonic.trim()}
+              onPress={() => {
+                setRecovering(true);
+                void persistWallet(vault, recoveryMnemonic)
+                  .then((next) => {
+                    setSecret(undefined);
+                    setRecoveryMnemonic("");
+                    setShowRecovery(false);
+                    onRecovered(next);
+                  })
+                  .catch((cause: unknown) => Alert.alert("恢复失败", errorMessage(cause)))
+                  .finally(() => setRecovering(false));
+              }}
+            >
+              验证并恢复
+            </PaperButton>
+          ) : null}
+        </PaperCard.Actions>
+      </PaperCard>
     </ScrollView>
   );
 }
@@ -782,49 +821,73 @@ function ApprovalModal({
   }, [item, signer]);
   if (!item) return null;
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={() => onRespond(false)}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <Text style={styles.heading}>{approvalTitle(item.request)}</Text>
-          <Text style={styles.label}>网络</Text>
-          <Text>{approvalNetwork(item.request, network)}</Text>
+    <Portal>
+      <Dialog visible onDismiss={() => onRespond(false)}>
+        <Dialog.Icon icon={approvalIcon(item.request)} />
+        <Dialog.Title>{approvalTitle(item.request)}</Dialog.Title>
+        <Dialog.ScrollArea style={styles.dialogScrollArea}>
+          <ScrollView contentContainerStyle={styles.dialogContent}>
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">网络</Text>
+              <Text variant="bodyLarge">{approvalNetwork(item.request, network)}</Text>
+            </View>
+            <Divider />
           <ApprovalDetails request={item.request} fee={fee} />
-          <View style={styles.row}>
-            <View style={styles.flex}><SecondaryButton label="拒绝" onPress={() => onRespond(false)} danger /></View>
-            <View style={styles.flex}><PrimaryButton label="允许" onPress={() => onRespond(true)} /></View>
-          </View>
-        </View>
-      </View>
-    </Modal>
+          </ScrollView>
+        </Dialog.ScrollArea>
+        <Dialog.Actions>
+          <PaperButton textColor={walletTheme.colors.error} onPress={() => onRespond(false)}>拒绝</PaperButton>
+          <PaperButton mode="contained" onPress={() => onRespond(true)}>允许</PaperButton>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
   );
 }
 
 function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation; fee?: string }) {
   if (request.method === "connect") {
-    return <Text style={styles.muted}>网页将可以读取地址，并继续发起需要单独确认的签名请求。</Text>;
+    return <Text variant="bodyMedium">网页将可以读取地址，并继续发起需要单独确认的签名请求。</Text>;
   }
   if (request.method === "sign_message") {
     return (
-      <Card>
-        <Text style={styles.label}>消息</Text>
-        <Text selectable style={styles.secret}>{request.message.value}</Text>
-      </Card>
+      <PaperCard mode="contained">
+        <PaperCard.Title title="消息" />
+        <PaperCard.Content>
+          <Text variant="bodyMedium" selectable style={styles.mono}>{request.message.value}</Text>
+        </PaperCard.Content>
+      </PaperCard>
     );
   }
   const tx = request.transaction;
   return (
-    <Card>
-      <Text style={styles.label}>交易哈希</Text>
-      <Text selectable style={styles.monoSmall}>{tx.hash()}</Text>
-      <Text>输入：{tx.inputs.length}</Text>
-      <Text>输出：{tx.outputs.length}</Text>
-      {tx.outputs.slice(0, 6).map((output, index) => (
-        <Text key={index} style={styles.monoSmall}>#{index + 1} {fixedPointToString(output.capacity)} CKB · {output.lock.codeHash.slice(0, 14)}…</Text>
-      ))}
-      <Text style={styles.label}>手续费</Text>
-      <Text>{fee ?? "正在解析…"}</Text>
-    </Card>
+    <PaperCard mode="contained">
+      <PaperCard.Title title="交易摘要" />
+      <PaperCard.Content style={styles.cardContent}>
+        <View style={styles.metadataBlock}>
+          <Text variant="labelMedium">交易哈希</Text>
+          <Text variant="bodySmall" selectable style={styles.mono}>{tx.hash()}</Text>
+        </View>
+        <List.Item title={`${tx.inputs.length} 个输入`} left={(props) => <List.Icon {...props} icon="import" />} />
+        <List.Item title={`${tx.outputs.length} 个输出`} left={(props) => <List.Icon {...props} icon="export" />} />
+        {tx.outputs.slice(0, 6).map((output, index) => (
+          <Text key={index} variant="bodySmall" style={styles.mono}>
+            #{index + 1} {fixedPointToString(output.capacity)} CKB · {output.lock.codeHash.slice(0, 14)}…
+          </Text>
+        ))}
+        <Divider />
+        <View style={styles.metadataBlock}>
+          <Text variant="labelMedium">手续费</Text>
+          <Text variant="bodyLarge">{fee ?? "正在解析…"}</Text>
+        </View>
+      </PaperCard.Content>
+    </PaperCard>
   );
+}
+
+function approvalIcon(request: SignerJsonRpcConfirmation) {
+  if (request.method === "connect") return "link-variant";
+  if (request.method === "sign_message") return "message-text-lock";
+  return "file-sign";
 }
 
 function approvalTitle(request: SignerJsonRpcConfirmation) {
@@ -876,40 +939,21 @@ function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (scre
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <PaperCard mode="outlined" style={styles.paperCard}>
-      <PaperCard.Content style={styles.paperCardContent}>{children}</PaperCard.Content>
-    </PaperCard>
-  );
-}
-
 function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
   return (
-    <PaperButton
-      mode="contained"
-      disabled={disabled}
-      onPress={onPress}
-      style={styles.paperButton}
-      contentStyle={styles.paperButtonContent}
-      labelStyle={styles.paperButtonLabel}
-    >
+    <PaperButton mode="contained" disabled={disabled} onPress={onPress}>
       {label}
     </PaperButton>
   );
 }
 
 function SecondaryButton({ label, onPress, disabled, danger }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
-  const theme = useTheme();
   return (
     <PaperButton
       mode="outlined"
       disabled={disabled}
       onPress={onPress}
-      textColor={danger ? theme.colors.error : undefined}
-      style={[styles.paperButton, danger && { borderColor: theme.colors.error }]}
-      contentStyle={styles.paperButtonContent}
-      labelStyle={styles.paperButtonLabel}
+      textColor={danger ? walletTheme.colors.error : undefined}
     >
       {label}
     </PaperButton>
@@ -921,18 +965,12 @@ function WalletTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
-  return <Pressable onPress={onPress}><Text style={styles.back}>‹ 返回</Text></Pressable>;
+  return <PaperButton compact icon="arrow-left" onPress={onPress} style={styles.backButton}>返回</PaperButton>;
 }
 
 function ConnectionState({ label, ready }: { label: string; ready: boolean }) {
   return (
-    <Chip
-      compact
-      mode="outlined"
-      avatar={<View style={[styles.connectionDot, ready && styles.connectionDotReady]} />}
-      style={styles.connectionState}
-      textStyle={styles.connectionLabel}
-    >
+    <Chip compact mode={ready ? "flat" : "outlined"} icon={ready ? "check-circle" : "progress-clock"}>
       {label}
     </Chip>
   );
@@ -977,78 +1015,27 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: walletTheme.colors.background },
   body: { flex: 1 },
   page: { padding: 20, gap: 16 },
-  center: { justifyContent: "center", alignItems: "center" },
+  center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
-  appHeader: { paddingHorizontal: 4, backgroundColor: walletTheme.colors.surface },
-  appTitle: { fontSize: 20, fontWeight: "700" },
-  hero: { fontSize: 34, fontWeight: "800", color: walletTheme.colors.onBackground },
-  heading: { fontSize: 25, fontWeight: "700", color: walletTheme.colors.onBackground },
-  subtitle: { fontSize: 16, color: walletTheme.colors.onSurfaceVariant, marginBottom: 18 },
-  muted: { color: walletTheme.colors.onSurfaceVariant },
-  warning: { color: walletTheme.colors.error, lineHeight: 20 },
-  networkLabel: { textAlign: "center", color: walletTheme.colors.onSurfaceVariant },
-  balance: { textAlign: "center", fontSize: 44, fontWeight: "700", color: walletTheme.colors.onBackground },
-  unit: { textAlign: "center", marginTop: -14, color: walletTheme.colors.onSurfaceVariant },
-  paperCard: { backgroundColor: walletTheme.colors.surface },
-  paperCardContent: { gap: 10, paddingVertical: 2 },
-  qrCard: { backgroundColor: walletTheme.colors.surface, borderRadius: 14, padding: 18, alignSelf: "center" },
-  label: { fontSize: 13, fontWeight: "600", color: walletTheme.colors.onSurfaceVariant, marginTop: 4 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginTop: 10 },
-  mono: { fontFamily: "monospace", lineHeight: 21 },
-  monoSmall: { fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
-  secret: { fontFamily: "monospace", lineHeight: 22, color: walletTheme.colors.onSurface },
-  input: { backgroundColor: walletTheme.colors.surface, fontSize: 16 },
-  mnemonicInput: { minHeight: 150, textAlignVertical: "top" },
-  endpointInput: { minHeight: 90, textAlignVertical: "top", fontSize: 12 },
+  screenTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
+  cardContent: { gap: 12 },
+  metadataBlock: { gap: 4 },
+  mono: { fontFamily: "monospace" },
+  mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
   words: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  word: { width: "31%", flexDirection: "row", gap: 6, backgroundColor: "white", padding: 10, borderRadius: 8 },
-  wordIndex: { color: "#8a93a3", fontSize: 12 },
-  paperButton: { alignSelf: "stretch" },
-  paperButtonContent: { minHeight: 48 },
-  paperButtonLabel: { fontSize: 15, fontWeight: "700" },
-  dangerText: { color: walletTheme.colors.error },
-  disabled: { opacity: 0.45 },
-  back: { fontSize: 16, color: walletTheme.colors.primary },
+  backButton: { alignSelf: "flex-start", marginLeft: -12 },
   networkSwitch: { width: 170, marginRight: 8 },
-  khiePage: { padding: 20, gap: 14 },
-  khieTitleRow: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
-  connectionState: { alignSelf: "flex-start", backgroundColor: walletTheme.colors.surface },
-  connectionDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: walletTheme.colors.outline },
-  connectionDotReady: { backgroundColor: walletSemanticColors.success },
-  connectionLabel: { color: walletTheme.colors.onSurfaceVariant, fontSize: 12, fontWeight: "600" },
-  khieCard: { gap: 12, borderRadius: 16, backgroundColor: walletTheme.colors.surface, padding: 16 },
-  khieSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  khieSectionTitle: { color: walletTheme.colors.onSurface, fontSize: 18, fontWeight: "700", marginBottom: 3 },
-  pairingProgress: { minHeight: 300, alignItems: "center", justifyContent: "center" },
-  pairingMethod: { gap: 9 },
-  methodEyebrow: { color: "#596273", fontSize: 12, fontWeight: "700" },
-  compactQrCard: { width: 158, height: 158, alignSelf: "center", alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: walletTheme.colors.outlineVariant, borderRadius: 12, backgroundColor: "white" },
-  endpointCopy: { minHeight: 31, color: "#7a8495", fontFamily: "monospace", fontSize: 9, lineHeight: 13, textAlign: "center" },
-  qrPendingCard: { height: 189, alignItems: "center", justifyContent: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: "#e0e5ed", borderRadius: 10, backgroundColor: "#f9fafb" },
-  retryText: { color: "#2563eb", fontSize: 13, fontWeight: "700" },
-  orDivider: { height: 17, flexDirection: "row", alignItems: "center", gap: 9 },
-  orLine: { height: StyleSheet.hairlineWidth, flex: 1, backgroundColor: "#d5dae3" },
-  orText: { color: "#98a1b0", fontSize: 11 },
-  pasteRow: { flexDirection: "row", gap: 8 },
-  pasteInput: { height: 44, flex: 1, minWidth: 0, backgroundColor: walletTheme.colors.surface, fontFamily: "monospace", fontSize: 10 },
-  pasteButton: { minWidth: 70, alignSelf: "stretch", justifyContent: "center" },
-  peerDetails: { gap: 10, borderRadius: 12, backgroundColor: walletTheme.colors.surfaceVariant, padding: 13 },
-  peerSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  peerPath: { color: "#596273", fontSize: 12, fontWeight: "600" },
-  peerName: { color: "#111827", fontSize: 14, fontWeight: "700" },
-  peerAgent: { color: "#7a8495", fontSize: 10 },
-  requestIdle: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, backgroundColor: walletTheme.colors.surfaceVariant, padding: 14 },
-  requestDot: { width: 9, height: 9, borderRadius: 99, backgroundColor: walletSemanticColors.success },
-  requestTitle: { color: "#111827", fontSize: 14, fontWeight: "700" },
-  requestHint: { color: "#7a8495", fontSize: 11, lineHeight: 16, marginTop: 2 },
-  khieError: { fontSize: 12, lineHeight: 17 },
+  pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
+  qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
+  qrFrame: { alignSelf: "center", padding: 12, borderRadius: walletTheme.roundness * 4, backgroundColor: "white" },
+  qrPlaceholder: { height: 166, alignItems: "center", justifyContent: "center", gap: 12 },
+  dialogScrollArea: { maxHeight: 480, paddingHorizontal: 0 },
+  dialogContent: { gap: 16, paddingHorizontal: 24, paddingVertical: 16 },
   snackbar: { marginBottom: 88 },
   scanner: { flex: 1, backgroundColor: "black" },
-  scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: 20, alignSelf: "center", top: "25%" },
+  scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: walletTheme.roundness * 5, alignSelf: "center", top: "25%" },
   scanFooter: { position: "absolute", left: 20, right: 20, bottom: 30, gap: 12 },
-  scanText: { color: "white", textAlign: "center", fontSize: 16 },
-  modalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
-  modalCard: { maxHeight: "82%", backgroundColor: "white", padding: 20, borderTopLeftRadius: 22, borderTopRightRadius: 22, gap: 14 },
-  row: { flexDirection: "row", gap: 12 },
+  scanText: { color: "white", textAlign: "center" },
   flex: { flex: 1 },
 } as const);

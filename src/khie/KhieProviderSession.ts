@@ -1,11 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { Libp2p } from "@ckb-ccc/libp2p";
 import type { Identify, IdentifyPush } from "@libp2p/identify";
-import type {
-  Connection,
-  IdentifyResult,
-  Peer,
-  PeerId,
+import {
+  StreamStateError,
+  type Connection,
+  type IdentifyResult,
+  type Peer,
+  type PeerId,
 } from "@libp2p/interface";
 import { multiaddr } from "@multiformats/multiaddr";
 
@@ -342,6 +343,10 @@ export class KhieProviderSession {
 
   private reportError(cause: unknown): void {
     const error = cause instanceof Error ? cause : new Error("Khie session failed");
+    // Connection listeners own recovery when a peer closes a stream mid-write.
+    if (error instanceof StreamStateError) {
+      return;
+    }
     if (!(error instanceof PairingEndpointError) && error.name !== "AbortError") {
       console.error("Khie provider session error", error.stack ?? error.message);
     }

@@ -2,7 +2,6 @@ import { MD3LightTheme, type MD3Theme } from "react-native-paper";
 
 export const walletTheme: MD3Theme = {
   ...MD3LightTheme,
-  roundness: 4,
   colors: {
     ...MD3LightTheme.colors,
     primary: "#315DA8",
@@ -43,10 +42,3 @@ export const walletTheme: MD3Theme = {
     },
   },
 };
-
-export const walletSemanticColors = {
-  success: "#176B3A",
-  onSuccess: "#FFFFFF",
-  successContainer: "#A7F3C4",
-  onSuccessContainer: "#00210D",
-} as const;
