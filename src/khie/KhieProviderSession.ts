@@ -53,7 +53,9 @@ export type KhieProviderSessionState = {
   error?: string;
   paired: boolean;
   ready: boolean;
+  relayAddress: string;
   relayConnected: boolean;
+  relayConnecting: boolean;
   remotePeer?: KhieRemotePeer;
 };
 
@@ -76,14 +78,22 @@ export class KhieProviderSession {
   private endpointUpdateId = 0;
   private remotePeerUpdateId = 0;
   private disconnectedAt?: number;
-  private state: KhieProviderSessionState = {
-    endpoint: "",
-    paired: false,
-    ready: false,
-    relayConnected: false,
-  };
+  private relayAddress: string;
+  private state: KhieProviderSessionState;
 
-  constructor(private readonly config: KhieProviderSessionConfig) {}
+  constructor(private readonly config: KhieProviderSessionConfig) {
+    this.relayAddress = (
+      config.relayAddress ?? DEFAULT_KHIE_RELAY_ADDRESS
+    ).trim();
+    this.state = {
+      endpoint: "",
+      paired: false,
+      ready: false,
+      relayAddress: this.relayAddress,
+      relayConnected: false,
+      relayConnecting: false,
+    };
+  }
 
   get snapshot(): KhieProviderSessionState {
     return this.state;
@@ -114,15 +124,24 @@ export class KhieProviderSession {
     }
   }
 
-  async connectRelay(): Promise<boolean> {
+  async connectRelay(relayAddress = this.relayAddress): Promise<boolean> {
     const node = this.node;
-    const address = (this.config.relayAddress ?? DEFAULT_KHIE_RELAY_ADDRESS).trim();
-    if (!node || !address || this.abortController.signal.aborted) {
+    const address = relayAddress.trim();
+    if (
+      !node ||
+      !address ||
+      this.abortController.signal.aborted ||
+      this.state.relayConnecting
+    ) {
       return false;
     }
+    this.relayAddress = address;
+    this.patchState({ relayAddress: address, relayConnecting: true });
+    const previous = this.relayConnection;
+    this.relayConnection = undefined;
     let connection: Connection | undefined;
     try {
-      await this.relayConnection?.close();
+      await previous?.close();
       connection = await node.dial(multiaddr(address), {
         signal: this.abortController.signal,
       });
@@ -136,6 +155,8 @@ export class KhieProviderSession {
       this.patchState({ relayConnected: false });
       this.reportError(cause);
       return false;
+    } finally {
+      this.patchState({ relayConnecting: false });
     }
   }
 

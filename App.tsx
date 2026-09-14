@@ -53,6 +53,7 @@ import {
   KhieProviderSession,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
+import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
 import {
   SecureStoreWalletVault,
   type WalletAuthenticationPurpose,
@@ -117,7 +118,9 @@ function WalletApp() {
     endpoint: "",
     paired: false,
     ready: false,
+    relayAddress: DEFAULT_KHIE_RELAY_ADDRESS,
     relayConnected: false,
+    relayConnecting: false,
   });
   const [notice, setNotice] = useState<string>();
 
@@ -283,7 +286,9 @@ function WalletApp() {
             onScan={() => setScreen("scanner")}
             onPair={pairKhieEndpoint}
             onCancelPairing={cancelKhiePairing}
-            onRetryRelay={() => sessionRef.current?.connectRelay() ?? Promise.resolve(false)}
+            onConnectRelay={(address) =>
+              sessionRef.current?.connectRelay(address) ?? Promise.resolve(false)
+            }
             onUnpair={() => sessionRef.current?.unpair() ?? Promise.resolve()}
           />
         ) : null}
@@ -530,7 +535,7 @@ function KhieScreen({
   onScan,
   onPair,
   onCancelPairing,
-  onRetryRelay,
+  onConnectRelay,
   onUnpair,
 }: {
   state: KhieProviderSessionState;
@@ -538,14 +543,19 @@ function KhieScreen({
   onScan: () => void;
   onPair: (endpoint: string) => Promise<boolean>;
   onCancelPairing: () => void;
-  onRetryRelay: () => Promise<boolean>;
+  onConnectRelay: (address: string) => Promise<boolean>;
   onUnpair: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const [endpoint, setEndpoint] = useState("");
+  const [relayAddress, setRelayAddress] = useState(state.relayAddress);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const qrSize = Math.max(180, Math.min(420, width - 64));
+
+  useEffect(() => setRelayAddress(state.relayAddress), [state.relayAddress]);
+
   const pair = async () => {
     if (await onPair(endpoint)) {
       setEndpoint("");
@@ -631,7 +641,14 @@ function KhieScreen({
                     : t("connectingToRelay")}
                 </Text>
                 {state.ready && !state.relayConnected ? (
-                  <PaperButton icon="refresh" onPress={() => void onRetryRelay()}>{t("retryRelay")}</PaperButton>
+                  <PaperButton
+                    icon="refresh"
+                    loading={state.relayConnecting}
+                    disabled={state.relayConnecting}
+                    onPress={() => void onConnectRelay(state.relayAddress)}
+                  >
+                    {t("retryRelay")}
+                  </PaperButton>
                 ) : null}
               </View>
             )}
@@ -662,6 +679,43 @@ function KhieScreen({
               }
             />
           </View>
+          <PaperButton
+            compact
+            mode="text"
+            icon={advancedSettingsOpen ? "chevron-up" : "chevron-down"}
+            onPress={() => setAdvancedSettingsOpen((open) => !open)}
+            style={styles.advancedSettingsToggle}
+          >
+            {t("advancedSettings")}
+          </PaperButton>
+          {advancedSettingsOpen ? (
+            <View style={styles.relaySettings}>
+              <Text variant="titleSmall">{t("relayMultiaddr")}</Text>
+              <WalletTextInput
+                dense
+                label={t("relayMultiaddr")}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={relayAddress}
+                onChangeText={setRelayAddress}
+                returnKeyType="go"
+                onSubmitEditing={() => void onConnectRelay(relayAddress)}
+              />
+              <PaperButton
+                mode="outlined"
+                icon="connection"
+                loading={state.relayConnecting}
+                disabled={state.relayConnecting || !state.ready || !relayAddress.trim()}
+                onPress={() => void onConnectRelay(relayAddress)}
+              >
+                {state.relayConnecting
+                  ? t("connecting")
+                  : state.relayConnected
+                    ? t("reconnect")
+                    : t("connectRelay")}
+              </PaperButton>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -1144,6 +1198,8 @@ const styles = StyleSheet.create({
   khieMethod: { gap: 12 },
   orDivider: { flexDirection: "row", alignItems: "center", gap: 12 },
   requestIdle: { paddingVertical: 12, textAlign: "center" },
+  advancedSettingsToggle: { alignSelf: "flex-start", marginLeft: -12 },
+  relaySettings: { gap: 12 },
   qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
   qrFrame: { alignSelf: "center", padding: 12, borderRadius: 12, backgroundColor: "white" },
   qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
