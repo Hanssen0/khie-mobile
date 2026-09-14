@@ -545,91 +545,67 @@ function KhieScreen({
     }
   };
 
-  const remoteActive = state.remotePeer?.active === true;
-  const connectionPath = remoteActive
-    ? state.remotePeer?.direct
-      ? t("webRtcDirect")
-      : t("relayConnection")
-    : t("waitingWebReconnect");
+  const connectionPath = !state.remotePeer?.active
+    ? t("inactive")
+    : state.remotePeer.direct
+      ? t("direct")
+      : t("relayed");
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <View style={styles.screenTitleRow}>
-        <View style={styles.flex}>
-          <Text variant="headlineMedium">Khie</Text>
-          <Text variant="bodyMedium">{t("p2pWalletConnection")}</Text>
-        </View>
-        <ConnectionState
-          ready={state.paired ? remoteActive : state.ready && state.relayConnected}
-          label={
-            state.paired
-              ? remoteActive
-                ? t("connected")
-                : t("paired")
-              : state.relayConnected
-                ? t("available")
-                : t("preparing")
-          }
-        />
-      </View>
+      <Text variant="headlineMedium">Khie</Text>
 
       {pairing ? (
         <View style={styles.pairingProgress}>
           <ActivityIndicator size="large" />
-          <Text variant="titleLarge">{t("establishingSecureConnection")}</Text>
-          <Text variant="bodyMedium">{t("keepPageOpen")}</Text>
-          <PaperButton mode="text" onPress={onCancelPairing}>{t("cancelPairing")}</PaperButton>
+          <Text variant="titleLarge">{t("pairingWithKhie")}</Text>
+          <PaperButton mode="text" onPress={onCancelPairing}>{t("cancel")}</PaperButton>
         </View>
       ) : state.paired ? (
         <View style={styles.khieContent}>
-          <View style={styles.khieSectionHeader}>
-            <Icon source="web" size={32} color={theme.colors.primary} />
-            <View style={styles.flex}>
-              <Text variant="titleLarge">{state.remotePeer?.name ?? t("webConnector")}</Text>
-              <Text variant="bodyMedium">{connectionPath}</Text>
+          <View style={styles.peerOverview}>
+            {state.remotePeer ? (
+              <>
+                <Chip compact>{connectionPath}</Chip>
+                <View style={styles.flex}>
+                  <Text variant="titleMedium" numberOfLines={1}>
+                    {state.remotePeer.name ?? t("unknown")}
+                  </Text>
+                  <Text variant="bodySmall" numberOfLines={1}>
+                    {state.remotePeer.agentVersion ?? t("unknownAgent")}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <Text variant="bodyMedium" style={styles.flex}>
+                {t("loadingRemotePeerDetails")}
+              </Text>
+            )}
+            <PaperButton
+              compact
+              textColor={theme.colors.error}
+              onPress={() => void onUnpair()}
+            >
+              {t("unpair")}
+            </PaperButton>
+          </View>
+          {state.remotePeer ? (
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">Peer ID</Text>
+              <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
+                {state.remotePeer.id}
+              </Text>
             </View>
-          </View>
-          <List.Item
-            title={remoteActive ? t("webOnline") : t("webOffline")}
-            description={remoteActive ? t("canRequest") : t("reconnectsAutomatically")}
-            left={(props) => <List.Icon {...props} icon={remoteActive ? "check-circle" : "progress-clock"} />}
-          />
+          ) : null}
           <Divider />
-          <View style={styles.metadataBlock}>
-            <Text variant="labelMedium">Peer ID</Text>
-            <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
-              {state.remotePeer?.id ?? t("readingPeer")}
-            </Text>
-            {state.remotePeer?.agentVersion ? (
-              <Text variant="labelSmall" numberOfLines={1}>{state.remotePeer.agentVersion}</Text>
-            ) : null}
-          </View>
-          <Divider />
-          <List.Item
-            title={t("waitingWebRequest")}
-            description={t("requestsConfirmedSeparately")}
-            left={(props) => <List.Icon {...props} icon="shield-check" />}
-          />
-          <PaperButton
-            icon="link-off"
-            textColor={theme.colors.error}
-            onPress={() => void onUnpair()}
-            style={styles.khieAction}
-          >
-            {t("unpair")}
-          </PaperButton>
+          <Text variant="bodySmall" style={styles.requestIdle}>
+            {t("readyForRequests")}
+          </Text>
         </View>
       ) : (
         <View style={styles.khieContent}>
-          <View style={styles.khieSectionHeader}>
-            <Icon source="connection" size={32} color={theme.colors.primary} />
-            <View style={styles.flex}>
-              <Text variant="titleLarge">{t("connectWeb")}</Text>
-              <Text variant="bodyMedium">{t("pairingMethodsEqual")}</Text>
-            </View>
-          </View>
           <View style={styles.khieMethod}>
-            <Text variant="titleSmall">{t("webScansPhone")}</Text>
+            <Text variant="titleSmall">{t("letConnectorScanThis")}</Text>
             {state.endpoint ? (
               <>
                 <View style={styles.qrFrame}>
@@ -643,7 +619,9 @@ function KhieScreen({
               <View style={[styles.qrPlaceholder, { height: qrSize + 24 }]}>
                 <ActivityIndicator />
                 <Text variant="bodyMedium">
-                  {state.relayConnected ? t("generatingPairingCode") : t("connectingRelay")}
+                  {state.relayConnected
+                    ? t("preparingPairingCode")
+                    : t("connectingToRelay")}
                 </Text>
                 {state.ready && !state.relayConnected ? (
                   <PaperButton icon="refresh" onPress={() => void onRetryRelay()}>{t("retryRelay")}</PaperButton>
@@ -651,15 +629,19 @@ function KhieScreen({
               </View>
             )}
           </View>
-          <Divider />
+          <View style={styles.orDivider}>
+            <Divider style={styles.flex} />
+            <Text variant="labelMedium">{t("or")}</Text>
+            <Divider style={styles.flex} />
+          </View>
           <View style={styles.khieMethod}>
-            <Text variant="titleSmall">{t("phoneScansWeb")}</Text>
+            <Text variant="titleSmall">{t("scanConnectorCode")}</Text>
             <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
               {t("scanConnectorCode")}
             </PaperButton>
             <WalletTextInput
               dense
-              label={t("connectorEndpoint")}
+              label={t("pastePairingCode")}
               autoCapitalize="none"
               autoCorrect={false}
               value={endpoint}
@@ -718,8 +700,8 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
       />
       <View style={styles.scanGuide} />
       <View style={styles.scanFooter}>
-        <Text variant="titleMedium" style={styles.scanText}>{t("scanConnectorQr")}</Text>
-        <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancel")}</PaperButton>
+        <Text variant="titleMedium" style={styles.scanText}>{t("scanConnectorCode")}</Text>
+        <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancelScan")}</PaperButton>
       </View>
     </View>
   );
@@ -1067,14 +1049,6 @@ function BackButton({ onPress }: { onPress: () => void }) {
   return <PaperButton compact icon="arrow-left" onPress={onPress} style={styles.backButton}>{t("back")}</PaperButton>;
 }
 
-function ConnectionState({ label, ready }: { label: string; ready: boolean }) {
-  return (
-    <Chip compact mode={ready ? "flat" : "outlined"} icon={ready ? "check-circle" : "progress-clock"}>
-      {label}
-    </Chip>
-  );
-}
-
 function Notice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   const { t } = useI18n();
   return (
@@ -1148,7 +1122,6 @@ const styles = StyleSheet.create({
   page: { padding: 20, gap: 16 },
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
-  screenTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
   cardContent: { gap: 12 },
   metadataBlock: { gap: 4 },
@@ -1159,9 +1132,10 @@ const styles = StyleSheet.create({
   networkSwitch: { width: 170, marginRight: 8 },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
-  khieSectionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
   khieMethod: { gap: 12 },
-  khieAction: { alignSelf: "flex-start" },
+  orDivider: { flexDirection: "row", alignItems: "center", gap: 12 },
+  requestIdle: { paddingVertical: 12, textAlign: "center" },
   qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
   qrFrame: { alignSelf: "center", padding: 12, borderRadius: 12, backgroundColor: "white" },
   qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
