@@ -85,11 +85,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <I18nProvider>
+      <I18nProvider>
+        <PaperProvider theme={theme}>
           <WalletApp />
-        </I18nProvider>
-      </PaperProvider>
+        </PaperProvider>
+      </I18nProvider>
     </SafeAreaProvider>
   );
 }
