@@ -3,6 +3,8 @@ import { getRandomValues } from "expo-crypto";
 import process from "process";
 import "react-native-url-polyfill/auto";
 
+import { installWebRtcDiagnostics } from "./webrtcDiagnostics";
+
 const eventTargetShim = require("event-target-shim") as {
   Event: typeof globalThis.Event;
   EventTarget: typeof globalThis.EventTarget;
@@ -79,3 +81,5 @@ if (Promise.withResolvers == null) {
     return { promise, resolve, reject };
   };
 }
+
+installWebRtcDiagnostics();

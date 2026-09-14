@@ -24,6 +24,7 @@ import {
   KHIE_JSON_RPC_PROTOCOL,
   KHIE_PAIRING_PROTOCOL,
 } from "./protocol";
+import { khieTrace } from "../runtime/khieTrace";
 
 type ProviderJsonRpcComponents = Libp2p.JsonRpcServiceComponents & {
   pairing: Libp2p.PairingService;
@@ -103,6 +104,7 @@ export class KhieProviderSession {
     if (this.node || this.abortController.signal.aborted) {
       return;
     }
+    khieTrace("session.start.begin");
     try {
       const node = await createProviderNode(
         () => !this.abortController.signal.aborted && !this.pairedPeer,
@@ -112,6 +114,7 @@ export class KhieProviderSession {
         this.abortController.signal,
       );
       this.node = node;
+      khieTrace("session.start.ready", { peerId: node.peerId.toString() });
       this.observe(node);
       this.patchState({ ready: true });
       await this.connectRelay();
@@ -136,6 +139,8 @@ export class KhieProviderSession {
       return false;
     }
     this.relayAddress = address;
+    const startedAt = Date.now();
+    khieTrace("relay.connect.begin", { address });
     this.patchState({ relayAddress: address, relayConnecting: true });
     const previous = this.relayConnection;
     this.relayConnection = undefined;
@@ -147,10 +152,18 @@ export class KhieProviderSession {
       });
       this.abortController.signal.throwIfAborted();
       this.relayConnection = connection;
+      khieTrace("relay.connect.success", {
+        durationMs: Date.now() - startedAt,
+        ...connectionDetails(connection),
+      });
       this.patchState({ error: undefined, relayConnected: true });
       await this.syncEndpoint(node);
       return true;
     } catch (cause) {
+      khieTrace("relay.connect.failure", {
+        durationMs: Date.now() - startedAt,
+        error: errorDetails(cause),
+      });
       await connection?.close();
       this.patchState({ relayConnected: false });
       this.reportError(cause);
@@ -172,12 +185,21 @@ export class KhieProviderSession {
       controller.signal,
     ]);
     this.patchState({ error: undefined });
+    const startedAt = Date.now();
     try {
       const target = await decodePairingEndpointMobile(endpoint, "connector");
+      khieTrace("pair.begin", {
+        addresses: target.addresses.map(String),
+      });
       await node.services.pairing.pair(target, { signal });
+      khieTrace("pair.success", { durationMs: Date.now() - startedAt });
       this.patchState({ error: undefined });
       return true;
     } catch (cause) {
+      khieTrace("pair.failure", {
+        durationMs: Date.now() - startedAt,
+        error: errorDetails(cause),
+      });
       if (!controller.signal.aborted) {
         this.reportError(cause);
       }
@@ -253,10 +275,12 @@ export class KhieProviderSession {
         return;
       }
       node.services.pairing.refresh(event.detail);
+      khieTrace(event.type, { peerId: event.detail.toString() });
       this.disconnectedAt = event.type === "peer:connect" ? undefined : Date.now();
       void this.syncRemotePeer(node, event.detail);
     };
     const syncConnection = (event: CustomEvent<Connection>) => {
+      khieTrace(event.type, connectionDetails(event.detail));
       if (event.type === "connection:close" && event.detail === this.relayConnection) {
         this.relayConnection = undefined;
         this.patchState({ relayConnected: false });
@@ -288,6 +312,7 @@ export class KhieProviderSession {
         }
         this.pairedPeer = peerId;
         this.pairedPeerName = name;
+        khieTrace("pair.event.paired", { peerId: peerId.toString(), name });
         this.disconnectedAt = undefined;
         this.patchState({ paired: true });
         void this.syncRemotePeer(node, peerId);
@@ -297,6 +322,7 @@ export class KhieProviderSession {
           return;
         }
         this.pairedPeer = undefined;
+        khieTrace("pair.event.unpaired", { peerId: peerId.toString() });
         this.pairedPeerName = undefined;
         this.disconnectedAt = undefined;
         this.remotePeerUpdateId += 1;
@@ -421,7 +447,18 @@ async function createProviderNode(
           { protocol: KHIE_JSON_RPC_PROTOCOL, maxMessageLength: JSON_RPC_MAX_MESSAGE_LENGTH },
           function (request) {
             const { pairing } = this.components;
+            const startedAt = Date.now();
+            const rpc = rpcDetails(request.payload);
+            khieTrace("rpc.request.received", {
+              peerId: request.peerId.toString(),
+              ...connectionDetails(request.connection),
+              ...rpc,
+            });
             if (!pairing.isPaired(request.peerId) || !isSelectedPeer(request.peerId)) {
+              khieTrace("rpc.request.rejected", {
+                peerId: request.peerId.toString(),
+                ...rpc,
+              });
               throw new ccc.JsonRpcError({
                 code: -32000,
                 message: "Peer is not paired for Khie access",
@@ -431,6 +468,26 @@ async function createProviderNode(
             return withTimeout(
               Promise.resolve(authorizer.handle(request.peerId, request.payload, handler)),
               JSON_RPC_TIMEOUT_MS,
+            ).then(
+              (result) => {
+                khieTrace("rpc.request.completed", {
+                  durationMs: Date.now() - startedAt,
+                  peerId: request.peerId.toString(),
+                  ...connectionDetails(request.connection),
+                  ...rpc,
+                });
+                return result;
+              },
+              (cause) => {
+                khieTrace("rpc.request.failure", {
+                  durationMs: Date.now() - startedAt,
+                  peerId: request.peerId.toString(),
+                  ...connectionDetails(request.connection),
+                  ...rpc,
+                  error: errorDetails(cause),
+                });
+                throw cause;
+              },
             );
           },
         ),
@@ -443,6 +500,34 @@ async function createProviderNode(
     await node?.stop();
     throw cause;
   }
+}
+
+function connectionDetails(connection: Connection): Record<string, unknown> {
+  return {
+    connectionId: connection.id,
+    direct: connection.direct,
+    direction: connection.direction,
+    remoteAddr: connection.remoteAddr?.toString(),
+    remotePeer: connection.remotePeer?.toString(),
+    status: connection.status,
+    streamCount: connection.streams?.length,
+    openedAt: connection.timeline?.open,
+    closedAt: connection.timeline?.close,
+  };
+}
+
+function rpcDetails(payload: ccc.JsonRpcPayload): Record<string, unknown> {
+  if (typeof payload !== "object" || payload === null) return {};
+  const value = payload as { id?: unknown; method?: unknown };
+  return {
+    rpcId: value.id,
+    rpcMethod: typeof value.method === "string" ? value.method : undefined,
+  };
+}
+
+function errorDetails(cause: unknown): Record<string, unknown> {
+  if (!(cause instanceof Error)) return { value: String(cause) };
+  return { name: cause.name, message: cause.message };
 }
 
 function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
