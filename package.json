@@ -27,6 +27,7 @@
     "@libp2p/webrtc": "6.0.32",
     "@libp2p/websockets": "10.1.21",
     "@multiformats/multiaddr": "13.0.3",
+    "@react-native-vector-icons/material-design-icons": "13.1.4",
     "@scure/bip32": "2.0.1",
     "@scure/bip39": "2.0.1",
     "event-target-shim": "6.0.2",
@@ -41,7 +42,9 @@
     "process": "0.11.10",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-paper": "5.15.3",
     "react-native-qrcode-svg": "6.3.24",
+    "react-native-safe-area-context": "5.9.1",
     "react-native-svg": "15.15.5",
     "react-native-url-polyfill": "3.0.0",
     "react-native-webrtc": "124.0.6"
@@ -55,7 +58,9 @@
   "expo": {
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["react-native-webrtc"]
+        "exclude": [
+          "react-native-webrtc"
+        ]
       }
     }
   }

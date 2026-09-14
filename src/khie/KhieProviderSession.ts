@@ -13,6 +13,7 @@ import { KhieConnectionAuthorizer } from "./connectionAuthorizer";
 import {
   decodePairingEndpointMobile,
   encodePairingEndpointMobile,
+  PairingEndpointError,
 } from "./pairingEndpointCodec";
 import {
   DEFAULT_KHIE_RELAY_ADDRESS,
@@ -148,6 +149,7 @@ export class KhieProviderSession {
       this.abortController.signal,
       controller.signal,
     ]);
+    this.patchState({ error: undefined });
     try {
       const target = await decodePairingEndpointMobile(endpoint, "connector");
       await node.services.pairing.pair(target, { signal });
@@ -340,7 +342,9 @@ export class KhieProviderSession {
 
   private reportError(cause: unknown): void {
     const error = cause instanceof Error ? cause : new Error("Khie session failed");
-    console.error("Khie provider session error", error.stack ?? error.message);
+    if (!(error instanceof PairingEndpointError) && error.name !== "AbortError") {
+      console.error("Khie provider session error", error.stack ?? error.message);
+    }
     this.patchState({ error: error.message });
   }
 }

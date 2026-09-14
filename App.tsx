@@ -13,14 +13,28 @@ import {
   AppState,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
+import {
+  Appbar,
+  BottomNavigation,
+  Button as PaperButton,
+  Card as PaperCard,
+  Chip,
+  HelperText,
+  PaperProvider,
+  Portal,
+  SegmentedButtons,
+  Snackbar,
+  Surface,
+  Text,
+  TextInput as PaperTextInput,
+  useTheme,
+} from "react-native-paper";
 import QRCode from "react-native-qrcode-svg";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import {
@@ -33,6 +47,7 @@ import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
 import { clientForNetwork, networkFromId } from "./src/wallet/network";
 import type { Network, WalletProfile } from "./src/wallet/types";
 import { generateMnemonic, persistWallet } from "./src/wallet/walletService";
+import { walletSemanticColors, walletTheme } from "./src/theme";
 
 type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "restore";
@@ -40,6 +55,16 @@ type Onboarding = "start" | "create" | "restore";
 const endpointUrl = "https://app.ckbccc.com/khie";
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <PaperProvider theme={walletTheme}>
+        <WalletApp />
+      </PaperProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function WalletApp() {
   const vault = useMemo(() => new SecureStoreWalletVault(), []);
   const approvalQueue = useMemo(() => new ApprovalQueue(), []);
   const clients = useRef({
@@ -57,6 +82,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [onboarding, setOnboarding] = useState<Onboarding>("start");
   const [approval, setApproval] = useState<ApprovalItem>();
+  const [pairing, setPairing] = useState(false);
   const [sessionState, setSessionState] = useState<KhieProviderSessionState>({
     endpoint: "",
     paired: false,
@@ -161,6 +187,24 @@ export default function App() {
     [approvalQueue, selectNetwork, sessionState.paired],
   );
 
+  const pairKhieEndpoint = useCallback(async (endpoint: string) => {
+    const session = sessionRef.current;
+    if (!session || !endpoint.trim()) {
+      return false;
+    }
+    setPairing(true);
+    try {
+      return await session.pair(endpoint);
+    } finally {
+      setPairing(false);
+    }
+  }, []);
+
+  const cancelKhiePairing = useCallback(() => {
+    sessionRef.current?.cancelPairing();
+    setPairing(false);
+  }, []);
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -191,10 +235,10 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="auto" />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-      <View style={styles.appHeader}>
-        <Text style={styles.appTitle}>Khie Wallet</Text>
+      <Appbar.Header statusBarHeight={0} style={styles.appHeader}>
+        <Appbar.Content title="Khie Wallet" titleStyle={styles.appTitle} />
         <NetworkSwitch value={network} onChange={changeNetwork} />
-      </View>
+      </Appbar.Header>
       <View style={styles.body}>
         {screen === "home" ? (
           <HomeScreen signer={signerRef.current} network={network} onNavigate={setScreen} />
@@ -205,8 +249,11 @@ export default function App() {
         {screen === "khie" ? (
           <KhieScreen
             state={sessionState}
+            pairing={pairing}
             onScan={() => setScreen("scanner")}
-            onPair={(value) => sessionRef.current?.pair(value) ?? Promise.resolve(false)}
+            onPair={pairKhieEndpoint}
+            onCancelPairing={cancelKhiePairing}
+            onRetryRelay={() => sessionRef.current?.connectRelay() ?? Promise.resolve(false)}
             onUnpair={() => sessionRef.current?.unpair() ?? Promise.resolve()}
           />
         ) : null}
@@ -226,7 +273,7 @@ export default function App() {
             onCancel={() => setScreen("khie")}
             onScanned={(value) => {
               setScreen("khie");
-              void sessionRef.current?.pair(value);
+              void pairKhieEndpoint(value);
             }}
           />
         ) : null}
@@ -310,7 +357,7 @@ function OnboardingScreen({
         <BackButton onPress={() => onMode("start")} />
         <Text style={styles.heading}>恢复钱包</Text>
         <Text style={styles.muted}>输入 12 或 24 词英文 BIP-39 助记词。</Text>
-        <TextInput
+        <WalletTextInput
           style={[styles.input, styles.mnemonicInput]}
           multiline
           autoCapitalize="none"
@@ -340,9 +387,9 @@ function OnboardingScreen({
         ))}
       </View>
       <Text style={styles.label}>输入第 3 个词</Text>
-      <TextInput style={styles.input} autoCapitalize="none" value={word3} onChangeText={setWord3} />
+      <WalletTextInput style={styles.input} autoCapitalize="none" value={word3} onChangeText={setWord3} />
       <Text style={styles.label}>输入第 9 个词</Text>
-      <TextInput style={styles.input} autoCapitalize="none" value={word9} onChangeText={setWord9} />
+      <WalletTextInput style={styles.input} autoCapitalize="none" value={word9} onChangeText={setWord9} />
       <PrimaryButton label={busy ? "正在保存…" : "确认并创建"} onPress={() => void save(mnemonic)} disabled={!confirmed || busy} />
     </ScrollView>
   );
@@ -417,63 +464,172 @@ function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void
 
 function KhieScreen({
   state,
+  pairing,
   onScan,
   onPair,
+  onCancelPairing,
+  onRetryRelay,
   onUnpair,
 }: {
   state: KhieProviderSessionState;
+  pairing: boolean;
   onScan: () => void;
   onPair: (endpoint: string) => Promise<boolean>;
+  onCancelPairing: () => void;
+  onRetryRelay: () => Promise<boolean>;
   onUnpair: () => Promise<void>;
 }) {
   const [endpoint, setEndpoint] = useState("");
-  const [pairing, setPairing] = useState(false);
   const pair = async () => {
-    setPairing(true);
-    await onPair(endpoint);
-    setPairing(false);
+    if (await onPair(endpoint)) {
+      setEndpoint("");
+    }
   };
+
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <Text style={styles.heading}>Khie 连接</Text>
-      <Card>
-        <StatusRow label="节点" ok={state.ready} />
-        <StatusRow label="Relay" ok={state.relayConnected} />
-        <StatusRow label="已配对" ok={state.paired} />
-        {state.remotePeer ? (
-          <>
-            <StatusRow label="在线" ok={state.remotePeer.active} />
-            <StatusRow label="WebRTC 直连" ok={state.remotePeer.direct === true} />
-            <Text style={styles.monoSmall}>{state.remotePeer.name ?? state.remotePeer.id}</Text>
-          </>
-        ) : null}
-      </Card>
-      {!state.paired ? (
-        <>
-          <PrimaryButton label="扫描网页 Connector 二维码" onPress={onScan} />
-          <TextInput
-            style={[styles.input, styles.endpointInput]}
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="也可以粘贴 role=connector 的配对地址"
-            value={endpoint}
-            onChangeText={setEndpoint}
-          />
-          <SecondaryButton label={pairing ? "配对中…" : "连接粘贴的地址"} onPress={() => void pair()} disabled={!endpoint.trim() || pairing} />
-          <Text style={styles.sectionTitle}>让网页扫描手机</Text>
-          {state.endpoint ? (
-            <View style={styles.qrCard}>
-              <QRCode value={state.endpoint} size={220} />
+    <ScrollView contentContainerStyle={styles.khiePage} keyboardShouldPersistTaps="handled">
+      <View style={styles.khieTitleRow}>
+        <View style={styles.flex}>
+          <Text style={styles.heading}>Khie</Text>
+          <Text style={styles.muted}>P2P 钱包连接</Text>
+        </View>
+        <ConnectionState
+          ready={state.paired ? state.remotePeer?.active === true : state.ready && state.relayConnected}
+          label={
+            state.paired
+              ? state.remotePeer?.active
+                ? "已连接"
+                : "已配对"
+              : state.relayConnected
+                ? "可连接"
+                : "准备中"
+          }
+        />
+      </View>
+
+      {pairing ? (
+        <Surface elevation={1} style={[styles.khieCard, styles.pairingProgress]}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.khieSectionTitle}>正在建立安全连接…</Text>
+          <Text style={[styles.muted, styles.centerText]}>请保持当前页面打开</Text>
+          <SecondaryButton label="取消配对" onPress={onCancelPairing} />
+        </Surface>
+      ) : state.paired ? (
+        <Surface elevation={1} style={styles.khieCard}>
+          <View style={styles.khieSectionHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.khieSectionTitle}>已连接</Text>
+              <Text style={styles.muted}>网页可以发起查询与签名请求</Text>
             </View>
-          ) : (
-            <Text style={styles.muted}>Relay 准备好后会生成 Provider 二维码。</Text>
-          )}
-        </>
+            <PaperButton compact mode="text" textColor={walletTheme.colors.error} onPress={() => void onUnpair()}>
+              解除
+            </PaperButton>
+          </View>
+
+          <View style={styles.peerDetails}>
+            <View style={styles.peerSummary}>
+              <ConnectionState
+                ready={state.remotePeer?.active === true}
+                label={state.remotePeer?.active ? "在线" : "离线"}
+              />
+              <Text style={styles.peerPath}>
+                {state.remotePeer?.active
+                  ? state.remotePeer.direct
+                    ? "WebRTC 直连"
+                    : "Relay 连接"
+                  : "等待网页重连"}
+              </Text>
+            </View>
+            <Text numberOfLines={1} style={styles.peerName}>
+              {state.remotePeer?.name ?? "网页 Connector"}
+            </Text>
+            <Text selectable numberOfLines={2} style={styles.monoSmall}>
+              {state.remotePeer?.id ?? "正在读取 peer 信息…"}
+            </Text>
+            {state.remotePeer?.agentVersion ? (
+              <Text numberOfLines={1} style={styles.peerAgent}>{state.remotePeer.agentVersion}</Text>
+            ) : null}
+          </View>
+
+          <Surface elevation={0} style={styles.requestIdle}>
+            <View style={styles.requestDot} />
+            <View style={styles.flex}>
+              <Text style={styles.requestTitle}>等待网页请求…</Text>
+              <Text style={styles.requestHint}>连接、消息和交易签名都会单独确认</Text>
+            </View>
+          </Surface>
+        </Surface>
       ) : (
-        <SecondaryButton label="解除配对" onPress={() => void onUnpair()} danger />
+        <Surface elevation={1} style={styles.khieCard}>
+          <View>
+            <Text style={styles.khieSectionTitle}>连接网页</Text>
+            <Text style={styles.muted}>以下两种配对方式完全等价</Text>
+          </View>
+
+          <View style={styles.pairingMethod}>
+            <Text style={styles.methodEyebrow}>方式一 · 网页扫手机</Text>
+            {state.endpoint ? (
+              <>
+                <View style={styles.compactQrCard}>
+                  <QRCode value={state.endpoint} size={142} />
+                </View>
+                <Text selectable numberOfLines={2} style={styles.endpointCopy}>
+                  {state.endpoint}
+                </Text>
+              </>
+            ) : (
+              <View style={styles.qrPendingCard}>
+                <ActivityIndicator />
+                <Text style={styles.muted}>
+                  {state.relayConnected ? "正在生成配对码…" : "正在连接 Relay…"}
+                </Text>
+                {state.ready && !state.relayConnected ? (
+                  <Pressable onPress={() => void onRetryRelay()}>
+                    <Text style={styles.retryText}>重试 Relay</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.orDivider}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>或</Text>
+            <View style={styles.orLine} />
+          </View>
+
+          <View style={styles.pairingMethod}>
+            <Text style={styles.methodEyebrow}>方式二 · 手机扫网页</Text>
+            <PrimaryButton label="扫描 Connector 配对码" onPress={onScan} />
+            <View style={styles.pasteRow}>
+              <WalletTextInput
+                dense
+                style={styles.pasteInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="或粘贴 role=connector 配对地址"
+                value={endpoint}
+                onChangeText={setEndpoint}
+              />
+              <PaperButton
+                compact
+                mode="contained-tonal"
+                style={styles.pasteButton}
+                disabled={!endpoint.trim()}
+                onPress={() => void pair()}
+              >
+                连接
+              </PaperButton>
+            </View>
+          </View>
+        </Surface>
       )}
-      {state.error ? <Text style={styles.warning}>{state.error}</Text> : null}
+
+      {state.error && !pairing ? (
+        <HelperText type="error" visible style={styles.khieError}>
+          {formatKhieError(state.error)}
+        </HelperText>
+      ) : null}
     </ScrollView>
   );
 }
@@ -569,7 +725,7 @@ function SettingsScreen({
       />
       {showRecovery ? (
         <>
-          <TextInput
+          <WalletTextInput
             style={[styles.input, styles.mnemonicInput]}
             multiline
             autoCapitalize="none"
@@ -688,106 +844,205 @@ function approvalNetwork(request: SignerJsonRpcConfirmation, fallback: Network) 
 
 function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network: Network) => void }) {
   return (
-    <View style={styles.segment}>
-      <Pressable style={[styles.segmentItem, value === "testnet" && styles.segmentActive]} onPress={() => onChange("testnet")}>
-        <Text style={value === "testnet" ? styles.segmentActiveText : undefined}>测试网</Text>
-      </Pressable>
-      <Pressable style={[styles.segmentItem, value === "mainnet" && styles.segmentActive]} onPress={() => onChange("mainnet")}>
-        <Text style={value === "mainnet" ? styles.segmentActiveText : undefined}>主网</Text>
-      </Pressable>
-    </View>
+    <SegmentedButtons
+      density="small"
+      value={value}
+      onValueChange={(next) => onChange(next as Network)}
+      buttons={[
+        { value: "testnet", label: "测试网", showSelectedCheck: false },
+        { value: "mainnet", label: "主网", showSelectedCheck: false },
+      ]}
+      style={styles.networkSwitch}
+    />
   );
 }
 
 function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (screen: Screen) => void }) {
-  const items: Array<[Screen, string]> = [["home", "账户"], ["khie", "Khie"], ["settings", "设置"]];
+  const routes = [
+    { key: "home", title: "账户", focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
+    { key: "khie", title: "Khie", focusedIcon: "connection", unfocusedIcon: "connection" },
+    { key: "settings", title: "设置", focusedIcon: "cog", unfocusedIcon: "cog-outline" },
+  ];
+  const selected = current === "receive" ? "home" : current;
+  const index = Math.max(0, routes.findIndex(({ key }) => key === selected));
   return (
-    <View style={styles.bottomBar}>
-      {items.map(([screen, label]) => (
-        <Pressable key={screen} style={styles.bottomItem} onPress={() => onNavigate(screen)}>
-          <Text style={current === screen ? styles.bottomActive : styles.muted}>{label}</Text>
-        </Pressable>
-      ))}
-    </View>
+    <BottomNavigation.Bar
+      compact
+      shifting={false}
+      navigationState={{ index, routes }}
+      safeAreaInsets={{ bottom: 0 }}
+      onTabPress={({ route }) => onNavigate(route.key as Screen)}
+    />
   );
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+  return (
+    <PaperCard mode="outlined" style={styles.paperCard}>
+      <PaperCard.Content style={styles.paperCardContent}>{children}</PaperCard.Content>
+    </PaperCard>
+  );
 }
 
 function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
-  return <Pressable style={[styles.button, disabled && styles.disabled]} onPress={onPress} disabled={disabled}><Text style={styles.buttonText}>{label}</Text></Pressable>;
+  return (
+    <PaperButton
+      mode="contained"
+      disabled={disabled}
+      onPress={onPress}
+      style={styles.paperButton}
+      contentStyle={styles.paperButtonContent}
+      labelStyle={styles.paperButtonLabel}
+    >
+      {label}
+    </PaperButton>
+  );
 }
 
 function SecondaryButton({ label, onPress, disabled, danger }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
-  return <Pressable style={[styles.secondaryButton, danger && styles.dangerButton, disabled && styles.disabled]} onPress={onPress} disabled={disabled}><Text style={[styles.secondaryText, danger && styles.dangerText]}>{label}</Text></Pressable>;
+  const theme = useTheme();
+  return (
+    <PaperButton
+      mode="outlined"
+      disabled={disabled}
+      onPress={onPress}
+      textColor={danger ? theme.colors.error : undefined}
+      style={[styles.paperButton, danger && { borderColor: theme.colors.error }]}
+      contentStyle={styles.paperButtonContent}
+      labelStyle={styles.paperButtonLabel}
+    >
+      {label}
+    </PaperButton>
+  );
+}
+
+function WalletTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
+  return <PaperTextInput mode="outlined" {...props} />;
 }
 
 function BackButton({ onPress }: { onPress: () => void }) {
   return <Pressable onPress={onPress}><Text style={styles.back}>‹ 返回</Text></Pressable>;
 }
 
-function StatusRow({ label, ok }: { label: string; ok: boolean }) {
-  return <View style={styles.statusRow}><Text>{label}</Text><Text style={ok ? styles.ok : styles.muted}>{ok ? "已就绪" : "未就绪"}</Text></View>;
+function ConnectionState({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <Chip
+      compact
+      mode="outlined"
+      avatar={<View style={[styles.connectionDot, ready && styles.connectionDotReady]} />}
+      style={styles.connectionState}
+      textStyle={styles.connectionLabel}
+    >
+      {label}
+    </Chip>
+  );
 }
 
 function Notice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
-  return <Pressable style={styles.notice} onPress={onDismiss}><Text style={styles.noticeText}>{text}</Text></Pressable>;
+  return (
+    <Portal>
+      <Snackbar
+        visible
+        onDismiss={onDismiss}
+        action={{ label: "关闭", onPress: onDismiss }}
+        wrapperStyle={styles.snackbar}
+      >
+        {text}
+      </Snackbar>
+    </Portal>
+  );
 }
 
 function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : "操作失败";
 }
 
+function formatKhieError(message: string): string {
+  if (message.startsWith("Expected a connector pairing endpoint")) {
+    return "这不是网页 Connector 的配对码，请扫描网页端生成的二维码。";
+  }
+  if (message === "Pairing endpoint is not a valid URL") {
+    return "配对地址不是有效链接。";
+  }
+  if (message === "Pairing endpoint is incomplete") {
+    return "配对地址不完整，请重新扫描或粘贴。";
+  }
+  if (message === "Pairing endpoint contains invalid compressed addresses") {
+    return "配对地址已损坏或与当前 Khie 版本不兼容。";
+  }
+  return message;
+}
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#f5f7fb" },
+  safe: { flex: 1, backgroundColor: walletTheme.colors.background },
   body: { flex: 1 },
   page: { padding: 20, gap: 16 },
   center: { justifyContent: "center", alignItems: "center" },
   centerText: { textAlign: "center" },
-  appHeader: { paddingHorizontal: 20, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#d5dae3" },
+  appHeader: { paddingHorizontal: 4, backgroundColor: walletTheme.colors.surface },
   appTitle: { fontSize: 20, fontWeight: "700" },
-  hero: { fontSize: 34, fontWeight: "800", color: "#111827" },
-  heading: { fontSize: 25, fontWeight: "700", color: "#111827" },
-  subtitle: { fontSize: 16, color: "#596273", marginBottom: 18 },
-  muted: { color: "#697386" },
-  warning: { color: "#9a3412", lineHeight: 20 },
-  networkLabel: { textAlign: "center", color: "#697386" },
-  balance: { textAlign: "center", fontSize: 44, fontWeight: "700", color: "#111827" },
-  unit: { textAlign: "center", marginTop: -14, color: "#697386" },
-  card: { gap: 10, backgroundColor: "white", padding: 16, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: "#d5dae3" },
-  qrCard: { backgroundColor: "white", borderRadius: 14, padding: 18, alignSelf: "center" },
-  label: { fontSize: 13, fontWeight: "600", color: "#596273", marginTop: 4 },
+  hero: { fontSize: 34, fontWeight: "800", color: walletTheme.colors.onBackground },
+  heading: { fontSize: 25, fontWeight: "700", color: walletTheme.colors.onBackground },
+  subtitle: { fontSize: 16, color: walletTheme.colors.onSurfaceVariant, marginBottom: 18 },
+  muted: { color: walletTheme.colors.onSurfaceVariant },
+  warning: { color: walletTheme.colors.error, lineHeight: 20 },
+  networkLabel: { textAlign: "center", color: walletTheme.colors.onSurfaceVariant },
+  balance: { textAlign: "center", fontSize: 44, fontWeight: "700", color: walletTheme.colors.onBackground },
+  unit: { textAlign: "center", marginTop: -14, color: walletTheme.colors.onSurfaceVariant },
+  paperCard: { backgroundColor: walletTheme.colors.surface },
+  paperCardContent: { gap: 10, paddingVertical: 2 },
+  qrCard: { backgroundColor: walletTheme.colors.surface, borderRadius: 14, padding: 18, alignSelf: "center" },
+  label: { fontSize: 13, fontWeight: "600", color: walletTheme.colors.onSurfaceVariant, marginTop: 4 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginTop: 10 },
   mono: { fontFamily: "monospace", lineHeight: 21 },
   monoSmall: { fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
-  secret: { fontFamily: "monospace", lineHeight: 22, color: "#111827" },
-  input: { minHeight: 48, borderWidth: 1, borderColor: "#c8cfda", borderRadius: 10, backgroundColor: "white", padding: 12, fontSize: 16 },
+  secret: { fontFamily: "monospace", lineHeight: 22, color: walletTheme.colors.onSurface },
+  input: { backgroundColor: walletTheme.colors.surface, fontSize: 16 },
   mnemonicInput: { minHeight: 150, textAlignVertical: "top" },
   endpointInput: { minHeight: 90, textAlignVertical: "top", fontSize: 12 },
   words: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   word: { width: "31%", flexDirection: "row", gap: 6, backgroundColor: "white", padding: 10, borderRadius: 8 },
   wordIndex: { color: "#8a93a3", fontSize: 12 },
-  button: { minHeight: 50, justifyContent: "center", alignItems: "center", borderRadius: 11, paddingHorizontal: 18, backgroundColor: "#2563eb", alignSelf: "stretch" },
-  buttonText: { color: "white", fontSize: 16, fontWeight: "700" },
-  secondaryButton: { minHeight: 48, justifyContent: "center", alignItems: "center", borderRadius: 11, borderWidth: 1, borderColor: "#9aa5b5", paddingHorizontal: 18, alignSelf: "stretch" },
-  secondaryText: { color: "#253247", fontSize: 16, fontWeight: "600" },
-  dangerButton: { borderColor: "#dc2626" },
-  dangerText: { color: "#dc2626" },
+  paperButton: { alignSelf: "stretch" },
+  paperButtonContent: { minHeight: 48 },
+  paperButtonLabel: { fontSize: 15, fontWeight: "700" },
+  dangerText: { color: walletTheme.colors.error },
   disabled: { opacity: 0.45 },
-  back: { fontSize: 16, color: "#2563eb" },
-  segment: { flexDirection: "row", backgroundColor: "#edf0f5", padding: 3, borderRadius: 9 },
-  segmentItem: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7 },
-  segmentActive: { backgroundColor: "white" },
-  segmentActiveText: { color: "#111827", fontWeight: "700" },
-  bottomBar: { flexDirection: "row", backgroundColor: "white", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#d5dae3", paddingBottom: 8 },
-  bottomItem: { flex: 1, alignItems: "center", paddingVertical: 13 },
-  bottomActive: { color: "#2563eb", fontWeight: "700" },
-  statusRow: { flexDirection: "row", justifyContent: "space-between" },
-  ok: { color: "#15803d", fontWeight: "600" },
-  notice: { backgroundColor: "#fff7ed", padding: 12, borderBottomWidth: 1, borderBottomColor: "#fed7aa" },
-  noticeText: { color: "#9a3412", textAlign: "center" },
+  back: { fontSize: 16, color: walletTheme.colors.primary },
+  networkSwitch: { width: 170, marginRight: 8 },
+  khiePage: { padding: 20, gap: 14 },
+  khieTitleRow: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
+  connectionState: { alignSelf: "flex-start", backgroundColor: walletTheme.colors.surface },
+  connectionDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: walletTheme.colors.outline },
+  connectionDotReady: { backgroundColor: walletSemanticColors.success },
+  connectionLabel: { color: walletTheme.colors.onSurfaceVariant, fontSize: 12, fontWeight: "600" },
+  khieCard: { gap: 12, borderRadius: 16, backgroundColor: walletTheme.colors.surface, padding: 16 },
+  khieSectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  khieSectionTitle: { color: walletTheme.colors.onSurface, fontSize: 18, fontWeight: "700", marginBottom: 3 },
+  pairingProgress: { minHeight: 300, alignItems: "center", justifyContent: "center" },
+  pairingMethod: { gap: 9 },
+  methodEyebrow: { color: "#596273", fontSize: 12, fontWeight: "700" },
+  compactQrCard: { width: 158, height: 158, alignSelf: "center", alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: walletTheme.colors.outlineVariant, borderRadius: 12, backgroundColor: "white" },
+  endpointCopy: { minHeight: 31, color: "#7a8495", fontFamily: "monospace", fontSize: 9, lineHeight: 13, textAlign: "center" },
+  qrPendingCard: { height: 189, alignItems: "center", justifyContent: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: "#e0e5ed", borderRadius: 10, backgroundColor: "#f9fafb" },
+  retryText: { color: "#2563eb", fontSize: 13, fontWeight: "700" },
+  orDivider: { height: 17, flexDirection: "row", alignItems: "center", gap: 9 },
+  orLine: { height: StyleSheet.hairlineWidth, flex: 1, backgroundColor: "#d5dae3" },
+  orText: { color: "#98a1b0", fontSize: 11 },
+  pasteRow: { flexDirection: "row", gap: 8 },
+  pasteInput: { height: 44, flex: 1, minWidth: 0, backgroundColor: walletTheme.colors.surface, fontFamily: "monospace", fontSize: 10 },
+  pasteButton: { minWidth: 70, alignSelf: "stretch", justifyContent: "center" },
+  peerDetails: { gap: 10, borderRadius: 12, backgroundColor: walletTheme.colors.surfaceVariant, padding: 13 },
+  peerSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  peerPath: { color: "#596273", fontSize: 12, fontWeight: "600" },
+  peerName: { color: "#111827", fontSize: 14, fontWeight: "700" },
+  peerAgent: { color: "#7a8495", fontSize: 10 },
+  requestIdle: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 12, backgroundColor: walletTheme.colors.surfaceVariant, padding: 14 },
+  requestDot: { width: 9, height: 9, borderRadius: 99, backgroundColor: walletSemanticColors.success },
+  requestTitle: { color: "#111827", fontSize: 14, fontWeight: "700" },
+  requestHint: { color: "#7a8495", fontSize: 11, lineHeight: 16, marginTop: 2 },
+  khieError: { fontSize: 12, lineHeight: 17 },
+  snackbar: { marginBottom: 88 },
   scanner: { flex: 1, backgroundColor: "black" },
   scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: 20, alignSelf: "center", top: "25%" },
   scanFooter: { position: "absolute", left: 20, right: 20, bottom: 30, gap: 12 },

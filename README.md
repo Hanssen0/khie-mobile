@@ -1,5 +1,8 @@
 # Khie Wallet
 
+> [!WARNING]
+> This application and its source code were generated entirely by AI. It has not been independently reviewed or proven secure. Before using it, especially with real assets, you must understand the security, private-key management, transaction-signing and operational risks. Use it at your own risk.
+
 Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khie `SignerJsonRpc` protocol.
 
 ## Included
@@ -8,6 +11,7 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 - Derive one CKB account at `m/44'/309'/0'/0/0`.
 - Testnet/mainnet address and balance, receive QR, authenticated mnemonic/private-key export.
 - Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
+- A deliberately small React Native Paper MD3 presentation layer, with wallet-specific theme tokens and replaceable wrapper components.
 - Replaceable internal `SigningBackend`; Khie never reads or exposes a private-key field.
 
 This MVP intentionally excludes in-app transfers, tokens, history, persistent dapp authorization and release signing.

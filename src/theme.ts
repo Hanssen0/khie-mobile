@@ -1,0 +1,52 @@
+import { MD3LightTheme, type MD3Theme } from "react-native-paper";
+
+export const walletTheme: MD3Theme = {
+  ...MD3LightTheme,
+  roundness: 4,
+  colors: {
+    ...MD3LightTheme.colors,
+    primary: "#315DA8",
+    onPrimary: "#FFFFFF",
+    primaryContainer: "#D9E2FF",
+    onPrimaryContainer: "#001A41",
+    secondary: "#565E71",
+    onSecondary: "#FFFFFF",
+    secondaryContainer: "#DAE2F9",
+    onSecondaryContainer: "#131C2B",
+    tertiary: "#705575",
+    onTertiary: "#FFFFFF",
+    tertiaryContainer: "#FAD8FD",
+    onTertiaryContainer: "#28132E",
+    error: "#BA1A1A",
+    onError: "#FFFFFF",
+    errorContainer: "#FFDAD6",
+    onErrorContainer: "#410002",
+    background: "#F9F9FF",
+    onBackground: "#1A1B20",
+    surface: "#F9F9FF",
+    onSurface: "#1A1B20",
+    surfaceVariant: "#E1E2EC",
+    onSurfaceVariant: "#44464F",
+    outline: "#757780",
+    outlineVariant: "#C5C6D0",
+    inverseSurface: "#2F3036",
+    inverseOnSurface: "#F1F0F7",
+    inversePrimary: "#AFC6FF",
+    elevation: {
+      ...MD3LightTheme.colors.elevation,
+      level0: "transparent",
+      level1: "#F2F3FA",
+      level2: "#ECEEF7",
+      level3: "#E6E9F4",
+      level4: "#E4E7F2",
+      level5: "#E0E4F0",
+    },
+  },
+};
+
+export const walletSemanticColors = {
+  success: "#176B3A",
+  onSuccess: "#FFFFFF",
+  successContainer: "#A7F3C4",
+  onSuccessContainer: "#00210D",
+} as const;
