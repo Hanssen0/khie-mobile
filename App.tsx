@@ -55,12 +55,21 @@ import {
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
 import {
+  SecureStoreNetworkSettings,
+} from "./src/storage/networkSettings";
+import {
   SecureStoreWalletVault,
   type WalletAuthenticationPurpose,
 } from "./src/storage/walletVault";
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
 import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
-import { clientForNetwork, networkFromId } from "./src/wallet/network";
+import {
+  DEFAULT_NETWORK_RPC_URLS,
+  clientForNetwork,
+  isRpcUrl,
+  networkFromId,
+  type NetworkRpcUrls,
+} from "./src/wallet/network";
 import type { Network, WalletProfile } from "./src/wallet/types";
 import { generateMnemonic, persistWallet } from "./src/wallet/walletService";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
@@ -97,6 +106,7 @@ function WalletApp() {
       ),
     [],
   );
+  const networkSettings = useMemo(() => new SecureStoreNetworkSettings(), []);
   const approvalQueue = useMemo(() => new ApprovalQueue(), []);
   const clients = useRef({
     mainnet: clientForNetwork("mainnet"),
@@ -110,6 +120,7 @@ function WalletApp() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<WalletProfile>();
   const [network, setNetwork] = useState<Network>("testnet");
+  const [rpcUrls, setRpcUrls] = useState<NetworkRpcUrls>(DEFAULT_NETWORK_RPC_URLS);
   const [screen, setScreen] = useState<Screen>("home");
   const [onboarding, setOnboarding] = useState<Onboarding>("start");
   const [approval, setApproval] = useState<ApprovalItem>();
@@ -127,12 +138,24 @@ function WalletApp() {
   useEffect(() => approvalQueue.subscribe(setApproval), [approvalQueue]);
 
   useEffect(() => {
-    void vault
-      .loadProfile()
-      .then(setProfile)
+    void Promise.all([
+      vault.loadProfile(),
+      networkSettings.load().catch((cause: unknown) => {
+        setNotice(errorMessage(cause, tRef.current));
+        return { ...DEFAULT_NETWORK_RPC_URLS };
+      }),
+    ])
+      .then(([nextProfile, nextRpcUrls]) => {
+        clients.current = {
+          mainnet: clientForNetwork("mainnet", nextRpcUrls.mainnet),
+          testnet: clientForNetwork("testnet", nextRpcUrls.testnet),
+        };
+        setRpcUrls(nextRpcUrls);
+        setProfile(nextProfile);
+      })
       .catch((cause: unknown) => setNotice(errorMessage(cause, tRef.current)))
       .finally(() => setLoading(false));
-  }, [vault]);
+  }, [networkSettings, vault]);
 
   const backend = useMemo(
     () => profile && new LocalMnemonicSigningBackend(profile, vault),
@@ -220,6 +243,25 @@ function WalletApp() {
     [approvalQueue, selectNetwork, sessionState.paired],
   );
 
+  const saveRpcUrls = useCallback(
+    async (next: NetworkRpcUrls) => {
+      const saved = await networkSettings.save(next);
+      clients.current = {
+        mainnet: clientForNetwork("mainnet", saved.mainnet),
+        testnet: clientForNetwork("testnet", saved.testnet),
+      };
+      setRpcUrls(saved);
+      approvalQueue.cancelAll("Network RPC URL changed");
+      if (backend) {
+        signerRef.current = new KhieSignerAdapter(
+          clients.current[networkRef.current],
+          backend,
+        );
+      }
+    },
+    [approvalQueue, backend, networkSettings],
+  );
+
   const pairKhieEndpoint = useCallback(async (endpoint: string) => {
     const session = sessionRef.current;
     if (!session || !endpoint.trim()) {
@@ -296,7 +338,12 @@ function WalletApp() {
           <SettingsScreen
             backend={backend!}
             profile={profile}
+            rpcUrls={rpcUrls}
             vault={vault}
+            onSaveRpcUrls={async (next) => {
+              await saveRpcUrls(next);
+              setNotice(t("rpcUrlsSaved"));
+            }}
             onRecovered={(next) => {
               setProfile(next);
               setNotice(t("walletKeyRecovered"));
@@ -771,19 +818,41 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
 function SettingsScreen({
   backend,
   profile,
+  rpcUrls,
   vault,
+  onSaveRpcUrls,
   onRecovered,
 }: {
   backend: LocalMnemonicSigningBackend;
   profile: WalletProfile;
+  rpcUrls: NetworkRpcUrls;
   vault: SecureStoreWalletVault;
+  onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>;
   onRecovered: (profile: WalletProfile) => void;
 }) {
   const { t } = useI18n();
   const [secret, setSecret] = useState<{ label: string; value: string }>();
+  const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
+  const [savingRpcUrls, setSavingRpcUrls] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
   const [recovering, setRecovering] = useState(false);
+  useEffect(() => setRpcDraft(rpcUrls), [rpcUrls]);
+  const testnetRpcValid = isRpcUrl(rpcDraft.testnet);
+  const mainnetRpcValid = isRpcUrl(rpcDraft.mainnet);
+  const rpcUrlsChanged =
+    rpcDraft.testnet.trim() !== rpcUrls.testnet ||
+    rpcDraft.mainnet.trim() !== rpcUrls.mainnet;
+  const applyRpcUrls = async (next: NetworkRpcUrls) => {
+    setSavingRpcUrls(true);
+    try {
+      await onSaveRpcUrls(next);
+    } catch (cause) {
+      Alert.alert(t("unableToSave"), errorMessage(cause, t));
+    } finally {
+      setSavingRpcUrls(false);
+    }
+  };
   const reveal = async (kind: "mnemonic" | "privateKey") => {
     try {
       setSecret({
@@ -802,6 +871,56 @@ function SettingsScreen({
         <PaperCard.Content>
           <LanguageMenu />
         </PaperCard.Content>
+      </PaperCard>
+      <PaperCard mode="outlined">
+        <PaperCard.Title
+          title={t("networkRpc")}
+          left={(props) => <Icon {...props} source="server-network" />}
+        />
+        <PaperCard.Content>
+          <WalletTextInput
+            label={t("testnetRpcUrl")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={rpcDraft.testnet}
+            error={!testnetRpcValid}
+            onChangeText={(testnet) => setRpcDraft((current) => ({ ...current, testnet }))}
+          />
+          <HelperText type="error" visible={!testnetRpcValid}>
+            {t("invalidRpcUrl")}
+          </HelperText>
+          <WalletTextInput
+            label={t("mainnetRpcUrl")}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={rpcDraft.mainnet}
+            error={!mainnetRpcValid}
+            onChangeText={(mainnet) => setRpcDraft((current) => ({ ...current, mainnet }))}
+          />
+          <HelperText type="error" visible={!mainnetRpcValid}>
+            {t("invalidRpcUrl")}
+          </HelperText>
+        </PaperCard.Content>
+        <PaperCard.Actions>
+          <PaperButton
+            disabled={savingRpcUrls}
+            onPress={() => void applyRpcUrls({ ...DEFAULT_NETWORK_RPC_URLS })}
+          >
+            {t("restoreDefaults")}
+          </PaperButton>
+          <PaperButton
+            mode="contained"
+            loading={savingRpcUrls}
+            disabled={
+              savingRpcUrls || !rpcUrlsChanged || !testnetRpcValid || !mainnetRpcValid
+            }
+            onPress={() => void applyRpcUrls(rpcDraft)}
+          >
+            {t("save")}
+          </PaperButton>
+        </PaperCard.Actions>
       </PaperCard>
       <PaperCard mode="outlined">
         <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
