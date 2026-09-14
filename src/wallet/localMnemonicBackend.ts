@@ -34,8 +34,9 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
     purpose: SigningPurpose,
     operation: (signer: Signer) => Promise<T>,
   ): Promise<T> {
-    const label = purpose === "message" ? "签名消息" : "签名交易";
-    const mnemonic = await this.vault.readMnemonic(`验证身份以${label}`);
+    const mnemonic = await this.vault.readMnemonic(
+      purpose === "message" ? "signMessage" : "signTransaction",
+    );
     const { account, privateKey } = deriveAccount(mnemonic);
     try {
       if (account.publicKey !== this.account.publicKey) {
@@ -48,11 +49,11 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
   }
 
   exportMnemonic(): Promise<string> {
-    return this.vault.readMnemonic("验证身份以查看助记词");
+    return this.vault.readMnemonic("viewMnemonic");
   }
 
   async exportPrivateKey(): Promise<string> {
-    const mnemonic = await this.vault.readMnemonic("验证身份以查看私钥");
+    const mnemonic = await this.vault.readMnemonic("viewPrivateKey");
     const { privateKey } = deriveAccount(mnemonic);
     try {
       return hexFrom(privateKey);

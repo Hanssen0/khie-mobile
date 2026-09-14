@@ -12,6 +12,7 @@ import {
   AppState,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -49,7 +50,10 @@ import {
   KhieProviderSession,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
-import { SecureStoreWalletVault } from "./src/storage/walletVault";
+import {
+  SecureStoreWalletVault,
+  type WalletAuthenticationPurpose,
+} from "./src/storage/walletVault";
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
 import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
 import { clientForNetwork, networkFromId } from "./src/wallet/network";
@@ -78,7 +82,13 @@ function WalletApp() {
   const { t } = useI18n();
   const tRef = useRef(t);
   tRef.current = t;
-  const vault = useMemo(() => new SecureStoreWalletVault(), []);
+  const vault = useMemo(
+    () =>
+      new SecureStoreWalletVault((purpose) =>
+        walletAuthenticationPrompt(purpose, tRef.current),
+      ),
+    [],
+  );
   const approvalQueue = useMemo(() => new ApprovalQueue(), []);
   const clients = useRef({
     mainnet: clientForNetwork("mainnet"),
@@ -515,7 +525,9 @@ function KhieScreen({
   onUnpair: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { width } = useWindowDimensions();
   const [endpoint, setEndpoint] = useState("");
+  const qrSize = Math.max(180, Math.min(420, width - 64));
   const pair = async () => {
     if (await onPair(endpoint)) {
       setEndpoint("");
@@ -551,70 +563,73 @@ function KhieScreen({
       </View>
 
       {pairing ? (
-        <PaperCard mode="elevated">
-          <PaperCard.Content style={styles.pairingProgress}>
-            <ActivityIndicator size="large" />
-            <Text variant="titleLarge">{t("establishingSecureConnection")}</Text>
-            <Text variant="bodyMedium">{t("keepPageOpen")}</Text>
-            <PaperButton mode="text" onPress={onCancelPairing}>{t("cancelPairing")}</PaperButton>
-          </PaperCard.Content>
-        </PaperCard>
+        <View style={styles.pairingProgress}>
+          <ActivityIndicator size="large" />
+          <Text variant="titleLarge">{t("establishingSecureConnection")}</Text>
+          <Text variant="bodyMedium">{t("keepPageOpen")}</Text>
+          <PaperButton mode="text" onPress={onCancelPairing}>{t("cancelPairing")}</PaperButton>
+        </View>
       ) : state.paired ? (
-        <PaperCard mode="elevated">
-          <PaperCard.Title
-            title={state.remotePeer?.name ?? t("webConnector")}
-            subtitle={connectionPath}
-            left={(props) => <Icon {...props} source="web" />}
-          />
-          <PaperCard.Content style={styles.cardContent}>
-            <List.Item
-              title={remoteActive ? t("webOnline") : t("webOffline")}
-              description={remoteActive ? t("canRequest") : t("reconnectsAutomatically")}
-              left={(props) => <List.Icon {...props} icon={remoteActive ? "check-circle" : "progress-clock"} />}
-            />
-            <Divider />
-            <View style={styles.metadataBlock}>
-              <Text variant="labelMedium">Peer ID</Text>
-              <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
-                {state.remotePeer?.id ?? t("readingPeer")}
-              </Text>
-              {state.remotePeer?.agentVersion ? (
-                <Text variant="labelSmall" numberOfLines={1}>{state.remotePeer.agentVersion}</Text>
-              ) : null}
+        <View style={styles.khieContent}>
+          <View style={styles.khieSectionHeader}>
+            <Icon source="web" size={32} color={walletTheme.colors.primary} />
+            <View style={styles.flex}>
+              <Text variant="titleLarge">{state.remotePeer?.name ?? t("webConnector")}</Text>
+              <Text variant="bodyMedium">{connectionPath}</Text>
             </View>
-            <Divider />
-            <List.Item
-              title={t("waitingWebRequest")}
-              description={t("requestsConfirmedSeparately")}
-              left={(props) => <List.Icon {...props} icon="shield-check" />}
-            />
-          </PaperCard.Content>
-          <PaperCard.Actions>
-            <PaperButton icon="link-off" textColor={walletTheme.colors.error} onPress={() => void onUnpair()}>
-              {t("unpair")}
-            </PaperButton>
-          </PaperCard.Actions>
-        </PaperCard>
-      ) : (
-        <PaperCard mode="elevated">
-          <PaperCard.Title
-            title={t("connectWeb")}
-            subtitle={t("pairingMethodsEqual")}
-            left={(props) => <Icon {...props} source="connection" />}
+          </View>
+          <List.Item
+            title={remoteActive ? t("webOnline") : t("webOffline")}
+            description={remoteActive ? t("canRequest") : t("reconnectsAutomatically")}
+            left={(props) => <List.Icon {...props} icon={remoteActive ? "check-circle" : "progress-clock"} />}
           />
-          <PaperCard.Content style={styles.cardContent}>
+          <Divider />
+          <View style={styles.metadataBlock}>
+            <Text variant="labelMedium">Peer ID</Text>
+            <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
+              {state.remotePeer?.id ?? t("readingPeer")}
+            </Text>
+            {state.remotePeer?.agentVersion ? (
+              <Text variant="labelSmall" numberOfLines={1}>{state.remotePeer.agentVersion}</Text>
+            ) : null}
+          </View>
+          <Divider />
+          <List.Item
+            title={t("waitingWebRequest")}
+            description={t("requestsConfirmedSeparately")}
+            left={(props) => <List.Icon {...props} icon="shield-check" />}
+          />
+          <PaperButton
+            icon="link-off"
+            textColor={walletTheme.colors.error}
+            onPress={() => void onUnpair()}
+            style={styles.khieAction}
+          >
+            {t("unpair")}
+          </PaperButton>
+        </View>
+      ) : (
+        <View style={styles.khieContent}>
+          <View style={styles.khieSectionHeader}>
+            <Icon source="connection" size={32} color={walletTheme.colors.primary} />
+            <View style={styles.flex}>
+              <Text variant="titleLarge">{t("connectWeb")}</Text>
+              <Text variant="bodyMedium">{t("pairingMethodsEqual")}</Text>
+            </View>
+          </View>
+          <View style={styles.khieMethod}>
             <Text variant="titleSmall">{t("webScansPhone")}</Text>
             {state.endpoint ? (
               <>
                 <View style={styles.qrFrame}>
-                  <QRCode value={state.endpoint} size={142} />
+                  <QRCode value={state.endpoint} size={qrSize} />
                 </View>
                 <Text variant="labelSmall" selectable numberOfLines={2} style={[styles.mono, styles.centerText]}>
                   {state.endpoint}
                 </Text>
               </>
             ) : (
-              <View style={styles.qrPlaceholder}>
+              <View style={[styles.qrPlaceholder, { height: qrSize + 24 }]}>
                 <ActivityIndicator />
                 <Text variant="bodyMedium">
                   {state.relayConnected ? t("generatingPairingCode") : t("connectingRelay")}
@@ -624,7 +639,9 @@ function KhieScreen({
                 ) : null}
               </View>
             )}
-            <Divider />
+          </View>
+          <Divider />
+          <View style={styles.khieMethod}>
             <Text variant="titleSmall">{t("phoneScansWeb")}</Text>
             <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
               {t("scanConnectorCode")}
@@ -644,8 +661,8 @@ function KhieScreen({
                 />
               }
             />
-          </PaperCard.Content>
-        </PaperCard>
+          </View>
+        </View>
       )}
 
       {state.error && !pairing ? (
@@ -1077,6 +1094,24 @@ function errorMessage(cause: unknown, t: Translate): string {
   return cause.message;
 }
 
+function walletAuthenticationPrompt(
+  purpose: WalletAuthenticationPurpose,
+  t: Translate,
+): string {
+  switch (purpose) {
+    case "signMessage":
+      return t("authenticationSignMessage");
+    case "signTransaction":
+      return t("authenticationSignTransaction");
+    case "viewMnemonic":
+      return t("authenticationViewMnemonic");
+    case "viewPrivateKey":
+      return t("authenticationViewPrivateKey");
+    default:
+      return t("authenticationUseWallet");
+  }
+}
+
 function formatKhieError(message: string, t: Translate): string {
   if (message.startsWith("Expected a connector pairing endpoint")) {
     return t("wrongPairingRole");
@@ -1109,9 +1144,13 @@ const styles = StyleSheet.create({
   backButton: { alignSelf: "flex-start", marginLeft: -12 },
   networkSwitch: { width: 170, marginRight: 8 },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
+  khieContent: { gap: 16 },
+  khieSectionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  khieMethod: { gap: 12 },
+  khieAction: { alignSelf: "flex-start" },
   qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
-  qrFrame: { alignSelf: "center", padding: 12, borderRadius: walletTheme.roundness * 4, backgroundColor: "white" },
-  qrPlaceholder: { height: 166, alignItems: "center", justifyContent: "center", gap: 12 },
+  qrFrame: { alignSelf: "center", padding: 12, borderRadius: walletTheme.roundness * 2, backgroundColor: "white" },
+  qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
   dialogScrollArea: { maxHeight: 480, paddingHorizontal: 0 },
   dialogContent: { gap: 16, paddingHorizontal: 24, paddingVertical: 16 },
   snackbar: { marginBottom: 88 },

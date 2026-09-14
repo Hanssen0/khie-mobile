@@ -14,7 +14,30 @@ import { SecureStoreWalletVault, WalletSecretUnavailableError } from "./walletVa
 
 describe("SecureStoreWalletVault", () => {
   beforeEach(() => {
-    secureStore.getItemAsync.mockReset();
+    vi.clearAllMocks();
+  });
+
+  it("uses the current localized prompt for each protected read", async () => {
+    secureStore.getItemAsync.mockResolvedValue("test mnemonic");
+    let localizedPrompt = "Authenticate to sign the message";
+    const prompt = vi.fn(() => localizedPrompt);
+    const vault = new SecureStoreWalletVault(prompt);
+
+    await vault.readMnemonic("signMessage");
+
+    localizedPrompt = "验证身份以签名消息";
+    await vault.readMnemonic("signMessage");
+
+    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(prompt).toHaveBeenNthCalledWith(2, "signMessage");
+    expect(secureStore.getItemAsync).toHaveBeenNthCalledWith(
+      2,
+      "khie.wallet.mnemonic.v1",
+      expect.objectContaining({
+        authenticationPrompt: "验证身份以签名消息",
+        requireAuthentication: true,
+      }),
+    );
   });
 
   it("classifies invalidated authenticated entries as recovery-required", async () => {
