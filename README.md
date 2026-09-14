@@ -39,6 +39,19 @@ cd android
 
 The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
 
+## Automated APK releases
+
+Pushing a tag whose name starts with `v` runs the Android release workflow:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow runs the TypeScript checks and tests, generates the Android project, and publishes standalone Hermes APKs plus their SHA-256 checksums to GitHub Releases. It provides individual `arm64-v8a`, `armeabi-v7a`, `x86` and `x86_64` APKs, plus a universal APK containing all four Android architectures.
+
+The current release variant uses the Expo-generated Android debug keystore. It is installable without Metro, but it is a development build and is not suitable for Play Store distribution or production asset custody.
+
 ## Checks
 
 ```sh

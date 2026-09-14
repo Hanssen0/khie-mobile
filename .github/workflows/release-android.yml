@@ -1,0 +1,98 @@
+name: Release Android APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+      EXPO_NO_TELEMETRY: 1
+      NODE_ENV: production
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          require-lockfile: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Check TypeScript
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Generate Android project
+        run: pnpm prebuild --platform android --no-install
+
+      - name: Build standalone release APK
+        working-directory: android
+        run: >-
+          ./gradlew :app:assembleRelease
+          -Pkhie.enableAbiSplits=true
+          -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86,x86_64
+          --no-daemon
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-arm64-v8a-release.apk "release/khie-mobile-${GITHUB_REF_NAME}-arm64-v8a.apk"
+          cp android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk "release/khie-mobile-${GITHUB_REF_NAME}-armeabi-v7a.apk"
+          cp android/app/build/outputs/apk/release/app-x86-release.apk "release/khie-mobile-${GITHUB_REF_NAME}-x86.apk"
+          cp android/app/build/outputs/apk/release/app-x86_64-release.apk "release/khie-mobile-${GITHUB_REF_NAME}-x86_64.apk"
+          cp android/app/build/outputs/apk/release/app-universal-release.apk "release/khie-mobile-${GITHUB_REF_NAME}-universal.apk"
+          cd release
+          sha256sum -- *.apk > "khie-mobile-${GITHUB_REF_NAME}.sha256"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Khie Wallet ${{ github.ref_name }}
+          body: |
+            Android standalone APK generated from `${{ github.sha }}`.
+
+            - `arm64-v8a`: current Android phones and tablets
+            - `armeabi-v7a`: older 32-bit ARM devices
+            - `x86`: older 32-bit Android emulators and Intel devices
+            - `x86_64`: Android emulators and Intel devices
+            - `universal`: all four Android architectures, including 32-bit `x86`
+
+            This application and its source code were generated entirely by AI. This APK uses development signing, has not been independently security audited and is not a production wallet. Understand the private-key, transaction-signing and asset risks before installing or using it.
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/khie-mobile-${{ github.ref_name }}-arm64-v8a.apk
+            release/khie-mobile-${{ github.ref_name }}-armeabi-v7a.apk
+            release/khie-mobile-${{ github.ref_name }}-x86.apk
+            release/khie-mobile-${{ github.ref_name }}-x86_64.apk
+            release/khie-mobile-${{ github.ref_name }}-universal.apk
+            release/khie-mobile-${{ github.ref_name }}.sha256
