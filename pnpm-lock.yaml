@@ -215,8 +215,8 @@ importers:
         specifier: 3.0.0
         version: 3.0.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))
       react-native-webrtc:
-        specifier: 124.0.6
-        version: 124.0.6(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
+        specifier: 124.0.8
+        version: 124.0.8(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
     devDependencies:
       '@types/node':
         specifier: 24.10.1
@@ -3030,8 +3030,8 @@ packages:
     peerDependencies:
       react-native: '*'
 
-  react-native-webrtc@124.0.6:
-    resolution: {integrity: sha512-5GviOGK19vujT7sGvSYdZE+bBlh0KC9g1JLharzajpCDVrNdCSpYxveOJUINSRevLsmL12FgNJJgnTjFKn7Aqw==}
+  react-native-webrtc@124.0.8:
+    resolution: {integrity: sha512-uuQxvmk+mvnk5U0tr+1N42sKZqgm41fJrBA+fmCvML9J9P4roSh2So82t5RHAlu/vE9vxu5AKgivAiH61clCBg==}
     peerDependencies:
       react-native: '>=0.60.0'
 
@@ -4921,7 +4921,7 @@ snapshots:
       progress-events: 1.1.0
       protons-runtime: 7.1.0
       race-signal: 2.0.2
-      react-native-webrtc: 124.0.6(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
+      react-native-webrtc: 124.0.8(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
       reflect-metadata: 0.2.2
       uint8-varint: 3.0.0
       uint8arraylist: 3.0.2
@@ -7102,11 +7102,10 @@ snapshots:
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2)
       whatwg-url-without-unicode: 8.0.0-3
 
-  react-native-webrtc@124.0.6(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2):
+  react-native-webrtc@124.0.8(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
       base64-js: 1.5.1
       debug: 4.3.4(supports-color@10.2.2)
-      event-target-shim: 6.0.2
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.7)(react@19.2.3)(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
