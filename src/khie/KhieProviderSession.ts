@@ -291,7 +291,6 @@ export class KhieProviderSession {
         this.disconnectedAt = undefined;
         this.patchState({ paired: true });
         void this.syncRemotePeer(node, peerId);
-        void Libp2p.dialKnownAddresses(node, peerId, this.abortController.signal).catch(() => {});
       }),
       node.services.pairing.onUnpaired((peerId) => {
         if (!this.pairedPeer?.equals(peerId)) {
