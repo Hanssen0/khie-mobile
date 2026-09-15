@@ -34,7 +34,6 @@ jobs:
         with:
           runtime: node@24
           cache: true
-          require-lockfile: true
 
       - name: Set up Java
         uses: actions/setup-java@v6
