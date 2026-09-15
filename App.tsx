@@ -2679,6 +2679,18 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
   const { t } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const scanned = useRef(false);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        onCancel();
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [onCancel]);
+
   if (!permission) {
     return <View style={[styles.page, styles.center]}><ActivityIndicator /></View>;
   }
@@ -2732,7 +2744,6 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
           }
         }}
       />
-      <View style={styles.scanGuide} />
       <View style={styles.scanFooter}>
         <Text variant="titleMedium" style={styles.scanText}>{t("scanConnectorCode")}</Text>
         <PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancelScan")}</PaperButton>
@@ -4565,7 +4576,6 @@ const styles = StyleSheet.create({
   qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
   snackbar: { marginBottom: 88 },
   scanner: { flex: 1, backgroundColor: "black" },
-  scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: 30, alignSelf: "center", top: "25%" },
   scanFooter: { position: "absolute", left: 20, right: 20, bottom: 30, gap: 12 },
   scanText: { color: "white", textAlign: "center" },
   flex: { flex: 1 },
