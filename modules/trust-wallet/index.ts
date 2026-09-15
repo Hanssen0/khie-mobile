@@ -12,8 +12,15 @@ export type ConnectedTrustDevice = {
   publicKey?: string;
 };
 
+export type TrustBluetoothState = {
+  available: boolean;
+  enabled: boolean;
+  locationServicesEnabled: boolean;
+};
+
 type TrustWalletNativeModule = {
   isAvailable(): boolean;
+  getBluetoothState(): TrustBluetoothState;
   scan(durationMs: number): Promise<TrustDevice[]>;
   connect(deviceId: string, pin: string): Promise<ConnectedTrustDevice>;
   resetPin(deviceId: string, puk: string, newPin: string): Promise<void>;
@@ -37,6 +44,10 @@ function requireModule(): TrustWalletNativeModule {
 
 export function isTrustWalletAvailable(): boolean {
   return nativeModule?.isAvailable() === true;
+}
+
+export function getTrustBluetoothState(): TrustBluetoothState {
+  return requireModule().getBluetoothState();
 }
 
 export function scanTrustDevices(durationMs = 8_000): Promise<TrustDevice[]> {

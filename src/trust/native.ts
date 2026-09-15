@@ -2,6 +2,7 @@ import {
   connectTrustDevice,
   disconnectTrustDevice,
   generateTrustDeviceKey,
+  getTrustBluetoothState,
   importTrustDeviceKey,
   isTrustWalletAvailable,
   resetTrustDeviceKey,
@@ -19,30 +20,90 @@ export function isTrustSupported(): boolean {
   return Platform.OS === "android" && isTrustWalletAvailable();
 }
 
-export async function scanForTrustDevices(): Promise<TrustDevice[]> {
-  if (Platform.OS !== "android") {
-    throw new Error("Trust hardware wallets are only supported on Android");
-  }
+export type TrustBluetoothSetupIssue =
+  | "bluetoothUnavailable"
+  | "bluetoothDisabled"
+  | "locationDisabled"
+  | "permissionDenied";
 
+export class TrustBluetoothSetupError extends Error {
+  constructor(
+    readonly issue: TrustBluetoothSetupIssue,
+    readonly settings: "app" | "bluetooth" | "location",
+  ) {
+    super(issue);
+    this.name = "TrustBluetoothSetupError";
+  }
+}
+
+async function requestTrustPermissions(purpose: "scan" | "connect"): Promise<void> {
+  const androidVersion = Number(Platform.Version);
   const permissions =
-    Number(Platform.Version) >= 31
-      ? [
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          // Some Android vendor stacks still gate BLE scan results behind
-          // location permission on Android 12+, even with BLUETOOTH_SCAN.
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ]
-      : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+    androidVersion >= 31
+      ? purpose === "scan"
+        ? [
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          ]
+        : [PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]
+      : purpose === "scan"
+        ? [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION]
+        : [];
+  if (!permissions.length) return;
+
   const result = await PermissionsAndroid.requestMultiple(permissions);
   if (permissions.some((permission) => result[permission] !== "granted")) {
-    throw new Error("Bluetooth permission is required to find Cryptape Trust devices");
+    throw new TrustBluetoothSetupError("permissionDenied", "app");
   }
+}
+
+export async function ensureTrustBluetoothReady(
+  purpose: "scan" | "connect",
+): Promise<void> {
+  if (Platform.OS !== "android") {
+    throw new TrustBluetoothSetupError("bluetoothUnavailable", "app");
+  }
+
+  await requestTrustPermissions(purpose);
+  const state = getTrustBluetoothState();
+  if (!state.available) {
+    throw new TrustBluetoothSetupError("bluetoothUnavailable", "app");
+  }
+  if (!state.enabled) {
+    throw new TrustBluetoothSetupError("bluetoothDisabled", "bluetooth");
+  }
+  if (
+    purpose === "scan" &&
+    Number(Platform.Version) <= 30 &&
+    !state.locationServicesEnabled
+  ) {
+    throw new TrustBluetoothSetupError("locationDisabled", "location");
+  }
+}
+
+export async function scanForTrustDevices(): Promise<TrustDevice[]> {
+  await ensureTrustBluetoothReady("scan");
   return scanTrustDevices();
 }
 
-export const connectTrustWallet = connectTrustDevice;
-export const resetTrustWalletPin = resetTrustDevicePin;
+export async function connectTrustWallet(
+  deviceId: string,
+  pin: string,
+  cachedName?: string,
+): Promise<ConnectedTrustDevice> {
+  await ensureTrustBluetoothReady("connect");
+  const device = await connectTrustDevice(deviceId, pin);
+  return cachedName ? { ...device, name: cachedName } : device;
+}
+
+export async function resetTrustWalletPin(
+  deviceId: string,
+  puk: string,
+  newPin: string,
+): Promise<void> {
+  await ensureTrustBluetoothReady("connect");
+  return resetTrustDevicePin(deviceId, puk, newPin);
+}
 export const generateTrustWalletKey = generateTrustDeviceKey;
 export const resetTrustWalletKey = resetTrustDeviceKey;
 export const importTrustWalletKey = importTrustDeviceKey;

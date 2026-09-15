@@ -3,8 +3,12 @@ package expo.modules.trustwallet
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.Context
+import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import expo.modules.kotlin.Promise
@@ -15,7 +19,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class TrustWalletModule : Module() {
   private val adapter: BluetoothAdapter?
-    get() = BluetoothAdapter.getDefaultAdapter()
+    get() = (appContext.reactContext
+      ?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
   private val mainHandler = Handler(Looper.getMainLooper())
   private var activeScan: ScanCallback? = null
 
@@ -33,6 +38,25 @@ class TrustWalletModule : Module() {
 
     Function("isAvailable") {
       adapter != null
+    }
+
+    @SuppressLint("MissingPermission")
+    Function("getBluetoothState") {
+      val bluetoothAdapter = adapter
+      val locationManager = appContext.reactContext
+        ?.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+      val locationServicesEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        locationManager?.isLocationEnabled == true
+      } else {
+        locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
+          locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+      }
+
+      mapOf(
+        "available" to (bluetoothAdapter != null),
+        "enabled" to (bluetoothAdapter?.isEnabled == true),
+        "locationServicesEnabled" to locationServicesEnabled
+      )
     }
 
     AsyncFunction("scan") { durationMs: Int, promise: Promise ->

@@ -8,7 +8,15 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   AppState,
@@ -71,12 +79,14 @@ import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
 import {
   connectTrustWallet,
   disconnectTrustWallet,
+  ensureTrustBluetoothReady,
   generateTrustWalletKey,
   importTrustWalletKey,
   isTrustSupported,
   resetTrustWalletKey,
   resetTrustWalletPin,
   scanForTrustDevices,
+  TrustBluetoothSetupError,
   type ConnectedTrustDevice,
   type TrustDevice,
 } from "./src/trust/native";
@@ -120,6 +130,13 @@ type TrustPinRequest = {
   reject: (cause: Error) => void;
   resolve: (pin: string) => void;
 };
+type TrustBluetoothSetupContextValue = {
+  show: (cause: unknown) => boolean;
+};
+
+const TrustBluetoothSetupContext = createContext<
+  TrustBluetoothSetupContextValue | undefined
+>(undefined);
 
 const endpointUrl = "https://app.ckbccc.com/khie";
 
@@ -133,7 +150,9 @@ export default function App() {
         <NavigationBar style="auto" />
         <I18nProvider>
           <PaperProvider theme={theme}>
-            <WalletApp />
+            <TrustBluetoothSetupProvider>
+              <WalletApp />
+            </TrustBluetoothSetupProvider>
           </PaperProvider>
         </I18nProvider>
       </KeyboardProvider>
@@ -143,6 +162,7 @@ export default function App() {
 
 function WalletApp() {
   const { t } = useI18n();
+  const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const theme = useTheme();
   const tRef = useRef(t);
   tRef.current = t;
@@ -200,6 +220,14 @@ function WalletApp() {
     [],
   );
 
+  const submitTrustPin = useCallback(() => {
+    if (!trustPinRequest || trustPin.length !== 8) return;
+    trustPinRequest.resolve(trustPin);
+    setTrustPinRequest(undefined);
+    setTrustPin("");
+    void KeyboardController.dismiss({ animated: true });
+  }, [trustPin, trustPinRequest]);
+
   useEffect(
     () =>
       approvalQueue.subscribe((item) => {
@@ -245,21 +273,38 @@ function WalletApp() {
 
   const requestTrustSigningPin = useCallback<RequestTrustPin>(
     async (purpose) => {
-      const pin = await requestTrustPin(purpose);
-      if (
-        (purpose !== "message" && purpose !== "transaction") ||
-        profile?.kind !== "cryptape-trust" ||
-        !profile.publicKey ||
-        trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase()
-      ) {
-        return pin;
+      const disconnectedProfile =
+        (purpose === "message" || purpose === "transaction") &&
+        profile?.kind === "cryptape-trust" &&
+        profile.publicKey &&
+        trustDevice?.id.toLowerCase() !== profile.deviceId.toLowerCase()
+          ? profile
+          : undefined;
+      if (disconnectedProfile) {
+        try {
+          await ensureTrustBluetoothReady("connect");
+        } catch (cause) {
+          showTrustBluetoothSetupError(cause);
+          throw cause;
+        }
       }
 
-      const device = await connectTrustWallet(profile.deviceId, pin);
+      const pin = await requestTrustPin(purpose);
+      if (!disconnectedProfile) {
+        return pin;
+      }
+      const expectedPublicKey = disconnectedProfile.publicKey;
+      if (!expectedPublicKey) return pin;
+
+      const device = await connectTrustWallet(
+        disconnectedProfile.deviceId,
+        pin,
+        disconnectedProfile.name,
+      );
       if (
         !device.publicKey ||
         normalizeTrustPublicKey(device.publicKey) !==
-          normalizeTrustPublicKey(profile.publicKey)
+          normalizeTrustPublicKey(expectedPublicKey)
       ) {
         await releaseTrustConnection().catch(() => undefined);
         throw new Error("Cryptape Trust public key has changed");
@@ -448,12 +493,13 @@ function WalletApp() {
   );
 
   const connectTrust = useCallback(
-    async (deviceId: string) => {
+    async (deviceId: string, cachedName?: string) => {
+      await ensureTrustBluetoothReady("connect");
       const pin = await new Promise<string>((resolve, reject) => {
         setTrustPin("");
         setTrustPinRequest({ purpose: "connect", deviceId, reject, resolve });
       });
-      const device = await connectTrustWallet(deviceId, pin);
+      const device = await connectTrustWallet(deviceId, pin, cachedName);
       setTrustDevice(device);
       return device;
     },
@@ -466,9 +512,9 @@ function WalletApp() {
   }, [approvalQueue, releaseTrustConnection]);
 
   const addTrustWallet = useCallback(
-    async (deviceId: string) => {
+    async (scannedDevice: TrustDevice) => {
       try {
-        const device = await connectTrust(deviceId);
+        const device = await connectTrust(scannedDevice.id, scannedDevice.name);
         setWalletState(await vault.saveCryptapeTrust(device));
         setOnboarding("start");
         setAddingWallet(false);
@@ -494,12 +540,16 @@ function WalletApp() {
     if (profile?.kind !== "cryptape-trust") {
       throw new Error("Cryptape Trust wallet is unavailable");
     }
+    const connected = trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase();
+    if (!connected) {
+      await ensureTrustBluetoothReady("connect");
+    }
     const pin = await requestTrustPin("keyManagement");
-    if (trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase()) {
+    if (connected) {
       return { device: trustDevice, pin };
     }
 
-    const device = await connectTrustWallet(profile.deviceId, pin);
+    const device = await connectTrustWallet(profile.deviceId, pin, profile.name);
     setTrustDevice(device);
     setWalletState(await vault.saveCryptapeTrust(device));
     if (hasTrustPublicKeyChanged(profile.publicKey, device.publicKey)) {
@@ -565,7 +615,7 @@ function WalletApp() {
       throw new Error("Cryptape Trust wallet is unavailable");
     }
     try {
-      const device = await connectTrust(profile.deviceId);
+      const device = await connectTrust(profile.deviceId, profile.name);
       if (hasTrustPublicKeyChanged(profile.publicKey, device.publicKey)) {
         approvalQueue.cancelAll("Wallet changed");
         if (sessionState.paired) {
@@ -635,6 +685,8 @@ function WalletApp() {
               label={t("trustPin")}
               keyboardType="number-pad"
               maxLength={8}
+              onSubmitEditing={submitTrustPin}
+              returnKeyType="done"
               secureTextEntry
               value={trustPin}
               onChangeText={(value) => setTrustPin(value.replace(/\D/g, ""))}
@@ -675,11 +727,7 @@ function WalletApp() {
               mode="contained"
               contentStyle={styles.extraHorizontalButtonPadding}
               disabled={trustPin.length !== 8}
-              onPress={() => {
-                trustPinRequest?.resolve(trustPin);
-                setTrustPinRequest(undefined);
-                setTrustPin("");
-              }}
+              onPress={submitTrustPin}
             >
               {t("continue")}
             </PaperButton>
@@ -758,9 +806,11 @@ function WalletApp() {
                     request.resolve(newPin);
                     setNotice(t("trustPinResetSuccess"));
                   })
-                  .catch((cause: unknown) =>
-                    Alert.alert(t("trustPinResetFailed"), errorMessage(cause, t)),
-                  )
+                  .catch((cause: unknown) => {
+                    if (!showTrustBluetoothSetupError(cause)) {
+                      Alert.alert(t("trustPinResetFailed"), errorMessage(cause, t));
+                    }
+                  })
                   .finally(() => setResettingTrustPin(false));
               }}
             >
@@ -972,7 +1022,7 @@ function OnboardingScreen({
   vault: SecureStoreWalletVault;
   onMode: (mode: Onboarding) => void;
   onComplete: (state: WalletState) => Promise<void> | void;
-  onConnectTrust: (deviceId: string) => Promise<void>;
+  onConnectTrust: (device: TrustDevice) => Promise<void>;
   onCancel?: () => void;
   onError: (cause: unknown) => void;
 }) {
@@ -1082,6 +1132,39 @@ function OnboardingScreen({
         <BackButton onPress={() => onMode("start")} />
         <TrustWalletBanner />
         <Text variant="headlineMedium">{t("connectTrustWallet")}</Text>
+        <View
+          style={[
+            styles.trustRiskNotice,
+            { backgroundColor: theme.colors.surfaceVariant },
+          ]}
+        >
+          <View style={styles.trustRiskNoticeHeader}>
+            <Icon source="information-outline" size={24} color={theme.colors.primary} />
+            <Text
+              variant="titleMedium"
+              style={[styles.flex, { color: theme.colors.onSurfaceVariant }]}
+            >
+              {t("trustRiskTitle")}
+            </Text>
+          </View>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            {t("trustRiskDescription")}
+          </Text>
+          <PaperButton
+            compact
+            mode="text"
+            icon="open-in-new"
+            style={styles.trustRiskLink}
+            textColor={theme.colors.primary}
+            onPress={() =>
+              void Linking.openURL("https://github.com/cryptape/trust-android").catch(
+                () => undefined,
+              )
+            }
+          >
+            {t("trustOriginalRepository")}
+          </PaperButton>
+        </View>
         <Text variant="bodyMedium">{t("trustWalletScanHint")}</Text>
         <TrustWalletPicker onConnect={onConnectTrust} />
       </ScrollView>
@@ -1989,13 +2072,15 @@ function SettingsScreen({
 function TrustWalletPicker({
   onConnect,
 }: {
-  onConnect: (deviceId: string) => Promise<void>;
+  onConnect: (device: TrustDevice) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const [devices, setDevices] = useState<TrustDevice[]>([]);
   const [scanning, setScanning] = useState(false);
   const [connectingId, setConnectingId] = useState<string>();
   const supported = isTrustSupported();
+  const compactDeviceLayout = useWindowDimensions().width < 400;
 
   const scan = async () => {
     setScanning(true);
@@ -2003,7 +2088,9 @@ function TrustWalletPicker({
     try {
       setDevices(await scanForTrustDevices());
     } catch (cause) {
-      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+      if (!showTrustBluetoothSetupError(cause)) {
+        Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+      }
     } finally {
       setScanning(false);
     }
@@ -2012,7 +2099,7 @@ function TrustWalletPicker({
   const connect = async (device: TrustDevice) => {
     setConnectingId(device.id);
     try {
-      await onConnect(device.id);
+      await onConnect(device);
       setDevices([]);
     } catch (cause) {
       Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
@@ -2027,24 +2114,41 @@ function TrustWalletPicker({
         <Text variant="bodyMedium">{t("trustWalletAndroidBuildOnly")}</Text>
       ) : null}
       {devices.map((device) => (
-        <List.Item
-          key={device.id}
-          title={device.name}
-          description={device.id}
-          left={(props) => <List.Icon {...props} icon="memory" />}
-          right={() => (
+        <View key={device.id} style={styles.trustDeviceResult}>
+          <List.Item
+            title={device.name}
+            description={device.id}
+            left={(props) => <List.Icon {...props} icon="memory" />}
+            right={
+              compactDeviceLayout
+                ? undefined
+                : (props) => (
+                    <PaperButton
+                      mode="contained-tonal"
+                      style={props.style}
+                      contentStyle={styles.extraHorizontalButtonPadding}
+                      loading={connectingId === device.id}
+                      disabled={Boolean(connectingId)}
+                      onPress={() => void connect(device)}
+                    >
+                      {t("connect")}
+                    </PaperButton>
+                  )
+            }
+          />
+          {compactDeviceLayout ? (
             <PaperButton
-              mode="text"
-              compact
+              mode="contained-tonal"
+              style={styles.trustDeviceConnectCompact}
+              contentStyle={styles.extraHorizontalButtonPadding}
               loading={connectingId === device.id}
               disabled={Boolean(connectingId)}
-              labelStyle={styles.linkButtonLabel}
               onPress={() => void connect(device)}
             >
               {t("connect")}
             </PaperButton>
-          )}
-        />
+          ) : null}
+        </View>
       ))}
       <View style={styles.trustPickerActions}>
         <PaperButton
@@ -2101,6 +2205,7 @@ function TrustDeviceScreen({
   onReset: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const theme = useTheme();
   const [action, setAction] = useState<"generate" | "import" | "reset">();
   const [privateKey, setPrivateKey] = useState("");
@@ -2132,7 +2237,9 @@ function TrustDeviceScreen({
         cause instanceof Error &&
         cause.message === "Cryptape Trust key operation was cancelled"
       ) return;
-      Alert.alert(t("trustKeyOperationFailed"), errorMessage(cause, t));
+      if (!showTrustBluetoothSetupError(cause)) {
+        Alert.alert(t("trustKeyOperationFailed"), errorMessage(cause, t));
+      }
     } finally {
       setBusy(false);
     }
@@ -2188,9 +2295,11 @@ function TrustDeviceScreen({
               onPress={() => {
                 setRefreshingDevice(true);
                 void onRefresh()
-                  .catch((cause: unknown) =>
-                    Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t)),
-                  )
+                  .catch((cause: unknown) => {
+                    if (!showTrustBluetoothSetupError(cause)) {
+                      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+                    }
+                  })
                   .finally(() => setRefreshingDevice(false));
               }}
             >
@@ -2777,6 +2886,83 @@ function errorMessage(cause: unknown, t: Translate): string {
   return cause.message;
 }
 
+function TrustBluetoothSetupProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
+  const [error, setError] = useState<TrustBluetoothSetupError>();
+  const show = useCallback((cause: unknown) => {
+    if (!(cause instanceof TrustBluetoothSetupError)) return false;
+    setError(cause);
+    return true;
+  }, []);
+  const value = useMemo(() => ({ show }), [show]);
+
+  const details = error
+    ? error.issue === "permissionDenied"
+      ? {
+          title: t("trustBluetoothPermissionTitle"),
+          message: t("trustBluetoothPermissionRequired"),
+        }
+      : error.issue === "bluetoothDisabled"
+        ? {
+            title: t("trustBluetoothDisabledTitle"),
+            message: t("trustBluetoothDisabled"),
+          }
+        : error.issue === "locationDisabled"
+          ? {
+              title: t("trustLocationDisabledTitle"),
+              message: t("trustLocationDisabled"),
+            }
+          : {
+              title: t("trustBluetoothUnavailableTitle"),
+              message: t("trustBluetoothUnavailable"),
+            }
+    : undefined;
+
+  const openSettings = () => {
+    if (!error) return;
+    const action =
+      error.settings === "bluetooth"
+        ? "android.settings.BLUETOOTH_SETTINGS"
+        : error.settings === "location"
+          ? "android.settings.LOCATION_SOURCE_SETTINGS"
+          : undefined;
+    setError(undefined);
+    const open = action
+      ? Linking.sendIntent(action).catch(() => Linking.openSettings())
+      : Linking.openSettings();
+    void open.catch(() => undefined);
+  };
+
+  return (
+    <TrustBluetoothSetupContext.Provider value={value}>
+      {children}
+      <Portal>
+        <Dialog visible={Boolean(error)} onDismiss={() => setError(undefined)}>
+          <Dialog.Icon icon="bluetooth" />
+          <Dialog.Title style={styles.centerText}>{details?.title}</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">{details?.message}</Text>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.dialogActions}>
+            <PaperButton onPress={() => setError(undefined)}>{t("cancel")}</PaperButton>
+            {error?.issue !== "bluetoothUnavailable" ? (
+              <PaperButton onPress={openSettings}>{t("openSettings")}</PaperButton>
+            ) : null}
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </TrustBluetoothSetupContext.Provider>
+  );
+}
+
+function useTrustBluetoothSetup(): TrustBluetoothSetupContextValue {
+  const context = useContext(TrustBluetoothSetupContext);
+  if (!context) {
+    throw new Error("TrustBluetoothSetupProvider is missing");
+  }
+  return context;
+}
+
 function walletAuthenticationPrompt(
   purpose: WalletAuthenticationPurpose,
   t: Translate,
@@ -2840,6 +3026,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
+  trustRiskNotice: { gap: 12, padding: 16, borderRadius: 12 },
+  trustRiskNoticeHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  trustRiskLink: { alignSelf: "flex-start" },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
   balanceValue: { width: "100%", alignItems: "center" },
   balanceIntegerRow: { width: "100%", flexDirection: "row", alignItems: "center" },
@@ -2883,6 +3072,8 @@ const styles = StyleSheet.create({
   },
   trustPicker: { gap: 16 },
   trustPickerActions: { alignItems: "flex-end" },
+  trustDeviceResult: { gap: 4 },
+  trustDeviceConnectCompact: { marginHorizontal: 16 },
   inlineProgress: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardActions: {
     flexWrap: "wrap",

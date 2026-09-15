@@ -37,6 +37,7 @@
     },
     "plugins": [
       "./plugins/withAndroidAbiSplits",
+      "./plugins/withTrustBluetoothPermissions",
       [
         "expo-navigation-bar",
         {
