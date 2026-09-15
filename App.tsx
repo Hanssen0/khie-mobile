@@ -497,9 +497,18 @@ function HomeScreen({
   onNavigate: (screen: Screen) => void;
 }) {
   const { t } = useI18n();
+  const theme = useTheme();
+  const { width } = useWindowDimensions();
   const [address, setAddress] = useState(() => t("addressGenerating"));
   const [balance, setBalance] = useState("—");
   const [refreshing, setRefreshing] = useState(false);
+  const balanceParts = /^(-?\d+)(\.\d+)$/.exec(balance);
+  const integerBalance = balanceParts?.[1] ?? balance;
+  const fractionalBalance = balanceParts?.[2];
+  const integerFontSize = Math.max(
+    28,
+    Math.min(45, (width - 136) / Math.max(integerBalance.length * 0.58, 1)),
+  );
 
   const refresh = useCallback(async () => {
     if (!signer) return;
@@ -530,14 +539,35 @@ function HomeScreen({
       <View style={styles.balanceBlock}>
         <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
         <View style={styles.balanceValue}>
-          <Text variant="displayMedium">{balance}</Text>
-          <IconButton
-            icon="refresh"
-            loading={refreshing}
-            disabled={refreshing}
-            accessibilityLabel={t("refresh")}
-            onPress={() => void refresh()}
-          />
+          <View style={styles.balanceIntegerRow}>
+            <View style={styles.balanceActionSpacer} />
+            <Text
+              variant="displayMedium"
+              numberOfLines={1}
+              style={[
+                styles.balanceInteger,
+                { fontSize: integerFontSize, lineHeight: Math.round(integerFontSize * 1.16) },
+              ]}
+            >
+              {integerBalance}
+            </Text>
+            <IconButton
+              icon="refresh"
+              loading={refreshing}
+              disabled={refreshing}
+              accessibilityLabel={t("refresh")}
+              style={styles.balanceRefresh}
+              onPress={() => void refresh()}
+            />
+          </View>
+          {fractionalBalance ? (
+            <Text
+              variant="titleLarge"
+              style={[styles.balanceFraction, { color: theme.colors.onSurfaceVariant }]}
+            >
+              {fractionalBalance}
+            </Text>
+          ) : null}
         </View>
         <Text variant="titleMedium">CKB</Text>
       </View>
@@ -1303,7 +1333,12 @@ const styles = StyleSheet.create({
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
-  balanceValue: { flexDirection: "row", alignItems: "center", gap: 4 },
+  balanceValue: { width: "100%", alignItems: "center" },
+  balanceIntegerRow: { width: "100%", flexDirection: "row", alignItems: "center" },
+  balanceActionSpacer: { width: 48 },
+  balanceInteger: { flex: 1, minWidth: 0, textAlign: "center", fontVariant: ["tabular-nums"] },
+  balanceRefresh: { width: 48, margin: 0 },
+  balanceFraction: { textAlign: "center", fontVariant: ["tabular-nums"] },
   cardContent: { gap: 12 },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
