@@ -203,8 +203,6 @@ const en = {
   notChecked: "Not checked",
   checkingForUpdates: "Checking…",
   automaticUpdateChecks: "Check automatically",
-  automaticUpdateChecksDescription:
-    "Check GitHub Releases at most once a day. Updates are never installed automatically.",
   checkForUpdates: "Check for updates",
   downloadUpdate: "Download update",
   updateAvailable: "Update available",
@@ -484,8 +482,6 @@ const zhHans: Record<TranslationKey, string> = {
   notChecked: "尚未检查",
   checkingForUpdates: "正在检查…",
   automaticUpdateChecks: "自动检查更新",
-  automaticUpdateChecksDescription:
-    "每天至多检查一次 GitHub Release，更新不会自动安装。",
   checkForUpdates: "检查更新",
   downloadUpdate: "下载更新",
   updateAvailable: "有可用更新",
@@ -758,8 +754,6 @@ const zhHant: Record<TranslationKey, string> = {
   notChecked: "尚未檢查",
   checkingForUpdates: "正在檢查…",
   automaticUpdateChecks: "自動檢查更新",
-  automaticUpdateChecksDescription:
-    "每天至多檢查一次 GitHub Release，更新不會自動安裝。",
   checkForUpdates: "檢查更新",
   downloadUpdate: "下載更新",
   updateAvailable: "有可用更新",
@@ -1032,8 +1026,6 @@ const hak: Record<TranslationKey, string> = {
   notChecked: "還吂檢查",
   checkingForUpdates: "當在檢查…",
   automaticUpdateChecks: "自動檢查更新",
-  automaticUpdateChecksDescription:
-    "逐日至多檢查一擺 GitHub Release，毋會自動安裝更新。",
   checkForUpdates: "檢查更新",
   downloadUpdate: "下載更新",
   updateAvailable: "有新版本",

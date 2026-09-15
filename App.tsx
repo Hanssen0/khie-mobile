@@ -198,7 +198,6 @@ const AppDialogContext = createContext<AppDialogContextValue | undefined>(
 const endpointUrl = "https://app.ckbccc.com/khie";
 const currentAppVersion =
   Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "unknown";
-const currentBuildVersion = Application.nativeBuildVersion;
 const configuredBuildCommit = Constants.expoConfig?.extra?.buildCommit;
 const currentBuildCommit =
   typeof configuredBuildCommit === "string" ? configuredBuildCommit : "unknown";
@@ -1407,7 +1406,6 @@ function WalletApp({
             updateSettings={updateSettings}
             checkingForUpdates={checkingForUpdates}
             currentVersion={currentAppVersion}
-            buildVersion={currentBuildVersion}
             buildCommit={currentBuildCommit}
             appArchitecture={currentAppArchitecture}
             updateAvailable={updateAvailable}
@@ -2320,7 +2318,6 @@ function SettingsScreen({
   updateSettings,
   checkingForUpdates,
   currentVersion,
-  buildVersion,
   buildCommit,
   appArchitecture,
   updateAvailable,
@@ -2348,7 +2345,6 @@ function SettingsScreen({
   updateSettings: UpdateSettings;
   checkingForUpdates: boolean;
   currentVersion: string;
-  buildVersion: string | null;
   buildCommit: string;
   appArchitecture: string;
   updateAvailable: boolean;
@@ -2714,9 +2710,7 @@ function SettingsScreen({
           <AppInformationRow
             label={t("currentVersion")}
             value={
-              buildVersion
-                ? `${currentVersion} (${buildVersion})`
-                : currentVersion
+              currentVersion.startsWith("v") ? currentVersion : `v${currentVersion}`
             }
           />
           <AppInformationRow
@@ -2768,8 +2762,6 @@ function SettingsScreen({
           <List.Item
             style={styles.appInformationSwitch}
             title={t("automaticUpdateChecks")}
-            description={t("automaticUpdateChecksDescription")}
-            descriptionNumberOfLines={3}
             right={() => (
               <View pointerEvents="none">
                 <Switch value={updateSettings.automaticChecks} />
