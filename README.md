@@ -5,6 +5,8 @@
 
 Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khie `SignerJsonRpc` protocol.
 
+![Khie Wallet account, Khie, Cryptape Trust and settings screens](assets/khie-wallet-preview.png)
+
 ## Included
 
 - Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics.
@@ -17,6 +19,12 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 - Replaceable internal `SigningBackend`; Khie never reads or exposes a private-key field.
 
 This MVP intentionally excludes in-app transfers, tokens, history, persistent dapp authorization and release signing.
+
+## Cryptape Trust
+
+![Cryptape Trust hardware wallet](assets/cryptape-trust-device-banner.jpg)
+
+As a small hardware-wallet easter egg, the Android app can connect to the experimental Cryptape Trust over Bluetooth LE and use it as a CKB signer. The device and its [original app](https://github.com/cryptape/trust-android) have been unmaintained for years and the protocol has known security weaknesses, so this integration is intended for testnet experiments—not mainnet assets.
 
 ## Android development build
 
@@ -76,4 +84,4 @@ The Trust/NKey bridge is adapted from the MIT-licensed [`cryptape/trust-android`
 
 ## Limitations and risk
 
-This is a development MVP, not a production wallet. It has not received a security audit, release hardening or Play Store review. Testnet is the default. Mainnet use and asset risk are the user's responsibility. Real-device acceptance still requires testing both QR directions, relay-only operation and an observed `direct === true` WebRTC connection against the current CCC Connector page. Trust/NKey scanning, secure-channel negotiation, PIN verification and hardware signing also remain unverified on a physical device.
+This is a development MVP, not a production wallet. It has not received a security audit, release hardening or Play Store review. Testnet is the default. Mainnet use and asset risk are the user's responsibility. Real-device acceptance still requires testing both QR directions, relay-only operation and an observed `direct === true` WebRTC connection against the current CCC Connector page.
