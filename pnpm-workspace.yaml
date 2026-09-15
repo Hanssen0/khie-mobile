@@ -2,3 +2,5 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - '@ckb-ccc/libp2p@0.2.1'
+patchedDependencies:
+  react-native-webrtc@124.0.8: patches/react-native-webrtc@124.0.8.patch

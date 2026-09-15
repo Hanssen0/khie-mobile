@@ -1,0 +1,10 @@
+diff --git a/android/src/main/java/com/oney/WebRTCModule/PeerConnectionObserver.java b/android/src/main/java/com/oney/WebRTCModule/PeerConnectionObserver.java
+index d0bc3a6..c8706b1 100644
+--- a/android/src/main/java/com/oney/WebRTCModule/PeerConnectionObserver.java
++++ b/android/src/main/java/com/oney/WebRTCModule/PeerConnectionObserver.java
+@@ -362 +362,0 @@ class PeerConnectionObserver implements PeerConnection.Observer {
+-            dataChannel.registerObserver(dcw);
+@@ -383,0 +383,3 @@ class PeerConnectionObserver implements PeerConnection.Observer {
++
++            // Ensure buffered messages reach JavaScript after the DataChannel is created.
++            dataChannel.registerObserver(dcw);
