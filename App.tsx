@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
+  BackHandler,
   ScrollView,
   StyleSheet,
   useColorScheme,
@@ -228,6 +229,17 @@ function WalletApp() {
     });
     return () => subscription.remove();
   }, [approvalQueue]);
+
+  useEffect(() => {
+    if (screen !== "receive") {
+      return;
+    }
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setScreen("home");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [screen]);
 
   const changeNetwork = useCallback(
     (next: Network) => {
