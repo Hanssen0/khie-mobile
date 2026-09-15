@@ -217,6 +217,9 @@ importers:
       fflate:
         specifier: 0.8.2
         version: 0.8.2
+      ieee754:
+        specifier: ^1.2.1
+        version: 1.2.1
       it-length-prefixed:
         specifier: 11.0.1
         version: 11.0.1
