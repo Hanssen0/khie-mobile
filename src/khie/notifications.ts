@@ -1,5 +1,7 @@
 import * as Notifications from "expo-notifications";
 
+import walletColors from "../colors.json";
+
 const CONNECTION_CHANNEL_ID = "khie-connection";
 const REQUEST_CHANNEL_ID = "khie-request";
 const CONNECTION_CATEGORY_ID = "khie_connected";
@@ -113,7 +115,7 @@ export async function showKhieConnectionNotification(
       body,
       autoDismiss: false,
       categoryIdentifier: CONNECTION_CATEGORY_ID,
-      color: "#315DA8",
+      color: walletColors.light.primary,
       data: { khieNotification: "connection" satisfies KhieNotificationKind },
       priority: Notifications.AndroidNotificationPriority.LOW,
       sound: false,
@@ -135,7 +137,7 @@ export async function showKhieRequestNotification(
       body,
       autoDismiss: true,
       categoryIdentifier: REQUEST_CATEGORY_ID,
-      color: "#315DA8",
+      color: walletColors.light.primary,
       data: {
         approvalId,
         khieNotification: "request" satisfies KhieNotificationKind,

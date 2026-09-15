@@ -61,6 +61,18 @@ describe("KhieProviderSession relay address", () => {
 });
 
 describe("KhieProviderSession pairing lifetime", () => {
+  it("classifies malformed endpoints as incompatible pairing codes", async () => {
+    const session = createSession();
+    Object.assign(session, { node: {} });
+
+    await expect(session.pair("not a pairing endpoint")).resolves.toBe(false);
+
+    expect(session.snapshot.error).toEqual({
+      kind: "incompatible-pairing-code",
+      message: "Pairing endpoint is not a valid URL",
+    });
+  });
+
   it("redials without unpairing after a transport interruption", async () => {
     const id = "12D3KooWEUcGkHCFDcU5HucKpknW8iLt36UdGoxD2sGNkXQ8U8db";
     const peerId = {

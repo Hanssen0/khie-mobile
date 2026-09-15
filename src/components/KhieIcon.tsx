@@ -23,3 +23,13 @@ export function KhieIcon({
     </Svg>
   );
 }
+
+export function khieIconSource({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) {
+  return <KhieIcon color={color} size={size} />;
+}

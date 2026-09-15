@@ -51,13 +51,18 @@ export type KhieRemotePeer = {
 
 export type KhieProviderSessionState = {
   endpoint: string;
-  error?: string;
+  error?: KhieProviderSessionError;
   paired: boolean;
   ready: boolean;
   relayAddress: string;
   relayConnected: boolean;
   relayConnecting: boolean;
   remotePeer?: KhieRemotePeer;
+};
+
+export type KhieProviderSessionError = {
+  kind: "incompatible-pairing-code" | "runtime";
+  message: string;
 };
 
 export type KhieProviderSessionConfig = {
@@ -396,7 +401,16 @@ export class KhieProviderSession {
     if (!(error instanceof PairingEndpointError) && error.name !== "AbortError") {
       console.error("Khie provider session error", error.stack ?? error.message);
     }
-    this.patchState({ error: error.message });
+    this.patchState({
+      error: {
+        kind:
+          error instanceof PairingEndpointError ||
+          error.name === "UnsupportedProtocolError"
+            ? "incompatible-pairing-code"
+            : "runtime",
+        message: error.message,
+      },
+    });
   }
 }
 

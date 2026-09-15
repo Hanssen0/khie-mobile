@@ -6,6 +6,7 @@ import {
   type SignerJsonRpcConfirmation,
 } from "@ckb-ccc/core";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Clipboard from "expo-clipboard";
 import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -18,11 +19,11 @@ import {
   useState,
 } from "react";
 import {
-  Alert,
   AppState,
   BackHandler,
   ImageBackground,
   Linking,
+  Pressable,
   ScrollView,
   StyleSheet,
   useColorScheme,
@@ -56,11 +57,17 @@ import {
   KeyboardAwareScrollView,
   KeyboardController,
   KeyboardProvider,
+  type KeyboardAwareScrollViewRef,
 } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { RecommendedAppIcon } from "./src/components/RecommendedAppIcon";
-import { KhieIcon } from "./src/components/KhieIcon";
+import {
+  CryptapeIcon,
+  cryptapeIconSource,
+} from "./src/components/CryptapeIcon";
+import { InfoCard } from "./src/components/InfoCard";
+import { KhieIcon, khieIconSource } from "./src/components/KhieIcon";
 import {
   I18nProvider,
   languageLabel,
@@ -84,6 +91,7 @@ import {
 import { TransactionApprovalDetails } from "./src/khie/TransactionApprovalDetails";
 import {
   KhieProviderSession,
+  type KhieProviderSessionError,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
@@ -104,6 +112,10 @@ import {
 import {
   SecureStoreNetworkSettings,
 } from "./src/storage/networkSettings";
+import {
+  SecureStoreThemeSettings,
+  type ThemePreference,
+} from "./src/storage/themeSettings";
 import {
   SecureStoreWalletVault,
   type WalletAuthenticationPurpose,
@@ -144,26 +156,70 @@ type TrustPinRequest = {
 type TrustBluetoothSetupContextValue = {
   show: (cause: unknown) => boolean;
 };
+type AppDialogState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  destructive?: boolean;
+  onConfirm?: () => void;
+};
+type AppDialogContextValue = {
+  show: (title: string, message: string) => void;
+  confirm: (dialog: AppDialogState) => void;
+};
 
 const TrustBluetoothSetupContext = createContext<
   TrustBluetoothSetupContextValue | undefined
 >(undefined);
+const AppDialogContext = createContext<AppDialogContextValue | undefined>(
+  undefined,
+);
 
 const endpointUrl = "https://app.ckbccc.com/khie";
 
 export default function App() {
-  const colorScheme = useColorScheme();
-  const theme = colorScheme === "dark" ? walletDarkTheme : walletLightTheme;
+  const systemColorScheme = useColorScheme();
+  const themeSettings = useMemo(() => new SecureStoreThemeSettings(), []);
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>("system");
+  const dark =
+    themePreference === "system"
+      ? systemColorScheme === "dark"
+      : themePreference === "dark";
+  const theme = dark ? walletDarkTheme : walletLightTheme;
+
+  useEffect(() => {
+    let active = true;
+    void themeSettings.load().then((preference) => {
+      if (active) setThemePreference(preference);
+    });
+    return () => {
+      active = false;
+    };
+  }, [themeSettings]);
+
+  const changeThemePreference = useCallback(
+    async (preference: ThemePreference) => {
+      setThemePreference(await themeSettings.save(preference));
+    },
+    [themeSettings],
+  );
 
   return (
     <SafeAreaProvider>
       <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-        <NavigationBar style="auto" />
+        <NavigationBar style={dark ? "dark" : "light"} />
         <I18nProvider>
           <PaperProvider theme={theme}>
-            <TrustBluetoothSetupProvider>
-              <WalletApp />
-            </TrustBluetoothSetupProvider>
+            <AppDialogProvider>
+              <TrustBluetoothSetupProvider>
+                <WalletApp
+                  themePreference={themePreference}
+                  onChangeThemePreference={changeThemePreference}
+                />
+              </TrustBluetoothSetupProvider>
+            </AppDialogProvider>
           </PaperProvider>
         </I18nProvider>
       </KeyboardProvider>
@@ -171,8 +227,15 @@ export default function App() {
   );
 }
 
-function WalletApp() {
+function WalletApp({
+  themePreference,
+  onChangeThemePreference,
+}: {
+  themePreference: ThemePreference;
+  onChangeThemePreference: (preference: ThemePreference) => Promise<void>;
+}) {
   const { t } = useI18n();
+  const appDialog = useAppDialog();
   const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const theme = useTheme();
   const tRef = useRef(t);
@@ -955,7 +1018,10 @@ function WalletApp() {
                   })
                   .catch((cause: unknown) => {
                     if (!showTrustBluetoothSetupError(cause)) {
-                      Alert.alert(t("trustPinResetFailed"), errorMessage(cause, t));
+                      appDialog.show(
+                        t("trustPinResetFailed"),
+                        errorMessage(cause, t),
+                      );
                     }
                   })
                   .finally(() => setResettingTrustPin(false));
@@ -989,6 +1055,7 @@ function WalletApp() {
         </Dialog.Content>
         <Dialog.Actions style={styles.dialogActions}>
           <PaperButton
+            contentStyle={styles.extraHorizontalButtonPadding}
             onPress={() => {
               khieNotificationPromptDismissed.current = true;
               setKhieNotificationPromptOpen(false);
@@ -998,6 +1065,7 @@ function WalletApp() {
           </PaperButton>
           <PaperButton
             mode="contained"
+            contentStyle={styles.extraHorizontalButtonPadding}
             onPress={() => {
               khieNotificationPromptDismissed.current = true;
               setKhieNotificationPromptOpen(false);
@@ -1132,6 +1200,7 @@ function WalletApp() {
             profile={profile}
             wallets={walletState.wallets}
             rpcUrls={rpcUrls}
+            themePreference={themePreference}
             vault={vault}
             onChangeNetwork={changeNetwork}
             onSelectWallet={selectWallet}
@@ -1159,6 +1228,7 @@ function WalletApp() {
               await saveRpcUrls(next);
               setNotice(t("rpcUrlsSaved"));
             }}
+            onChangeThemePreference={onChangeThemePreference}
             onRecovered={(next) => {
               setWalletState(next);
               setNotice(t("walletKeyRecovered"));
@@ -1529,7 +1599,9 @@ function HomeScreen({
           <PaperCard.Title
             title="Cryptape Trust"
             subtitle={walletLabel(wallets, profile.id, t)}
-            left={(props) => <Icon {...props} source="bluetooth" />}
+            left={({ size }) => (
+              <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />
+            )}
           />
           <PaperCard.Content>
             <Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text>
@@ -1600,36 +1672,17 @@ function HomeScreen({
         <Text variant="titleLarge">{t("recommendedApps")}</Text>
         <View style={styles.recommendedApps}>
           {recommendedApps.map((app) => (
-            <PaperCard
+            <InfoCard
               key={app.url}
-              mode="elevated"
+              title={app.name}
+              description={app.description}
+              centerContent
+              icon={({ color, size }) => (
+                <RecommendedAppIcon name={app.icon} size={size} color={color} />
+              )}
+              showExternalLink
               onPress={() => void Linking.openURL(app.url).catch(() => undefined)}
-            >
-              <PaperCard.Content style={styles.recommendedAppContent}>
-                <View style={styles.recommendedAppLogo}>
-                  <RecommendedAppIcon
-                    name={app.icon}
-                    size={32}
-                    color={theme.colors.primary}
-                  />
-                </View>
-                <View style={styles.recommendedAppCopy}>
-                  <Text variant="titleMedium" numberOfLines={1}>{app.name}</Text>
-                  <Text
-                    variant="bodyMedium"
-                    numberOfLines={2}
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {app.description}
-                  </Text>
-                </View>
-                <Icon
-                  source="open-in-new"
-                  size={20}
-                  color={theme.colors.onSurfaceVariant}
-                />
-              </PaperCard.Content>
-            </PaperCard>
+            />
           ))}
         </View>
       </View>
@@ -1685,12 +1738,37 @@ function KhieScreen({
   const { t } = useI18n();
   const theme = useTheme();
   const { width } = useWindowDimensions();
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const [endpoint, setEndpoint] = useState("");
+  const [endpointCopied, setEndpointCopied] = useState(false);
+  const endpointCopyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const [relayAddress, setRelayAddress] = useState(state.relayAddress);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const qrSize = Math.max(180, Math.min(420, width - 64));
 
   useEffect(() => setRelayAddress(state.relayAddress), [state.relayAddress]);
+
+  useEffect(() => {
+    setEndpointCopied(false);
+    if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current);
+  }, [state.endpoint]);
+
+  useEffect(
+    () => () => {
+      if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current);
+    },
+    [],
+  );
+
+  const copyEndpoint = async () => {
+    if (!state.endpoint) return;
+    await Clipboard.setStringAsync(state.endpoint);
+    setEndpointCopied(true);
+    if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current);
+    endpointCopyTimer.current = setTimeout(() => setEndpointCopied(false), 1600);
+  };
 
   const pair = async () => {
     if (await onPair(endpoint)) {
@@ -1706,27 +1784,20 @@ function KhieScreen({
 
   return (
     <KeyboardAwareScrollView
+      ref={scrollRef}
       bottomOffset={16}
       contentContainerStyle={styles.page}
       keyboardShouldPersistTaps="handled"
     >
       <Text variant="headlineMedium">Khie</Text>
-      <PaperCard mode="contained">
-        <PaperCard.Content style={styles.khieIntroductionContent}>
-          <View style={styles.khieIntroductionHeader}>
-            <View style={styles.khieIntroductionIcon}>
-              <KhieIcon size={32} color={theme.colors.primary} />
-            </View>
-            <Text variant="titleMedium" style={styles.flex}>
-              {t("khieIntroductionTitle")}
-            </Text>
-          </View>
-          <Text variant="bodyMedium">{t("khieIntroduction")}</Text>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {t("khieNameMeaning")}
-          </Text>
-        </PaperCard.Content>
-      </PaperCard>
+      <InfoCard
+        title={t("khieIntroductionTitle")}
+        description={t("khieIntroduction")}
+        supportingText={t("khieNameMeaning")}
+        icon={({ color, size }) => (
+          <KhieIcon size={size} color={color} />
+        )}
+      />
 
       {pairing ? (
         <View style={styles.pairingProgress}>
@@ -1804,9 +1875,34 @@ function KhieScreen({
             {state.endpoint ? (
               <>
                 <QuietQrCode value={state.endpoint} size={qrSize} />
-                <Text variant="labelSmall" selectable numberOfLines={2} style={[styles.mono, styles.centerText]}>
-                  {state.endpoint}
-                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    endpointCopied
+                      ? t("khieEndpointCopied")
+                      : t("copyKhieEndpoint")
+                  }
+                  accessibilityLiveRegion="polite"
+                  onPress={() => void copyEndpoint()}
+                  style={({ pressed }) => [
+                    styles.endpointCopyRow,
+                    pressed && styles.endpointCopyRowPressed,
+                  ]}
+                >
+                  <Text
+                    variant="labelSmall"
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={[styles.mono, styles.endpointCopyText]}
+                  >
+                    {state.endpoint}
+                  </Text>
+                  <Icon
+                    source={endpointCopied ? "check" : "content-copy"}
+                    size={18}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                </Pressable>
               </>
             ) : (
               <View style={[styles.qrPlaceholder, { height: qrSize + 24 }]}>
@@ -1894,9 +1990,39 @@ function KhieScreen({
       )}
 
       {state.error && !pairing ? (
-        <HelperText type="error" visible>
-          {formatKhieError(state.error, t)}
-        </HelperText>
+        <View
+          onLayout={() => {
+            requestAnimationFrame(() => {
+              scrollRef.current?.scrollToEnd({ animated: true });
+            });
+          }}
+          style={[
+            styles.khieErrorNotice,
+            { backgroundColor: theme.colors.surfaceVariant },
+          ]}
+        >
+          <Icon
+            source="information-outline"
+            color={theme.colors.onSurfaceVariant}
+            size={24}
+          />
+          <View style={[styles.flex, styles.khieErrorCopy]}>
+            <Text
+              variant="labelLarge"
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
+              {state.error.kind === "incompatible-pairing-code"
+                ? t("incompatiblePairingCode")
+                : t("operationFailed")}
+            </Text>
+            <Text
+              variant="bodyMedium"
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
+              {formatKhieError(state.error, t)}
+            </Text>
+          </View>
+        </View>
       ) : null}
     </KeyboardAwareScrollView>
   );
@@ -1922,9 +2048,15 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
               <Text variant="bodyMedium">{t("cameraPermissionReason")}</Text>
             </Dialog.Content>
             <Dialog.Actions style={styles.dialogActions}>
-              <PaperButton onPress={onCancel}>{t("back")}</PaperButton>
+              <PaperButton
+                contentStyle={styles.extraHorizontalButtonPadding}
+                onPress={onCancel}
+              >
+                {t("back")}
+              </PaperButton>
               <PaperButton
                 mode="contained"
+                contentStyle={styles.extraHorizontalButtonPadding}
                 onPress={() => {
                   if (permission.canAskAgain) {
                     void requestPermission();
@@ -1968,12 +2100,14 @@ function SettingsScreen({
   profile,
   wallets,
   rpcUrls,
+  themePreference,
   vault,
   onChangeNetwork,
   onSelectWallet,
   onAddWallet,
   onRemoveWallet,
   onSaveRpcUrls,
+  onChangeThemePreference,
   onRecovered,
 }: {
   backend?: LocalMnemonicSigningBackend;
@@ -1981,15 +2115,18 @@ function SettingsScreen({
   profile: WalletProfile;
   wallets: WalletProfile[];
   rpcUrls: NetworkRpcUrls;
+  themePreference: ThemePreference;
   vault: SecureStoreWalletVault;
   onChangeNetwork: (network: Network) => void;
   onSelectWallet: (walletId: string) => Promise<void>;
   onAddWallet: () => void;
   onRemoveWallet: (walletId: string) => Promise<void>;
   onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>;
+  onChangeThemePreference: (preference: ThemePreference) => Promise<void>;
   onRecovered: (state: WalletState) => void;
 }) {
   const { t } = useI18n();
+  const appDialog = useAppDialog();
   const [secret, setSecret] = useState<{ label: string; value: string }>();
   const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
   const [savingRpcUrls, setSavingRpcUrls] = useState(false);
@@ -2032,7 +2169,7 @@ function SettingsScreen({
     try {
       await onSaveRpcUrls(next);
     } catch (cause) {
-      Alert.alert(t("unableToSave"), errorMessage(cause, t));
+      appDialog.show(t("unableToSave"), errorMessage(cause, t));
     } finally {
       setSavingRpcUrls(false);
     }
@@ -2045,26 +2182,28 @@ function SettingsScreen({
         value: kind === "mnemonic" ? await backend.exportMnemonic() : await backend.exportPrivateKey(),
       });
     } catch (cause) {
-      Alert.alert(t("unableToDisplay"), errorMessage(cause, t));
+      appDialog.show(t("unableToDisplay"), errorMessage(cause, t));
     }
   };
   const confirmRemove = (wallet: WalletProfile) => {
-    Alert.alert(
-      t("deleteWalletTitle", { wallet: walletLabel(wallets, wallet.id, t) }),
-      t(wallet.kind === "cryptape-trust" ? "removeTrustWalletDescription" : "deleteWalletDescription"),
-      [
-        { text: t("cancel"), style: "cancel" },
-        {
-          text: t("delete"),
-          style: "destructive",
-          onPress: () => {
-            void onRemoveWallet(wallet.id).catch((cause: unknown) =>
-              Alert.alert(t("unableToDeleteWallet"), errorMessage(cause, t)),
-            );
-          },
-        },
-      ],
-    );
+    appDialog.confirm({
+      title: t("deleteWalletTitle", {
+        wallet: walletLabel(wallets, wallet.id, t),
+      }),
+      message: t(
+        wallet.kind === "cryptape-trust"
+          ? "removeTrustWalletDescription"
+          : "deleteWalletDescription",
+      ),
+      cancelLabel: t("cancel"),
+      confirmLabel: t("delete"),
+      destructive: true,
+      onConfirm: () => {
+        void onRemoveWallet(wallet.id).catch((cause: unknown) =>
+          appDialog.show(t("unableToDeleteWallet"), errorMessage(cause, t)),
+        );
+      },
+    });
   };
   return (
     <KeyboardAwareScrollView
@@ -2108,7 +2247,10 @@ function SettingsScreen({
                 onPress={() => {
                   if (!selected) {
                     void onSelectWallet(wallet.id).catch((cause: unknown) =>
-                      Alert.alert(t("unableToSwitchWallet"), errorMessage(cause, t)),
+                      appDialog.show(
+                        t("unableToSwitchWallet"),
+                        errorMessage(cause, t),
+                      ),
                     );
                   }
                 }}
@@ -2121,6 +2263,27 @@ function SettingsScreen({
             {t("addWallet")}
           </PaperButton>
         </PaperCard.Actions>
+      </PaperCard>
+      <PaperCard mode="elevated">
+        <PaperCard.Title
+          title={t("appearance")}
+          left={(props) => <Icon {...props} source="theme-light-dark" />}
+        />
+        <PaperCard.Content>
+          <SegmentedButtons
+            value={themePreference}
+            onValueChange={(value) => {
+              void onChangeThemePreference(value as ThemePreference).catch((cause) =>
+                appDialog.show(t("unableToSave"), errorMessage(cause, t)),
+              );
+            }}
+            buttons={[
+              { value: "system", label: t("systemTheme"), showSelectedCheck: false },
+              { value: "light", label: t("lightTheme"), showSelectedCheck: false },
+              { value: "dark", label: t("darkTheme"), showSelectedCheck: false },
+            ]}
+          />
+        </PaperCard.Content>
       </PaperCard>
       <PaperCard mode="elevated">
         <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
@@ -2268,7 +2431,9 @@ function SettingsScreen({
                     setShowRecovery(false);
                     onRecovered(next);
                   })
-                  .catch((cause: unknown) => Alert.alert(t("recoveryFailed"), errorMessage(cause, t)))
+                  .catch((cause: unknown) =>
+                    appDialog.show(t("recoveryFailed"), errorMessage(cause, t)),
+                  )
                   .finally(() => setRecovering(false));
               }}
             >
@@ -2287,6 +2452,7 @@ function TrustWalletPicker({
   onConnect: (device: TrustDevice) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const appDialog = useAppDialog();
   const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const [devices, setDevices] = useState<TrustDevice[]>([]);
   const [scanning, setScanning] = useState(false);
@@ -2301,7 +2467,10 @@ function TrustWalletPicker({
       setDevices(await scanForTrustDevices());
     } catch (cause) {
       if (!showTrustBluetoothSetupError(cause)) {
-        Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+        appDialog.show(
+          t("trustWalletConnectionFailed"),
+          errorMessage(cause, t),
+        );
       }
     } finally {
       setScanning(false);
@@ -2314,7 +2483,10 @@ function TrustWalletPicker({
       await onConnect(device);
       setDevices([]);
     } catch (cause) {
-      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+      appDialog.show(
+        t("trustWalletConnectionFailed"),
+        errorMessage(cause, t),
+      );
     } finally {
       setConnectingId(undefined);
     }
@@ -2417,6 +2589,7 @@ function TrustDeviceScreen({
   onReset: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const appDialog = useAppDialog();
   const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
   const theme = useTheme();
   const [action, setAction] = useState<"generate" | "import" | "reset">();
@@ -2450,7 +2623,7 @@ function TrustDeviceScreen({
         cause.message === "Cryptape Trust key operation was cancelled"
       ) return;
       if (!showTrustBluetoothSetupError(cause)) {
-        Alert.alert(t("trustKeyOperationFailed"), errorMessage(cause, t));
+        appDialog.show(t("trustKeyOperationFailed"), errorMessage(cause, t));
       }
     } finally {
       setBusy(false);
@@ -2477,7 +2650,9 @@ function TrustDeviceScreen({
         <PaperCard mode="elevated">
           <PaperCard.Title
             title={device.name}
-            left={(props) => <Icon {...props} source="bluetooth" />}
+            left={({ size }) => (
+              <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />
+            )}
           />
           <PaperCard.Content style={styles.cardContent}>
             <View style={styles.metadataBlock}>
@@ -2509,7 +2684,10 @@ function TrustDeviceScreen({
                 void onRefresh()
                   .catch((cause: unknown) => {
                     if (!showTrustBluetoothSetupError(cause)) {
-                      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+                      appDialog.show(
+                        t("trustWalletConnectionFailed"),
+                        errorMessage(cause, t),
+                      );
                     }
                   })
                   .finally(() => setRefreshingDevice(false));
@@ -2860,14 +3038,19 @@ function BottomBar({
   const { t } = useI18n();
   const routes = [
     { key: "home", title: t("account"), focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
-    { key: "khie", title: "Khie", focusedIcon: "connection", unfocusedIcon: "connection" },
+    {
+      key: "khie",
+      title: "Khie",
+      focusedIcon: khieIconSource,
+      unfocusedIcon: khieIconSource,
+    },
     ...(showTrust
       ? [
           {
             key: "trust",
             title: "Cryptape Trust",
-            focusedIcon: "usb-flash-drive",
-            unfocusedIcon: "usb-flash-drive-outline",
+            focusedIcon: cryptapeIconSource,
+            unfocusedIcon: cryptapeIconSource,
           },
         ]
       : []),
@@ -3074,6 +3257,63 @@ function Notice({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   );
 }
 
+function AppDialogProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
+  const theme = useTheme();
+  const [dialog, setDialog] = useState<AppDialogState>();
+  const show = useCallback((title: string, message: string) => {
+    setDialog({ title, message });
+  }, []);
+  const confirm = useCallback((next: AppDialogState) => {
+    setDialog(next);
+  }, []);
+  const value = useMemo(() => ({ show, confirm }), [confirm, show]);
+  const dismiss = () => setDialog(undefined);
+  const accept = () => {
+    const onConfirm = dialog?.onConfirm;
+    setDialog(undefined);
+    onConfirm?.();
+  };
+
+  return (
+    <AppDialogContext.Provider value={value}>
+      {children}
+      <Portal>
+        <Dialog visible={Boolean(dialog)} onDismiss={dismiss}>
+          <Dialog.Title>{dialog?.title}</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">{dialog?.message}</Text>
+          </Dialog.Content>
+          <Dialog.Actions style={styles.dialogActions}>
+            {dialog?.cancelLabel ? (
+              <PaperButton
+                contentStyle={styles.extraHorizontalButtonPadding}
+                onPress={dismiss}
+              >
+                {dialog.cancelLabel}
+              </PaperButton>
+            ) : null}
+            <PaperButton
+              mode="contained"
+              buttonColor={dialog?.destructive ? theme.colors.error : undefined}
+              contentStyle={styles.extraHorizontalButtonPadding}
+              onPress={accept}
+            >
+              {dialog?.confirmLabel ?? t("close")}
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </AppDialogContext.Provider>
+  );
+}
+
+function useAppDialog(): AppDialogContextValue {
+  const context = useContext(AppDialogContext);
+  if (!context) throw new Error("AppDialogProvider is missing");
+  return context;
+}
+
 function errorMessage(cause: unknown, t: Translate): string {
   if (!(cause instanceof Error)) return t("operationFailed");
   const exactErrors: Partial<Record<string, Parameters<Translate>[0]>> = {
@@ -3156,9 +3396,27 @@ function TrustBluetoothSetupProvider({ children }: { children: React.ReactNode }
             <Text variant="bodyMedium">{details?.message}</Text>
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
-            <PaperButton onPress={() => setError(undefined)}>{t("cancel")}</PaperButton>
+            <PaperButton
+              mode={
+                error?.issue === "bluetoothUnavailable"
+                  ? "contained"
+                  : "text"
+              }
+              contentStyle={styles.extraHorizontalButtonPadding}
+              onPress={() => setError(undefined)}
+            >
+              {error?.issue === "bluetoothUnavailable"
+                ? t("close")
+                : t("cancel")}
+            </PaperButton>
             {error?.issue !== "bluetoothUnavailable" ? (
-              <PaperButton onPress={openSettings}>{t("openSettings")}</PaperButton>
+              <PaperButton
+                mode="contained"
+                contentStyle={styles.extraHorizontalButtonPadding}
+                onPress={openSettings}
+              >
+                {t("openSettings")}
+              </PaperButton>
             ) : null}
           </Dialog.Actions>
         </Dialog>
@@ -3193,20 +3451,10 @@ function walletAuthenticationPrompt(
   }
 }
 
-function formatKhieError(message: string, t: Translate): string {
-  if (message.startsWith("Expected a connector pairing endpoint")) {
-    return t("wrongPairingRole");
-  }
-  if (message === "Pairing endpoint is not a valid URL") {
-    return t("invalidPairingUrl");
-  }
-  if (message === "Pairing endpoint is incomplete") {
-    return t("incompletePairingUrl");
-  }
-  if (message === "Pairing endpoint contains invalid compressed addresses") {
-    return t("damagedPairingUrl");
-  }
-  return message;
+function formatKhieError(error: KhieProviderSessionError, t: Translate): string {
+  return error.kind === "incompatible-pairing-code"
+    ? t("scanPairingCodeFromConnector")
+    : error.message;
 }
 
 const styles = StyleSheet.create({
@@ -3259,27 +3507,14 @@ const styles = StyleSheet.create({
   cardContent: { gap: 12 },
   recommendedSection: { gap: 8 },
   recommendedApps: { gap: 8 },
-  recommendedAppContent: {
-    height: 104,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 16,
-  },
-  recommendedAppLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recommendedAppCopy: { flex: 1, gap: 2 },
   keyboardDialogLayer: { flex: 1 },
   keyboardDialog: { marginVertical: 24, maxHeight: "90%" },
   keyboardDialogContent: { flexShrink: 1, minHeight: 0 },
   dialogActions: {
     flexWrap: "wrap",
     rowGap: 8,
+    columnGap: 8,
+    justifyContent: "flex-end",
     paddingHorizontal: 24,
   },
   trustPicker: { gap: 16 },
@@ -3307,17 +3542,28 @@ const styles = StyleSheet.create({
   networkSwitch: { width: "100%" },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
-  khieIntroductionContent: { gap: 12, paddingTop: 16 },
-  khieIntroductionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  khieIntroductionIcon: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
   peerMetadata: { gap: 12 },
   khieMethod: { gap: 12 },
+  endpointCopyRow: {
+    width: "100%",
+    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  endpointCopyRowPressed: { opacity: 0.6 },
+  endpointCopyText: { flex: 1, minWidth: 0 },
+  khieErrorNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  khieErrorCopy: { gap: 2 },
   khieInput: { height: 56 },
   floatingInputContainer: { position: "relative" },
   floatingInputLabel: {

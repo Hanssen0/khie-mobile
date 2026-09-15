@@ -31,8 +31,7 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
-        "backgroundColor": "#fef4f7"
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
       }
     },
     "plugins": [
@@ -41,8 +40,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/adaptive-icon-monochrome.png",
-          "color": "#315DA8"
+          "icon": "./assets/adaptive-icon-monochrome.png"
         }
       ],
       [

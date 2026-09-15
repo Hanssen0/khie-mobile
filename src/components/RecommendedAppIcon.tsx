@@ -45,10 +45,14 @@ export function RecommendedAppIcon({
       <Circle
         cx="80"
         cy="80"
-        r="39.2"
+        r="39.209988"
         stroke={color}
-        strokeWidth="6.7"
-        strokeDasharray="0.7 23.3"
+        strokeWidth="6.741"
+        strokeLinecap="butt"
+        strokeLinejoin="round"
+        strokeDasharray="0.6741 23.2854 0.6741 0"
+        strokeDashoffset="0"
+        transform="rotate(-90 80 80)"
       />
       <Path
         d="M80.156 38.919a121.217 121.217 0 0 0-7.573 41.291A121.217 121.217 0 0 0 80 121.081a121.217 121.217 0 0 0 7.417-40.871 121.217 121.217 0 0 0-7.261-41.291Z"

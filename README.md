@@ -30,7 +30,7 @@ pnpm prebuild --platform android
 pnpm android
 ```
 
-Expo Go cannot run this app because `react-native-webrtc` requires native modules. The generated `android/` directory is intentionally ignored and should be regenerated from `app.json`.
+Expo Go cannot run this app because `react-native-webrtc` requires native modules. The generated `android/` directory is intentionally ignored and should be regenerated from `app.json` and `app.config.ts`.
 
 For a local development APK after prebuild:
 
