@@ -11,8 +11,16 @@ export type AccountDescriptor = {
 };
 
 export type WalletProfile = AccountDescriptor & {
+  id: string;
   createdAt: string;
-  version: 1;
+  mnemonicStorageVersion: 1 | 2;
+  version: 2;
+};
+
+export type WalletState = {
+  selectedWalletId?: string;
+  wallets: WalletProfile[];
+  version: 2;
 };
 
 export type SigningPurpose = "message" | "transaction";

@@ -49,7 +49,11 @@ describe("BIP-39 CKB wallet", () => {
 
   it("signs and verifies a message through the backend boundary", async () => {
     const vault = vaultWithMnemonic(mnemonic);
-    const backend = new LocalMnemonicSigningBackend(deriveAccount(mnemonic).account, vault);
+    const backend = new LocalMnemonicSigningBackend(
+      deriveAccount(mnemonic).account,
+      vault,
+      "test-wallet",
+    );
     const signer = backend.getReadOnlySigner(new ClientPublicTestnet());
     const signature = await backend.withSigner(signer.client, "message", (unlocked) =>
       unlocked.signMessage("hello khie"),
@@ -62,7 +66,11 @@ describe("BIP-39 CKB wallet", () => {
     vault.readMnemonic = async () => {
       throw new Error("wallet key invalidated");
     };
-    const backend = new LocalMnemonicSigningBackend(deriveAccount(mnemonic).account, vault);
+    const backend = new LocalMnemonicSigningBackend(
+      deriveAccount(mnemonic).account,
+      vault,
+      "test-wallet",
+    );
     await expect(
       backend.withSigner(new ClientPublicTestnet(), "message", async () => "unused"),
     ).rejects.toThrow("wallet key invalidated");
@@ -72,8 +80,10 @@ describe("BIP-39 CKB wallet", () => {
 function vaultWithMnemonic(value: string): WalletVault {
   return {
     clear: async () => {},
-    loadProfile: async () => undefined,
+    loadWallets: async () => ({ version: 2, wallets: [] }),
     readMnemonic: async () => value,
-    save: async () => {},
+    remove: async () => ({ version: 2, wallets: [] }),
+    save: async () => ({ version: 2, wallets: [] }),
+    select: async () => ({ version: 2, wallets: [] }),
   };
 }

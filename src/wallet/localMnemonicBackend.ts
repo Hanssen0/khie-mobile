@@ -23,6 +23,7 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
   constructor(
     readonly account: AccountDescriptor,
     private readonly vault: WalletVault,
+    private readonly walletId: string,
   ) {}
 
   getReadOnlySigner(client: Client): Signer {
@@ -35,6 +36,7 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
     operation: (signer: Signer) => Promise<T>,
   ): Promise<T> {
     const mnemonic = await this.vault.readMnemonic(
+      this.walletId,
       purpose === "message" ? "signMessage" : "signTransaction",
     );
     const { account, privateKey } = deriveAccount(mnemonic);
@@ -49,11 +51,11 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
   }
 
   exportMnemonic(): Promise<string> {
-    return this.vault.readMnemonic("viewMnemonic");
+    return this.vault.readMnemonic(this.walletId, "viewMnemonic");
   }
 
   async exportPrivateKey(): Promise<string> {
-    const mnemonic = await this.vault.readMnemonic("viewPrivateKey");
+    const mnemonic = await this.vault.readMnemonic(this.walletId, "viewPrivateKey");
     const { privateKey } = deriveAccount(mnemonic);
     try {
       return hexFrom(privateKey);

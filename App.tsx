@@ -71,8 +71,8 @@ import {
   networkFromId,
   type NetworkRpcUrls,
 } from "./src/wallet/network";
-import type { Network, WalletProfile } from "./src/wallet/types";
-import { generateMnemonic, persistWallet } from "./src/wallet/walletService";
+import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
+import { generateMnemonic, persistWallet, recoverWallet } from "./src/wallet/walletService";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
 
 type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
@@ -120,11 +120,12 @@ function WalletApp() {
   const previousPaired = useRef(false);
 
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<WalletProfile>();
+  const [walletState, setWalletState] = useState<WalletState>({ version: 2, wallets: [] });
   const [network, setNetwork] = useState<Network>("testnet");
   const [rpcUrls, setRpcUrls] = useState<NetworkRpcUrls>(DEFAULT_NETWORK_RPC_URLS);
   const [screen, setScreen] = useState<Screen>("home");
   const [onboarding, setOnboarding] = useState<Onboarding>("start");
+  const [addingWallet, setAddingWallet] = useState(false);
   const [approval, setApproval] = useState<ApprovalItem>();
   const [pairing, setPairing] = useState(false);
   const [sessionState, setSessionState] = useState<KhieProviderSessionState>({
@@ -141,26 +142,30 @@ function WalletApp() {
 
   useEffect(() => {
     void Promise.all([
-      vault.loadProfile(),
+      vault.loadWallets(),
       networkSettings.load().catch((cause: unknown) => {
         setNotice(errorMessage(cause, tRef.current));
         return { ...DEFAULT_NETWORK_RPC_URLS };
       }),
     ])
-      .then(([nextProfile, nextRpcUrls]) => {
+      .then(([nextWalletState, nextRpcUrls]) => {
         clients.current = {
           mainnet: clientForNetwork("mainnet", nextRpcUrls.mainnet),
           testnet: clientForNetwork("testnet", nextRpcUrls.testnet),
         };
         setRpcUrls(nextRpcUrls);
-        setProfile(nextProfile);
+        setWalletState(nextWalletState);
       })
       .catch((cause: unknown) => setNotice(errorMessage(cause, tRef.current)))
       .finally(() => setLoading(false));
   }, [networkSettings, vault]);
 
+  const profile =
+    walletState.wallets.find((wallet) => wallet.id === walletState.selectedWalletId) ??
+    walletState.wallets[0];
+
   const backend = useMemo(
-    () => profile && new LocalMnemonicSigningBackend(profile, vault),
+    () => profile && new LocalMnemonicSigningBackend(profile, vault, profile.id),
     [profile, vault],
   );
 
@@ -242,6 +247,19 @@ function WalletApp() {
     return () => subscription.remove();
   }, [screen]);
 
+  useEffect(() => {
+    if (!addingWallet) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (onboarding !== "start") {
+        setOnboarding("start");
+      } else {
+        setAddingWallet(false);
+      }
+      return true;
+    });
+    return () => subscription.remove();
+  }, [addingWallet, onboarding]);
+
   const changeNetwork = useCallback(
     (next: Network) => {
       if (next === networkRef.current) {
@@ -293,14 +311,30 @@ function WalletApp() {
     setPairing(false);
   }, []);
 
+  const activateWalletState = useCallback(
+    (next: WalletState) => {
+      const nextProfile =
+        next.wallets.find((wallet) => wallet.id === next.selectedWalletId) ?? next.wallets[0];
+      if (profile && profile.id !== nextProfile?.id) {
+        if (sessionState.paired) {
+          void sessionRef.current?.unpair().catch(() => undefined);
+        }
+        approvalQueue.cancelAll("Wallet changed");
+      }
+      setWalletState(next);
+      setScreen("home");
+    },
+    [approvalQueue, profile, sessionState.paired],
+  );
+
   if (loading) {
     return <LoadingScreen />;
   }
 
-  const finishOnboarding = (next: WalletProfile) => {
-    setProfile(next);
+  const finishOnboarding = (next: WalletState) => {
+    activateWalletState(next);
     setOnboarding("start");
-    setScreen("home");
+    setAddingWallet(false);
   };
 
   if (!profile) {
@@ -319,13 +353,45 @@ function WalletApp() {
     );
   }
 
+  if (addingWallet) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+        {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
+        <OnboardingScreen
+          mode={onboarding}
+          vault={vault}
+          onMode={setOnboarding}
+          onComplete={finishOnboarding}
+          onCancel={() => {
+            setAddingWallet(false);
+            setOnboarding("start");
+          }}
+          onError={(cause) => setNotice(errorMessage(cause, t))}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={theme.dark ? "light" : "dark"} />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
       <View style={styles.body}>
         {screen === "home" ? (
-          <HomeScreen signer={signerRef.current} network={network} onNavigate={setScreen} />
+          <HomeScreen
+            signer={signerRef.current}
+            network={network}
+            profile={profile}
+            wallets={walletState.wallets}
+            onSelectWallet={(walletId) => {
+              void vault
+                .select(walletId)
+                .then(activateWalletState)
+                .catch((cause: unknown) => setNotice(errorMessage(cause, t)));
+            }}
+            onNavigate={setScreen}
+          />
         ) : null}
         {screen === "receive" ? (
           <ReceiveScreen signer={signerRef.current} onBack={() => setScreen("home")} />
@@ -345,18 +411,37 @@ function WalletApp() {
         ) : null}
         {screen === "settings" ? (
           <SettingsScreen
+            key={profile.id}
             backend={backend!}
             network={network}
             profile={profile}
+            wallets={walletState.wallets}
             rpcUrls={rpcUrls}
             vault={vault}
             onChangeNetwork={changeNetwork}
+            onSelectWallet={async (walletId) => {
+              await vault.select(walletId).then(activateWalletState);
+              setScreen("settings");
+            }}
+            onAddWallet={() => {
+              setOnboarding("start");
+              setAddingWallet(true);
+            }}
+            onRemoveWallet={async (walletId) => {
+              if (walletId === profile.id && sessionState.paired) {
+                void sessionRef.current?.unpair().catch(() => undefined);
+              }
+              approvalQueue.cancelAll("Wallet removed");
+              const next = await vault.remove(walletId);
+              setWalletState(next);
+              setScreen(next.wallets.length ? "settings" : "home");
+            }}
             onSaveRpcUrls={async (next) => {
               await saveRpcUrls(next);
               setNotice(t("rpcUrlsSaved"));
             }}
             onRecovered={(next) => {
-              setProfile(next);
+              setWalletState(next);
               setNotice(t("walletKeyRecovered"));
             }}
           />
@@ -400,12 +485,14 @@ function OnboardingScreen({
   vault,
   onMode,
   onComplete,
+  onCancel,
   onError,
 }: {
   mode: Onboarding;
   vault: SecureStoreWalletVault;
   onMode: (mode: Onboarding) => void;
-  onComplete: (profile: WalletProfile) => void;
+  onComplete: (state: WalletState) => void;
+  onCancel?: () => void;
   onError: (cause: unknown) => void;
 }) {
   const { t } = useI18n();
@@ -441,15 +528,17 @@ function OnboardingScreen({
   if (mode === "start") {
     return (
       <View style={[styles.page, styles.center]}>
-        <LanguageMenu />
+        {onCancel ? <BackButton onPress={onCancel} /> : <LanguageMenu />}
         <Icon source="wallet" size={64} color={theme.colors.primary} />
-        <Text variant="displaySmall">Khie Wallet</Text>
-        <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
+        <Text variant="displaySmall">{onCancel ? t("addWallet") : "Khie Wallet"}</Text>
+        {!onCancel ? <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text> : null}
         <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
         <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
-        <HelperText type="error" visible style={styles.centerText}>
-          {t("developmentWarning")}
-        </HelperText>
+        {!onCancel ? (
+          <HelperText type="error" visible style={styles.centerText}>
+            {t("developmentWarning")}
+          </HelperText>
+        ) : null}
       </View>
     );
   }
@@ -501,10 +590,16 @@ function OnboardingScreen({
 function HomeScreen({
   signer,
   network,
+  profile,
+  wallets,
+  onSelectWallet,
   onNavigate,
 }: {
   signer?: Signer;
   network: Network;
+  profile: WalletProfile;
+  wallets: WalletProfile[];
+  onSelectWallet: (walletId: string) => void;
   onNavigate: (screen: Screen) => void;
 }) {
   const { t } = useI18n();
@@ -547,6 +642,7 @@ function HomeScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
+      <WalletMenu wallets={wallets} selected={profile.id} onSelect={onSelectWallet} />
       <View style={styles.balanceBlock}>
         <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
         <View style={styles.balanceValue}>
@@ -862,20 +958,28 @@ function SettingsScreen({
   backend,
   network,
   profile,
+  wallets,
   rpcUrls,
   vault,
   onChangeNetwork,
+  onSelectWallet,
+  onAddWallet,
+  onRemoveWallet,
   onSaveRpcUrls,
   onRecovered,
 }: {
   backend: LocalMnemonicSigningBackend;
   network: Network;
   profile: WalletProfile;
+  wallets: WalletProfile[];
   rpcUrls: NetworkRpcUrls;
   vault: SecureStoreWalletVault;
   onChangeNetwork: (network: Network) => void;
+  onSelectWallet: (walletId: string) => Promise<void>;
+  onAddWallet: () => void;
+  onRemoveWallet: (walletId: string) => Promise<void>;
   onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>;
-  onRecovered: (profile: WalletProfile) => void;
+  onRecovered: (state: WalletState) => void;
 }) {
   const { t } = useI18n();
   const [secret, setSecret] = useState<{ label: string; value: string }>();
@@ -910,9 +1014,69 @@ function SettingsScreen({
       Alert.alert(t("unableToDisplay"), errorMessage(cause, t));
     }
   };
+  const confirmRemove = (wallet: WalletProfile) => {
+    Alert.alert(
+      t("deleteWalletTitle", { wallet: walletLabel(wallets, wallet.id, t) }),
+      t("deleteWalletDescription"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("delete"),
+          style: "destructive",
+          onPress: () => {
+            void onRemoveWallet(wallet.id).catch((cause: unknown) =>
+              Alert.alert(t("unableToDeleteWallet"), errorMessage(cause, t)),
+            );
+          },
+        },
+      ],
+    );
+  };
   return (
     <ScrollView contentContainerStyle={[styles.page, styles.settingsPage]}>
       <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
+      <PaperCard mode="elevated">
+        <PaperCard.Title title={t("wallets")} left={(props) => <Icon {...props} source="wallet" />} />
+        <PaperCard.Content>
+          {wallets.map((wallet) => {
+            const selected = wallet.id === profile.id;
+            return (
+              <List.Item
+                key={wallet.id}
+                title={walletLabel(wallets, wallet.id, t)}
+                description={
+                  selected
+                    ? `${t("current")} · ${shortPublicKey(wallet.publicKey)}`
+                    : shortPublicKey(wallet.publicKey)
+                }
+                descriptionNumberOfLines={1}
+                left={(props) => (
+                  <List.Icon {...props} icon={selected ? "wallet" : "wallet-outline"} />
+                )}
+                right={() => (
+                  <IconButton
+                    icon="delete-outline"
+                    accessibilityLabel={t("delete")}
+                    onPress={() => confirmRemove(wallet)}
+                  />
+                )}
+                onPress={() => {
+                  if (!selected) {
+                    void onSelectWallet(wallet.id).catch((cause: unknown) =>
+                      Alert.alert(t("unableToSwitchWallet"), errorMessage(cause, t)),
+                    );
+                  }
+                }}
+              />
+            );
+          })}
+        </PaperCard.Content>
+        <PaperCard.Actions style={styles.cardActions}>
+          <PaperButton mode="contained" icon="plus" onPress={onAddWallet}>
+            {t("addWallet")}
+          </PaperButton>
+        </PaperCard.Actions>
+      </PaperCard>
       <PaperCard mode="elevated">
         <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
         <PaperCard.Content>
@@ -1048,7 +1212,7 @@ function SettingsScreen({
               disabled={recovering || !recoveryMnemonic.trim()}
               onPress={() => {
                 setRecovering(true);
-                void persistWallet(vault, recoveryMnemonic)
+                void recoverWallet(vault, profile, recoveryMnemonic)
                   .then((next) => {
                     setSecret(undefined);
                     setRecoveryMnemonic("");
@@ -1197,6 +1361,48 @@ function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network
   );
 }
 
+function WalletMenu({
+  wallets,
+  selected,
+  onSelect,
+}: {
+  wallets: WalletProfile[];
+  selected: string;
+  onSelect: (walletId: string) => void;
+}) {
+  const { t } = useI18n();
+  const [visible, setVisible] = useState(false);
+  return (
+    <Menu
+      visible={visible}
+      onDismiss={() => setVisible(false)}
+      anchor={
+        <PaperButton
+          compact
+          mode="contained-tonal"
+          icon="wallet"
+          onPress={() => setVisible(true)}
+          style={styles.walletMenu}
+        >
+          {walletLabel(wallets, selected, t)}
+        </PaperButton>
+      }
+    >
+      {wallets.map((wallet) => (
+        <Menu.Item
+          key={wallet.id}
+          leadingIcon={wallet.id === selected ? "check" : "wallet-outline"}
+          title={walletLabel(wallets, wallet.id, t)}
+          onPress={() => {
+            setVisible(false);
+            if (wallet.id !== selected) onSelect(wallet.id);
+          }}
+        />
+      ))}
+    </Menu>
+  );
+}
+
 function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (screen: Screen) => void }) {
   const { t } = useI18n();
   const routes = [
@@ -1251,6 +1457,15 @@ function LanguageMenu() {
       ))}
     </Menu>
   );
+}
+
+function walletLabel(wallets: WalletProfile[], walletId: string, t: Translate): string {
+  const index = wallets.findIndex((wallet) => wallet.id === walletId);
+  return t("walletNumber", { number: Math.max(0, index) + 1 });
+}
+
+function shortPublicKey(publicKey: string): string {
+  return `${publicKey.slice(0, 8)}…${publicKey.slice(-6)}`;
 }
 
 function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
@@ -1381,6 +1596,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
   },
+  walletMenu: { alignSelf: "center" },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
   mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
