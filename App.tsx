@@ -66,6 +66,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { RecommendedAppIcon } from "./src/components/RecommendedAppIcon";
+import { LocalizedError } from "./src/errors";
 import {
   CryptapeIcon,
   cryptapeIconSource,
@@ -140,6 +141,7 @@ import {
   createMnemonicChallenges,
   type MnemonicChallenge,
 } from "./src/wallet/mnemonicChallenge";
+import { assertValidMnemonic } from "./src/wallet/derivation";
 import {
   DEFAULT_NETWORK_RPC_URLS,
   clientForNetwork,
@@ -151,8 +153,17 @@ import {
   normalizeTrustPublicKey,
   prepareTrustKeyImport,
 } from "./src/wallet/trustSignature";
+import {
+  assertWalletPassword,
+  deriveWalletPasswordCredential,
+  MIN_WALLET_PASSWORD_LENGTH,
+} from "./src/wallet/password";
 import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
-import { generateMnemonic, persistWallet, recoverWallet } from "./src/wallet/walletService";
+import {
+  generateMnemonic,
+  persistFirstMnemonicWallet,
+  persistWallet,
+} from "./src/wallet/walletService";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
 import {
   fetchLatestRelease,
@@ -165,7 +176,17 @@ import {
 } from "./src/update/githubRelease";
 
 type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
-type Onboarding = "start" | "create" | "confirm" | "restore" | "trust";
+type Onboarding = "start" | "create" | "confirm" | "password" | "restore" | "trust";
+type WalletUnlockResult = {
+  mnemonic?: string;
+  passwordCredential: string;
+};
+type WalletPasswordRequest = {
+  purpose: WalletAuthenticationPurpose;
+  reject: (cause: Error) => void;
+  resolve: (result: WalletUnlockResult) => void;
+  walletId?: string;
+};
 type TrustPinRequest = {
   purpose: "connect" | "message" | "transaction" | "keyManagement";
   deviceId?: string;
@@ -300,7 +321,12 @@ function WalletApp({
   );
 
   const [loading, setLoading] = useState(true);
-  const [walletState, setWalletState] = useState<WalletState>({ version: 3, wallets: [] });
+  const [walletState, setWalletState] = useState<WalletState>({
+    biometricUnlock: false,
+    masterPasswordSet: false,
+    version: 4,
+    wallets: [],
+  });
   const [network, setNetwork] = useState<Network>("testnet");
   const [rpcUrls, setRpcUrls] = useState<NetworkRpcUrls>(DEFAULT_NETWORK_RPC_URLS);
   const [screen, setScreen] = useState<Screen>("home");
@@ -321,6 +347,11 @@ function WalletApp({
   const [trustDevice, setTrustDevice] = useState<ConnectedTrustDevice>();
   const [trustPinRequest, setTrustPinRequest] = useState<TrustPinRequest>();
   const [trustPin, setTrustPin] = useState("");
+  const [walletPasswordRequest, setWalletPasswordRequest] =
+    useState<WalletPasswordRequest>();
+  const [walletPassword, setWalletPassword] = useState("");
+  const [walletPasswordError, setWalletPasswordError] = useState<string>();
+  const [unlockingWallet, setUnlockingWallet] = useState(false);
   const [trustPinResetOpen, setTrustPinResetOpen] = useState(false);
   const [trustPuk, setTrustPuk] = useState("");
   const [trustNewPin, setTrustNewPin] = useState("");
@@ -339,6 +370,8 @@ function WalletApp({
   const [checkingForUpdates, setCheckingForUpdates] = useState(false);
   const [focusAppInformation, setFocusAppInformation] = useState(false);
   const khieNotificationPromptDismissed = useRef(false);
+  const walletStateRef = useRef(walletState);
+  walletStateRef.current = walletState;
 
   const requestTrustPin = useCallback<RequestTrustPin>(
     (purpose) =>
@@ -356,6 +389,112 @@ function WalletApp({
     setTrustPin("");
     void KeyboardController.dismiss({ animated: true });
   }, [trustPin, trustPinRequest]);
+
+  const requestPasswordUnlock = useCallback(
+    (purpose: WalletAuthenticationPurpose, walletId?: string) =>
+      new Promise<WalletUnlockResult>((resolve, reject) => {
+        setWalletPassword("");
+        setWalletPasswordError(undefined);
+        setWalletPasswordRequest((current) => {
+          current?.reject(new Error("Wallet unlock was cancelled"));
+          return { purpose, reject, resolve, walletId };
+        });
+      }),
+    [],
+  );
+
+  const requestWalletUnlock = useCallback(
+    async (
+      walletId: string,
+      purpose: WalletAuthenticationPurpose,
+      forcePassword = false,
+    ): Promise<WalletUnlockResult> => {
+      const wallet = walletStateRef.current.wallets.find(
+        (candidate) => candidate.id === walletId,
+      );
+      if (!wallet || wallet.kind !== "mnemonic") {
+        throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
+      }
+
+      if (walletStateRef.current.biometricUnlock && !forcePassword) {
+        let passwordCredential: string | null = null;
+        let credentialRead = false;
+        try {
+          passwordCredential = await vault.readBiometricCredential(purpose);
+          credentialRead = true;
+          if (passwordCredential) {
+            return {
+              mnemonic: await vault.readMnemonic(walletId, passwordCredential),
+              passwordCredential,
+            };
+          }
+        } catch {
+          // Cancelling or temporarily failing system authentication falls back
+          // to the wallet password without changing the biometric preference.
+        }
+        if (credentialRead && !passwordCredential) {
+          void vault
+            .setBiometricUnlock()
+            .then(setWalletState)
+            .catch(() => undefined);
+        }
+      }
+
+      return requestPasswordUnlock(purpose, walletId);
+    },
+    [requestPasswordUnlock, vault],
+  );
+
+  const submitWalletPassword = useCallback(async () => {
+    const request = walletPasswordRequest;
+    if (!request || unlockingWallet || !walletPassword) return;
+    setUnlockingWallet(true);
+    setWalletPasswordError(undefined);
+    try {
+      const passwordCredential = await deriveWalletPasswordCredential(walletPassword);
+      const mnemonic = request.walletId
+        ? await vault.readMnemonic(request.walletId, passwordCredential)
+        : undefined;
+      if (!request.walletId && !(await vault.verifyMasterCredential(passwordCredential))) {
+        throw new LocalizedError("invalidWalletPassword", "Invalid password");
+      }
+      request.resolve({ mnemonic, passwordCredential });
+      setWalletPasswordRequest(undefined);
+      setWalletPassword("");
+      void KeyboardController.dismiss({ animated: true });
+    } catch (cause) {
+      setWalletPasswordError(errorMessage(cause, t));
+    } finally {
+      setUnlockingWallet(false);
+    }
+  }, [t, unlockingWallet, vault, walletPassword, walletPasswordRequest]);
+
+  const requestMasterCredential = useCallback(
+    async (
+      purpose: WalletAuthenticationPurpose,
+      forcePassword = false,
+    ): Promise<string> => {
+      const state = walletStateRef.current;
+      if (state.biometricUnlock && !forcePassword) {
+        let credentialRead = false;
+        try {
+          const credential = await vault.readBiometricCredential(purpose);
+          credentialRead = true;
+          if (credential) {
+            if (await vault.verifyMasterCredential(credential)) return credential;
+          }
+        } catch {
+          // Let the master-password dialog handle cancellation, invalidation,
+          // or a temporarily unavailable biometric prompt.
+        }
+        if (credentialRead) {
+          void vault.setBiometricUnlock().then(setWalletState).catch(() => undefined);
+        }
+      }
+      return (await requestPasswordUnlock(purpose)).passwordCredential;
+    },
+    [requestPasswordUnlock, vault],
+  );
 
   useEffect(
     () =>
@@ -648,6 +787,34 @@ function WalletApp({
     ? selectAndroidApk(latestRelease, Device.supportedCpuArchitectures)
     : undefined;
 
+  const changeBiometricUnlock = useCallback(
+    async (enabled: boolean) => {
+      if (!walletState.masterPasswordSet) return;
+      const passwordCredential = enabled
+        ? await requestMasterCredential("enableBiometrics", true)
+        : undefined;
+      setWalletState(
+        await vault.setBiometricUnlock(passwordCredential),
+      );
+    },
+    [requestMasterCredential, vault, walletState.masterPasswordSet],
+  );
+
+  const changeMasterPassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      assertWalletPassword(newPassword);
+      const [oldCredential, newCredential] = await Promise.all([
+        deriveWalletPasswordCredential(oldPassword),
+        deriveWalletPasswordCredential(newPassword),
+      ]);
+      const next = await vault.changeMasterPassword(oldCredential, newCredential);
+      approvalQueue.cancelAll("Master password changed");
+      setWalletState(next);
+      setNotice(t("masterPasswordChanged"));
+    },
+    [approvalQueue, t, vault],
+  );
+
   const downloadUpdate = useCallback(async () => {
     if (!updateAsset) {
       appDialog.confirm({
@@ -716,7 +883,10 @@ function WalletApp({
           normalizeTrustPublicKey(expectedPublicKey)
       ) {
         await releaseTrustConnection().catch(() => undefined);
-        throw new Error("Cryptape Trust public key has changed");
+        throw new LocalizedError(
+          "trustPublicKeyChanged",
+          "Cryptape Trust public key has changed",
+        );
       }
       setTrustDevice(device);
       return pin;
@@ -727,9 +897,21 @@ function WalletApp({
   const localBackend = useMemo(
     () =>
       profile?.kind === "mnemonic"
-        ? new LocalMnemonicSigningBackend(profile, vault, profile.id)
+        ? new LocalMnemonicSigningBackend(
+            profile,
+            async (purpose) => {
+              const mnemonic = (await requestWalletUnlock(profile.id, purpose)).mnemonic;
+              if (!mnemonic) {
+                throw new LocalizedError(
+                  "walletUnavailable",
+                  "Wallet is unavailable",
+                );
+              }
+              return mnemonic;
+            },
+          )
         : undefined,
-    [profile, vault],
+    [profile, requestWalletUnlock],
   );
   const trustBackend = useMemo(
     () =>
@@ -782,7 +964,7 @@ function WalletApp({
       connect: async (networkId) => {
         const currentBackend = backendRef.current;
         if (!currentBackend) {
-          throw new Error("Wallet is unavailable");
+          throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
         }
         const next = networkFromId(networkId);
         networkRef.current = next;
@@ -950,7 +1132,7 @@ function WalletApp({
 
   const prepareTrustKeyOperation = useCallback(async () => {
     if (profile?.kind !== "cryptape-trust") {
-      throw new Error("Cryptape Trust wallet is unavailable");
+      throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
     }
     const connected = trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase();
     if (!connected) {
@@ -969,7 +1151,10 @@ function WalletApp({
       if (sessionState.paired) {
         void sessionRef.current?.unpair().catch(() => undefined);
       }
-      throw new Error("Cryptape Trust public key has changed");
+      throw new LocalizedError(
+        "trustPublicKeyChanged",
+        "Cryptape Trust public key has changed",
+      );
     }
     return { device, pin };
   }, [approvalQueue, profile, requestTrustPin, sessionState.paired, trustDevice, vault]);
@@ -1004,7 +1189,10 @@ function WalletApp({
           pin,
         );
         if (publicKey.toLowerCase() !== pair.publicKey.toLowerCase()) {
-          throw new Error("Cryptape Trust returned a different public key after import");
+          throw new LocalizedError(
+            "trustPublicKeyImportMismatch",
+            "Cryptape Trust returned a different public key after import",
+          );
         }
         await activateTrustKey(device, publicKey);
       });
@@ -1024,7 +1212,7 @@ function WalletApp({
 
   const refreshSelectedTrust = useCallback(async () => {
     if (profile?.kind !== "cryptape-trust") {
-      throw new Error("Cryptape Trust wallet is unavailable");
+      throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
     }
     try {
       const device = await connectTrust(profile.deviceId, profile.name);
@@ -1050,7 +1238,9 @@ function WalletApp({
   const selectWallet = useCallback(
     async (walletId: string) => {
       const target = walletState.wallets.find((wallet) => wallet.id === walletId);
-      if (!target) throw new Error("Unknown wallet");
+      if (!target) {
+        throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
+      }
       if (target.kind === "cryptape-trust") {
         if (
           trustDevice &&
@@ -1233,6 +1423,59 @@ function WalletApp({
             </PaperButton>
           </Dialog.Actions>
         </Dialog>
+        <Dialog
+          visible={Boolean(walletPasswordRequest)}
+          dismissable={false}
+          style={styles.keyboardDialog}
+        >
+          <Dialog.Title>{t("enterWalletPassword")}</Dialog.Title>
+          <KeyboardDialogContent>
+            <WalletTextInput
+              autoFocus
+              label={t("walletPassword")}
+              secureTextEntry
+              returnKeyType="done"
+              value={walletPassword}
+              error={Boolean(walletPasswordError)}
+              onChangeText={(value) => {
+                setWalletPassword(value);
+                setWalletPasswordError(undefined);
+              }}
+              onSubmitEditing={() => void submitWalletPassword()}
+            />
+            {walletPasswordError ? (
+              <HelperText type="error" visible>
+                {walletPasswordError}
+              </HelperText>
+            ) : null}
+          </KeyboardDialogContent>
+          <Dialog.Actions style={styles.dialogActions}>
+            <PaperButton
+              contentStyle={styles.extraHorizontalButtonPadding}
+              disabled={unlockingWallet}
+              onPress={() => {
+                walletPasswordRequest?.reject(
+                  new Error("Wallet unlock was cancelled"),
+                );
+                setWalletPasswordRequest(undefined);
+                setWalletPassword("");
+                setWalletPasswordError(undefined);
+                void KeyboardController.dismiss({ animated: true });
+              }}
+            >
+              {t("cancel")}
+            </PaperButton>
+            <PaperButton
+              mode="contained"
+              contentStyle={styles.extraHorizontalButtonPadding}
+              loading={unlockingWallet}
+              disabled={unlockingWallet || !walletPassword}
+              onPress={() => void submitWalletPassword()}
+            >
+              {t("unlock")}
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
       </KeyboardAvoidingView>
     </Portal>
   );
@@ -1304,6 +1547,8 @@ function WalletApp({
         <OnboardingScreen
           mode={onboarding}
           vault={vault}
+          hasMasterPassword={walletState.masterPasswordSet}
+          onUnlockMasterPassword={() => requestMasterCredential("useWallet")}
           onMode={setOnboarding}
           onComplete={finishOnboarding}
           onConnectTrust={addTrustWallet}
@@ -1322,6 +1567,8 @@ function WalletApp({
         <OnboardingScreen
           mode={onboarding}
           vault={vault}
+          hasMasterPassword={walletState.masterPasswordSet}
+          onUnlockMasterPassword={() => requestMasterCredential("useWallet")}
           onMode={setOnboarding}
           onComplete={finishOnboarding}
           onConnectTrust={addTrustWallet}
@@ -1411,8 +1658,12 @@ function WalletApp({
             updateAvailable={updateAvailable}
             updateAsset={updateAsset}
             focusAppInformation={focusAppInformation}
-            vault={vault}
+            biometricAvailable={vault.canUseBiometrics()}
+            biometricUnlock={walletState.biometricUnlock}
+            masterPasswordSet={walletState.masterPasswordSet}
             onChangeNetwork={changeNetwork}
+            onChangeBiometricUnlock={changeBiometricUnlock}
+            onChangeMasterPassword={changeMasterPassword}
             onSelectWallet={selectWallet}
             onAddWallet={() => {
               setOnboarding("start");
@@ -1443,10 +1694,6 @@ function WalletApp({
             onCheckForUpdates={() => checkForUpdates(false)}
             onDownloadUpdate={downloadUpdate}
             onAppInformationFocused={() => setFocusAppInformation(false)}
-            onRecovered={(next) => {
-              setWalletState(next);
-              setNotice(t("walletKeyRecovered"));
-            }}
           />
         ) : null}
         {screen === "scanner" ? (
@@ -1488,6 +1735,8 @@ function LoadingScreen() {
 function OnboardingScreen({
   mode,
   vault,
+  hasMasterPassword,
+  onUnlockMasterPassword,
   onMode,
   onComplete,
   onConnectTrust,
@@ -1496,6 +1745,8 @@ function OnboardingScreen({
 }: {
   mode: Onboarding;
   vault: SecureStoreWalletVault;
+  hasMasterPassword: boolean;
+  onUnlockMasterPassword: () => Promise<string>;
   onMode: (mode: Onboarding) => void;
   onComplete: (state: WalletState) => Promise<void> | void;
   onConnectTrust: (device: TrustDevice) => Promise<void>;
@@ -1509,6 +1760,13 @@ function OnboardingScreen({
   const [challenges, setChallenges] = useState<MnemonicChallenge[]>([]);
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [challengeError, setChallengeError] = useState(false);
+  const [passwordMnemonic, setPasswordMnemonic] = useState("");
+  const [passwordSource, setPasswordSource] = useState<"create" | "restore">(
+    "create",
+  );
+  const [newWalletPassword, setNewWalletPassword] = useState("");
+  const [confirmWalletPassword, setConfirmWalletPassword] = useState("");
+  const [enableBiometricUnlock, setEnableBiometricUnlock] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -1516,6 +1774,8 @@ function OnboardingScreen({
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (mode === "confirm") {
         onMode("create");
+      } else if (mode === "password") {
+        onMode(passwordSource);
       } else if (mode !== "start") {
         onMode("start");
       } else {
@@ -1524,7 +1784,7 @@ function OnboardingScreen({
       return true;
     });
     return () => subscription.remove();
-  }, [mode, onCancel, onMode]);
+  }, [mode, onCancel, onMode, passwordSource]);
 
   const beginCreate = async () => {
     setBusy(true);
@@ -1538,10 +1798,42 @@ function OnboardingScreen({
     }
   };
 
-  const save = async (value: string) => {
+  const beginPasswordSetup = async (
+    value: string,
+    source: "create" | "restore",
+  ) => {
+    try {
+      const mnemonic = assertValidMnemonic(value);
+      if (hasMasterPassword) {
+        setBusy(true);
+        const passwordCredential = await onUnlockMasterPassword();
+        await onComplete(await persistWallet(vault, mnemonic, passwordCredential));
+        return;
+      }
+      setPasswordMnemonic(mnemonic);
+      setPasswordSource(source);
+      setNewWalletPassword("");
+      setConfirmWalletPassword("");
+      setEnableBiometricUnlock(false);
+      onMode("password");
+    } catch (cause) {
+      onError(cause);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = async () => {
     setBusy(true);
     try {
-      await onComplete(await persistWallet(vault, value));
+      await onComplete(
+        await persistFirstMnemonicWallet(
+          vault,
+          passwordMnemonic,
+          newWalletPassword,
+          enableBiometricUnlock,
+        ),
+      );
     } catch (cause) {
       onError(cause);
     } finally {
@@ -1564,7 +1856,7 @@ function OnboardingScreen({
         setChallengeIndex(challengeIndex + 1);
         setChallengeError(false);
       } else {
-        void save(generatedMnemonic);
+        void beginPasswordSetup(generatedMnemonic, "create");
       }
       return;
     }
@@ -1665,7 +1957,7 @@ function OnboardingScreen({
         />
         <PrimaryButton
           label={busy ? t("saving") : t("restore")}
-          onPress={() => void save(restoreMnemonic)}
+          onPress={() => void beginPasswordSetup(restoreMnemonic, "restore")}
           disabled={busy}
         />
       </ScrollView>
@@ -1690,6 +1982,92 @@ function OnboardingScreen({
         </View>
         <PrimaryButton label={t("continueToVerification")} onPress={beginConfirmation} />
       </ScrollView>
+    );
+  }
+
+  if (mode === "password") {
+    const passwordTooShort =
+      newWalletPassword.length > 0 &&
+      [...newWalletPassword].length < MIN_WALLET_PASSWORD_LENGTH;
+    const passwordsDoNotMatch =
+      confirmWalletPassword.length > 0 &&
+      confirmWalletPassword !== newWalletPassword;
+    const biometricAvailable = vault.canUseBiometrics();
+    return (
+      <KeyboardAwareScrollView
+        bottomOffset={16}
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+      >
+        <BackButton onPress={() => onMode(passwordSource)} />
+        <Text variant="headlineMedium">{t("setWalletPassword")}</Text>
+        <Text variant="bodyMedium">{t("walletPasswordDescription")}</Text>
+        <WalletTextInput
+          autoFocus
+          label={t("walletPassword")}
+          secureTextEntry
+          value={newWalletPassword}
+          onChangeText={setNewWalletPassword}
+        />
+        {passwordTooShort ? (
+          <HelperText type="error" visible>
+            {t("walletPasswordTooShort")}
+          </HelperText>
+        ) : null}
+        <WalletTextInput
+          label={t("confirmWalletPassword")}
+          secureTextEntry
+          returnKeyType="done"
+          value={confirmWalletPassword}
+          onChangeText={setConfirmWalletPassword}
+          onSubmitEditing={() => {
+            if (
+              [...newWalletPassword].length >= MIN_WALLET_PASSWORD_LENGTH &&
+              confirmWalletPassword === newWalletPassword &&
+              !busy
+            ) {
+              void save();
+            }
+          }}
+        />
+        {passwordsDoNotMatch ? (
+          <HelperText type="error" visible>
+            {t("walletPasswordsDoNotMatch")}
+          </HelperText>
+        ) : null}
+        <List.Item
+          title={t("biometricUnlock")}
+          descriptionNumberOfLines={1}
+          description={
+            biometricAvailable
+              ? t("biometricUnlockDescription")
+              : t("biometricUnlockUnavailable")
+          }
+          left={(props) => <List.Icon {...props} icon="fingerprint" />}
+          right={() => (
+            <View pointerEvents="none" style={styles.listItemSwitch}>
+              <Switch
+                disabled={!biometricAvailable}
+                value={enableBiometricUnlock}
+              />
+            </View>
+          )}
+          onPress={() => {
+            if (biometricAvailable) {
+              setEnableBiometricUnlock((value) => !value);
+            }
+          }}
+        />
+        <PrimaryButton
+          label={busy ? t("saving") : t("saveWallet")}
+          disabled={
+            busy ||
+            [...newWalletPassword].length < MIN_WALLET_PASSWORD_LENGTH ||
+            confirmWalletPassword !== newWalletPassword
+          }
+          onPress={() => void save()}
+        />
+      </KeyboardAwareScrollView>
     );
   }
 
@@ -1870,7 +2248,7 @@ function HomeScreen({
         <Text variant="titleMedium">CKB</Text>
       </View>
       <PaperCard mode="elevated">
-        <PaperCard.Title title={t("walletAddress")} left={(props) => <Icon {...props} source="identifier" />} />
+        <PaperCard.Title title={t("walletAddress")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="identifier" />} />
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
@@ -2323,8 +2701,12 @@ function SettingsScreen({
   updateAvailable,
   updateAsset,
   focusAppInformation,
-  vault,
+  biometricAvailable,
+  biometricUnlock,
+  masterPasswordSet,
   onChangeNetwork,
+  onChangeBiometricUnlock,
+  onChangeMasterPassword,
   onSelectWallet,
   onAddWallet,
   onRemoveWallet,
@@ -2334,7 +2716,6 @@ function SettingsScreen({
   onCheckForUpdates,
   onDownloadUpdate,
   onAppInformationFocused,
-  onRecovered,
 }: {
   backend?: LocalMnemonicSigningBackend;
   network: Network;
@@ -2350,8 +2731,15 @@ function SettingsScreen({
   updateAvailable: boolean;
   updateAsset?: ReleaseAsset;
   focusAppInformation: boolean;
-  vault: SecureStoreWalletVault;
+  biometricAvailable: boolean;
+  biometricUnlock: boolean;
+  masterPasswordSet: boolean;
   onChangeNetwork: (network: Network) => void;
+  onChangeBiometricUnlock: (enabled: boolean) => Promise<void>;
+  onChangeMasterPassword: (
+    oldPassword: string,
+    newPassword: string,
+  ) => Promise<void>;
   onSelectWallet: (walletId: string) => Promise<void>;
   onAddWallet: () => void;
   onRemoveWallet: (walletId: string) => Promise<void>;
@@ -2361,7 +2749,6 @@ function SettingsScreen({
   onCheckForUpdates: () => Promise<void> | void;
   onDownloadUpdate: () => Promise<void>;
   onAppInformationFocused: () => void;
-  onRecovered: (state: WalletState) => void;
 }) {
   const { t } = useI18n();
   const appDialog = useAppDialog();
@@ -2369,9 +2756,8 @@ function SettingsScreen({
   const [secret, setSecret] = useState<{ label: string; value: string }>();
   const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
   const [savingRpcUrls, setSavingRpcUrls] = useState(false);
-  const [showRecovery, setShowRecovery] = useState(false);
-  const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
-  const [recovering, setRecovering] = useState(false);
+  const [updatingBiometrics, setUpdatingBiometrics] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [walletAddresses, setWalletAddresses] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!focusAppInformation) return;
@@ -2421,6 +2807,15 @@ function SettingsScreen({
       setSavingRpcUrls(false);
     }
   };
+  const toggleBiometricUnlock = () => {
+    if (updatingBiometrics || !biometricAvailable) return;
+    setUpdatingBiometrics(true);
+    void onChangeBiometricUnlock(!biometricUnlock)
+      .catch((cause: unknown) =>
+        appDialog.show(t("unableToSave"), errorMessage(cause, t)),
+      )
+      .finally(() => setUpdatingBiometrics(false));
+  };
   const reveal = async (kind: "mnemonic" | "privateKey") => {
     if (!backend) return;
     try {
@@ -2453,15 +2848,16 @@ function SettingsScreen({
     });
   };
   return (
-    <KeyboardAwareScrollView
-      ref={scrollRef}
-      bottomOffset={16}
-      contentContainerStyle={[styles.page, styles.settingsPage]}
-      keyboardShouldPersistTaps="handled"
-    >
+    <>
+      <KeyboardAwareScrollView
+        ref={scrollRef}
+        bottomOffset={16}
+        contentContainerStyle={[styles.page, styles.settingsPage]}
+        keyboardShouldPersistTaps="handled"
+      >
       <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
       <PaperCard mode="elevated">
-        <PaperCard.Title title={t("wallets")} left={(props) => <Icon {...props} source="wallet" />} />
+        <PaperCard.Title title={t("wallets")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="wallet" />} />
         <PaperCard.Content style={styles.walletListContent}>
           {wallets.map((wallet) => {
             const selected = wallet.id === profile.id;
@@ -2513,9 +2909,10 @@ function SettingsScreen({
         </PaperCard.Actions>
       </PaperCard>
       <PaperCard mode="elevated">
-        <PaperCard.Title
-          title={t("appearance")}
-          left={(props) => <Icon {...props} source="theme-light-dark" />}
+          <PaperCard.Title
+            title={t("appearance")}
+            leftStyle={styles.cardTitleLeft}
+            left={(props) => <Icon {...props} source="theme-light-dark" />}
         />
         <PaperCard.Content>
           <SegmentedButtons
@@ -2533,14 +2930,55 @@ function SettingsScreen({
           />
         </PaperCard.Content>
       </PaperCard>
+      {masterPasswordSet ? (
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title={t("security")}
+            leftStyle={styles.cardTitleLeft}
+            left={(props) => <Icon {...props} source="shield-lock" />}
+          />
+          <PaperCard.Content>
+            <List.Item
+              title={t("biometricUnlock")}
+              descriptionNumberOfLines={1}
+              description={
+                biometricAvailable
+                  ? t("biometricUnlockDescription")
+                  : t("biometricUnlockUnavailable")
+              }
+              left={(props) => <List.Icon {...props} icon="fingerprint" />}
+              right={() => (
+                <View pointerEvents="none" style={styles.listItemSwitch}>
+                  <Switch
+                    disabled={updatingBiometrics || !biometricAvailable}
+                    value={biometricUnlock}
+                  />
+                </View>
+              )}
+              onPress={() => {
+                toggleBiometricUnlock();
+              }}
+            />
+          </PaperCard.Content>
+          <PaperCard.Actions style={styles.cardActions}>
+            <PaperButton
+              mode="contained"
+              icon="key-change"
+              onPress={() => setChangePasswordOpen(true)}
+            >
+              {t("changeMasterPassword")}
+            </PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
+      ) : null}
       <PaperCard mode="elevated">
-        <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
+        <PaperCard.Title title={t("language")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="translate" />} />
         <PaperCard.Content>
           <LanguageMenu />
         </PaperCard.Content>
       </PaperCard>
       <PaperCard mode="elevated">
-        <PaperCard.Title title={t("network")} left={(props) => <Icon {...props} source="web" />} />
+        <PaperCard.Title title={t("network")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="web" />} />
         <PaperCard.Content>
           <NetworkSwitch value={network} onChange={onChangeNetwork} />
         </PaperCard.Content>
@@ -2548,6 +2986,7 @@ function SettingsScreen({
       <PaperCard mode="elevated">
         <PaperCard.Title
           title={t("networkRpc")}
+          leftStyle={styles.cardTitleLeft}
           left={(props) => <Icon {...props} source="server-network" />}
         />
         <PaperCard.Content>
@@ -2598,7 +3037,7 @@ function SettingsScreen({
       </PaperCard>
       {profile.kind === "mnemonic" && backend ? (
         <PaperCard mode="elevated">
-          <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
+      <PaperCard.Title title={t("accountInformation")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="account-key" />} />
           <PaperCard.Content style={styles.cardContent}>
             <View style={styles.metadataBlock}>
               <Text variant="labelMedium">{t("derivationPath")}</Text>
@@ -2618,7 +3057,7 @@ function SettingsScreen({
       ) : null}
       {profile.kind === "mnemonic" && secret ? (
         <PaperCard mode="contained">
-          <PaperCard.Title title={secret.label} left={(props) => <Icon {...props} source="shield-key" />} />
+        <PaperCard.Title title={secret.label} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="shield-key" />} />
           <PaperCard.Content>
             <Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text>
           </PaperCard.Content>
@@ -2632,67 +3071,10 @@ function SettingsScreen({
           {t("exportWarning")}
         </HelperText>
       ) : null}
-      {profile.kind === "mnemonic" ? <PaperCard mode="elevated">
-        <PaperCard.Title
-          title={t("keyRecovery")}
-          left={(props) => <Icon {...props} source="backup-restore" />}
-        />
-        <PaperCard.Content style={styles.cardContent}>
-          <Text variant="bodyMedium">
-            {t("keyRecoveryDescription")}
-          </Text>
-          {showRecovery ? (
-            <WalletTextInput
-              style={styles.mnemonicInput}
-              multiline
-              label={t("mnemonic")}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={recoveryMnemonic}
-              onChangeText={setRecoveryMnemonic}
-            />
-          ) : null}
-        </PaperCard.Content>
-        <PaperCard.Actions style={styles.cardActions}>
-          <PaperButton
-            mode="text"
-            icon={showRecovery ? "close" : "key-variant"}
-            onPress={() => {
-              setShowRecovery((value) => !value);
-              setRecoveryMnemonic("");
-            }}
-          >
-            {showRecovery ? t("cancel") : t("recoverWithMnemonic")}
-          </PaperButton>
-          {showRecovery ? (
-            <PaperButton
-              mode="contained"
-              icon="restore"
-              loading={recovering}
-              disabled={recovering || !recoveryMnemonic.trim()}
-              onPress={() => {
-                setRecovering(true);
-                void recoverWallet(vault, profile, recoveryMnemonic)
-                  .then((next) => {
-                    setSecret(undefined);
-                    setRecoveryMnemonic("");
-                    setShowRecovery(false);
-                    onRecovered(next);
-                  })
-                  .catch((cause: unknown) =>
-                    appDialog.show(t("recoveryFailed"), errorMessage(cause, t)),
-                  )
-                  .finally(() => setRecovering(false));
-              }}
-            >
-              {t("verifyAndRecover")}
-            </PaperButton>
-          ) : null}
-        </PaperCard.Actions>
-      </PaperCard> : null}
       <PaperCard mode="elevated">
         <PaperCard.Title
           title={t("appInformation")}
+          leftStyle={styles.cardTitleLeft}
           left={(props) => <Icon {...props} source="information-outline" />}
         />
         <PaperCard.Content style={styles.cardContent}>
@@ -2796,7 +3178,140 @@ function SettingsScreen({
           </PaperButton>
         </PaperCard.Actions>
       </PaperCard>
-    </KeyboardAwareScrollView>
+      </KeyboardAwareScrollView>
+      <ChangeMasterPasswordDialog
+        visible={changePasswordOpen}
+        onDismiss={() => setChangePasswordOpen(false)}
+        onSubmit={onChangeMasterPassword}
+      />
+    </>
+  );
+}
+
+function ChangeMasterPasswordDialog({
+  visible,
+  onDismiss,
+  onSubmit,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  onSubmit: (oldPassword: string, newPassword: string) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changing, setChanging] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!visible) {
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError(undefined);
+    }
+  }, [visible]);
+
+  const newPasswordTooShort =
+    newPassword.length > 0 &&
+    [...newPassword].length < MIN_WALLET_PASSWORD_LENGTH;
+  const passwordsDoNotMatch =
+    confirmPassword.length > 0 && confirmPassword !== newPassword;
+  const valid =
+    oldPassword.length > 0 &&
+    [...newPassword].length >= MIN_WALLET_PASSWORD_LENGTH &&
+    confirmPassword === newPassword;
+
+  const submit = async () => {
+    if (!valid || changing) return;
+    setChanging(true);
+    setError(undefined);
+    try {
+      await onSubmit(oldPassword, newPassword);
+      onDismiss();
+      void KeyboardController.dismiss({ animated: true });
+    } catch (cause) {
+      setError(errorMessage(cause, t));
+    } finally {
+      setChanging(false);
+    }
+  };
+
+  return (
+    <Portal>
+      <KeyboardAvoidingView
+        behavior="height"
+        pointerEvents="box-none"
+        style={styles.keyboardDialogLayer}
+      >
+        <Dialog visible={visible} dismissable={false} style={styles.keyboardDialog}>
+          <Dialog.Title>{t("changeMasterPassword")}</Dialog.Title>
+          <KeyboardDialogContent>
+            <WalletTextInput
+              autoFocus
+              label={t("currentWalletPassword")}
+              secureTextEntry
+              value={oldPassword}
+              onChangeText={(value) => {
+                setOldPassword(value);
+                setError(undefined);
+              }}
+            />
+            <WalletTextInput
+              label={t("newWalletPassword")}
+              secureTextEntry
+              value={newPassword}
+              onChangeText={setNewPassword}
+            />
+            {newPasswordTooShort ? (
+              <HelperText type="error" visible>
+                {t("walletPasswordTooShort")}
+              </HelperText>
+            ) : null}
+            <WalletTextInput
+              label={t("confirmWalletPassword")}
+              returnKeyType="done"
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              onSubmitEditing={() => void submit()}
+            />
+            {passwordsDoNotMatch ? (
+              <HelperText type="error" visible>
+                {t("walletPasswordsDoNotMatch")}
+              </HelperText>
+            ) : null}
+            {error ? (
+              <HelperText type="error" visible>
+                {error}
+              </HelperText>
+            ) : null}
+          </KeyboardDialogContent>
+          <Dialog.Actions style={styles.dialogActions}>
+            <PaperButton
+              contentStyle={styles.extraHorizontalButtonPadding}
+              disabled={changing}
+              onPress={() => {
+                onDismiss();
+                void KeyboardController.dismiss({ animated: true });
+              }}
+            >
+              {t("cancel")}
+            </PaperButton>
+            <PaperButton
+              mode="contained"
+              contentStyle={styles.extraHorizontalButtonPadding}
+              loading={changing}
+              disabled={!valid || changing}
+              onPress={() => void submit()}
+            >
+              {t("changePassword")}
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
+      </KeyboardAvoidingView>
+    </Portal>
   );
 }
 
@@ -3029,6 +3544,7 @@ function TrustDeviceScreen({
         <PaperCard mode="elevated">
           <PaperCard.Title
             title={device.name}
+            leftStyle={styles.cardTitleLeft}
             left={({ size }) => (
               <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />
             )}
@@ -3080,6 +3596,7 @@ function TrustDeviceScreen({
         <PaperCard mode="elevated">
           <PaperCard.Title
             title={t("trustKeyManagement")}
+            leftStyle={styles.cardTitleLeft}
             left={(props) => <Icon {...props} source="key-chain-variant" />}
           />
           <PaperCard.Content style={styles.cardContent}>
@@ -3695,13 +4212,11 @@ function useAppDialog(): AppDialogContextValue {
 
 function errorMessage(cause: unknown, t: Translate): string {
   if (!(cause instanceof Error)) return t("operationFailed");
+  if (cause instanceof LocalizedError) {
+    return t(cause.translationKey, cause.translationValues);
+  }
   const exactErrors: Partial<Record<string, Parameters<Translate>[0]>> = {
-    "请输入有效的 12 或 24 词英文 BIP-39 助记词": "invalidMnemonic",
-    "新钱包需要 128 位安全随机熵": "invalidEntropy",
-    "无法从助记词派生 CKB 账户": "derivationFailed",
-    "助记词与当前账户不匹配": "mnemonicMismatch",
-    "请先在 Android 系统中启用生物识别认证": "biometricRequired",
-    "Invalid profile": "invalidProfile",
+    "Invalid password": "invalidWalletPassword",
     "Bluetooth permission is required to find Cryptape Trust devices": "trustBluetoothPermissionRequired",
     "Bluetooth is not available": "trustBluetoothUnavailable",
     "Bluetooth is not available on this device": "trustBluetoothUnavailable",
@@ -3709,11 +4224,11 @@ function errorMessage(cause: unknown, t: Translate): string {
     "Cryptape Trust signing was cancelled": "trustSigningCancelled",
     "Cryptape Trust PIN must contain 8 digits": "trustPinInvalid",
     "Cryptape Trust public key has changed": "trustPublicKeyChanged",
+    "Trust hardware wallets are only available in an Android development build":
+      "trustWalletAndroidBuildOnly",
   };
   const key = exactErrors[cause.message];
   if (key) return t(key);
-  const unsupported = cause.message.match(/^不支持的网络：(.+)$/);
-  if (unsupported) return t("unsupportedNetwork", { network: unsupported[1] ?? "" });
   return cause.message;
 }
 
@@ -3825,6 +4340,8 @@ function walletAuthenticationPrompt(
       return t("authenticationViewMnemonic");
     case "viewPrivateKey":
       return t("authenticationViewPrivateKey");
+    case "enableBiometrics":
+      return t("authenticationEnableBiometrics");
     default:
       return t("authenticationUseWallet");
   }
@@ -3916,6 +4433,11 @@ const styles = StyleSheet.create({
   metadataBlock: { gap: 4 },
   appInformationLink: { paddingHorizontal: 0 },
   appInformationSwitch: { paddingHorizontal: 0 },
+  cardTitleLeft: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listItemSwitch: { alignSelf: "center" },
   appInformationRow: {
     flexDirection: "row",
     alignItems: "flex-start",

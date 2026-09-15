@@ -1,5 +1,6 @@
 import { ClientPublicMainnet, ClientPublicTestnet, type Client } from "@ckb-ccc/core";
 
+import { LocalizedError } from "../errors";
 import type { Network } from "./types";
 
 export type NetworkRpcUrls = Record<Network, string>;
@@ -24,7 +25,10 @@ export function clientForNetwork(
 ): Client {
   const normalizedUrl = url.trim();
   if (!isRpcUrl(normalizedUrl)) {
-    throw new Error(`无效的 ${network} RPC URL`);
+    throw new LocalizedError(
+      "invalidRpcUrl",
+      `Invalid ${network} RPC URL`,
+    );
   }
 
   if (normalizedUrl === DEFAULT_NETWORK_RPC_URLS[network]) {
@@ -45,5 +49,9 @@ export function networkFromId(networkId: string): Network {
   if (networkId === "ckb-testnet") {
     return "testnet";
   }
-  throw new Error(`不支持的网络：${networkId}`);
+  throw new LocalizedError(
+    "unsupportedNetwork",
+    `Unsupported network: ${networkId}`,
+    { network: networkId },
+  );
 }

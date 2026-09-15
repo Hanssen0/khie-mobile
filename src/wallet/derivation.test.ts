@@ -6,7 +6,6 @@ import {
 } from "@ckb-ccc/core";
 import { describe, expect, it } from "vitest";
 
-import type { WalletVault } from "../storage/walletVault";
 import { assertValidMnemonic, deriveAccount, mnemonicFromEntropy } from "./derivation";
 import { LocalMnemonicSigningBackend } from "./localMnemonicBackend";
 
@@ -48,11 +47,9 @@ describe("BIP-39 CKB wallet", () => {
   });
 
   it("signs and verifies a message through the backend boundary", async () => {
-    const vault = vaultWithMnemonic(mnemonic);
     const backend = new LocalMnemonicSigningBackend(
       deriveAccount(mnemonic).account,
-      vault,
-      "test-wallet",
+      async () => mnemonic,
     );
     const signer = backend.getReadOnlySigner(new ClientPublicTestnet());
     const signature = await backend.withSigner(signer.client, "message", (unlocked) =>
@@ -62,29 +59,14 @@ describe("BIP-39 CKB wallet", () => {
   });
 
   it("does not retry or mask vault invalidation", async () => {
-    const vault = vaultWithMnemonic(mnemonic);
-    vault.readMnemonic = async () => {
-      throw new Error("wallet key invalidated");
-    };
     const backend = new LocalMnemonicSigningBackend(
       deriveAccount(mnemonic).account,
-      vault,
-      "test-wallet",
+      async () => {
+        throw new Error("wallet unlock failed");
+      },
     );
     await expect(
       backend.withSigner(new ClientPublicTestnet(), "message", async () => "unused"),
-    ).rejects.toThrow("wallet key invalidated");
+    ).rejects.toThrow("wallet unlock failed");
   });
 });
-
-function vaultWithMnemonic(value: string): WalletVault {
-  return {
-    clear: async () => {},
-    loadWallets: async () => ({ version: 3, wallets: [] }),
-    readMnemonic: async () => value,
-    remove: async () => ({ version: 3, wallets: [] }),
-    save: async () => ({ version: 3, wallets: [] }),
-    saveCryptapeTrust: async () => ({ version: 3, wallets: [] }),
-    select: async () => ({ version: 3, wallets: [] }),
-  };
-}

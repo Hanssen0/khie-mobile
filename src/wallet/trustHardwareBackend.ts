@@ -12,6 +12,7 @@ import {
   type TransactionLike,
 } from "@ckb-ccc/core";
 
+import { LocalizedError } from "../errors";
 import { signWithTrustWallet, type ConnectedTrustDevice } from "../trust/native";
 import type {
   SigningAccountDescriptor,
@@ -82,7 +83,10 @@ export class TrustHardwareSigningBackend implements SigningBackend {
     try {
       const pin = await this.requestPin(purpose);
       if (!/^\d{8}$/.test(pin)) {
-        throw new Error("Cryptape Trust PIN must contain 8 digits");
+        throw new LocalizedError(
+          "trustPinInvalid",
+          "Cryptape Trust PIN must contain 8 digits",
+        );
       }
       return await operation(
         new SignerCkbTrustWallet(client, this.account.publicKey, pin),

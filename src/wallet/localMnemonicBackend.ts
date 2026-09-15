@@ -6,7 +6,8 @@ import {
   type Signer,
 } from "@ckb-ccc/core";
 
-import type { WalletVault } from "../storage/walletVault";
+import { LocalizedError } from "../errors";
+import type { WalletAuthenticationPurpose } from "../storage/walletVault";
 import { deriveAccount } from "./derivation";
 import type {
   AccountDescriptor,
@@ -22,8 +23,9 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
 
   constructor(
     readonly account: AccountDescriptor,
-    private readonly vault: WalletVault,
-    private readonly walletId: string,
+    private readonly unlock: (
+      purpose: WalletAuthenticationPurpose,
+    ) => Promise<string>,
   ) {}
 
   getReadOnlySigner(client: Client): Signer {
@@ -35,14 +37,16 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
     purpose: SigningPurpose,
     operation: (signer: Signer) => Promise<T>,
   ): Promise<T> {
-    const mnemonic = await this.vault.readMnemonic(
-      this.walletId,
+    const mnemonic = await this.unlock(
       purpose === "message" ? "signMessage" : "signTransaction",
     );
     const { account, privateKey } = deriveAccount(mnemonic);
     try {
       if (account.publicKey !== this.account.publicKey) {
-        throw new Error("助记词与当前账户不匹配");
+        throw new LocalizedError(
+          "mnemonicMismatch",
+          "The mnemonic does not match this account",
+        );
       }
       return await operation(new SignerCkbPrivateKey(client, privateKey));
     } finally {
@@ -51,11 +55,11 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
   }
 
   exportMnemonic(): Promise<string> {
-    return this.vault.readMnemonic(this.walletId, "viewMnemonic");
+    return this.unlock("viewMnemonic");
   }
 
   async exportPrivateKey(): Promise<string> {
-    const mnemonic = await this.vault.readMnemonic(this.walletId, "viewPrivateKey");
+    const mnemonic = await this.unlock("viewPrivateKey");
     const { privateKey } = deriveAccount(mnemonic);
     try {
       return hexFrom(privateKey);

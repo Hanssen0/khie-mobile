@@ -1,6 +1,8 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesFrom, hexFrom, type Hex, type HexLike } from "@ckb-ccc/core";
 
+import { LocalizedError } from "../errors";
+
 const SECP256K1_ORDER = BigInt(
   "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
 );
@@ -12,7 +14,10 @@ export function normalizeTrustPublicKey(value: HexLike): Hex {
   }
   const uncompressed = bytes.length === 65 && bytes[0] === 4 ? bytes.subarray(1) : bytes;
   if (uncompressed.length !== 64) {
-    throw new Error("Cryptape Trust returned an invalid public key");
+    throw new LocalizedError(
+      "trustPublicKeyInvalid",
+      "Cryptape Trust returned an invalid public key",
+    );
   }
   const compressed = new Uint8Array(33);
   compressed[0] = (uncompressed[63]! & 1) === 0 ? 2 : 3;
@@ -27,7 +32,10 @@ export function prepareTrustKeyImport(value: string): {
 } {
   const normalized = value.trim().replace(/^0x/i, "");
   if (!/^[0-9a-fA-F]{64}$/.test(normalized)) {
-    throw new Error("Cryptape Trust private key must contain 32 bytes");
+    throw new LocalizedError(
+      "trustPrivateKeyInvalid",
+      "Cryptape Trust private key must contain 32 bytes",
+    );
   }
   const privateKey = bytesFrom(`0x${normalized}`);
   const uncompressed = secp256k1.getPublicKey(privateKey, false);
@@ -68,5 +76,8 @@ export function normalizeTrustSignature(
       // Not every recovery id represents a valid curve point.
     }
   }
-  throw new Error("Cryptape Trust signature does not match the connected device");
+  throw new LocalizedError(
+    "trustSignatureMismatch",
+    "Cryptape Trust signature does not match the connected device",
+  );
 }

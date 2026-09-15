@@ -63,7 +63,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "允许 Khie Wallet 扫描配对二维码。",
+          "cameraPermission": "Allow Khie Wallet to scan pairing QR codes.",
           "recordAudioAndroid": false
         }
       ],
@@ -71,7 +71,7 @@
         "expo-secure-store",
         {
           "configureAndroidBackup": true,
-          "faceIDPermission": "允许 Khie Wallet 验证身份后使用钱包。"
+          "faceIDPermission": "Allow Khie Wallet to authenticate before using the wallet."
         }
       ]
     ],

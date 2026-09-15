@@ -57,23 +57,23 @@ public class BlePurseSDK {
                         }
 
                         if (HexString.toHexString(response).equals("100000")) {
-                            errMsg = "蓝牙钱包连接超时";
+                            errMsg = "Bluetooth wallet connection timed out";
                         } else {
-                            errMsg = "钱包返回数据解析失败";
+                            errMsg = "Unable to parse the wallet response";
                         }
 
                         isConnetSucess = false;
                     } else {
-                        errMsg = "蓝牙钱包选择失败";
+                        errMsg = "Unable to select the Bluetooth wallet";
                         isConnetSucess = false;
                     }
                 } else {
                     gatt.close(time);
                     isConnetSucess = false;
                     if (retCode == 100000) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                     } else {
-                        errMsg = "蓝牙钱包连接失败";
+                        errMsg = "Unable to connect to the Bluetooth wallet";
                         LogUtils.e("ble", "connect failed, retCode=" + retCode);
                     }
                 }
@@ -91,7 +91,7 @@ public class BlePurseSDK {
 
             return isConnetSucess;
         } else {
-            errMsg = "请初始化key";
+            errMsg = "Initialize the transport keys first";
             return false;
         }
     }
@@ -113,7 +113,7 @@ public class BlePurseSDK {
             return checkDevice(SequenceCounter, CardChallenge, skCMAC, skEnc);
         } else {
             isConnetSucess = false;
-            errMsg = "蓝牙钱包数据比对失败";
+            errMsg = "Bluetooth wallet response verification failed";
             return isConnetSucess;
         }
     }
@@ -131,11 +131,11 @@ public class BlePurseSDK {
         String result = HexString.toHexString(response);
         if (result.equals("9000")) {
             isConnetSucess = true;
-            errMsg = "设备校验成功";
+            errMsg = "Device verification succeeded";
         } else {
-            errMsg = "设备校验失败";
+            errMsg = "Device verification failed";
             if (result.equals("100000")) {
-                errMsg = "蓝牙钱包连接超时";
+                errMsg = "Bluetooth wallet connection timed out";
             }
 
             isConnetSucess = false;
@@ -169,19 +169,19 @@ public class BlePurseSDK {
         try {
             errMsg = "";
             if (!isConnetSucess || gatt == null) {
-                errMsg = "蓝牙钱包未校验";
+                errMsg = "Bluetooth wallet is not verified";
                 return null;
             }
 
             byte[] command = HexString.parseHexString("00B5000006");
             byte[] commandEnc = commandEnc(command);
             byte[] response = gatt.transmit(commandEnc, time);
-            LogUtils.e("BlePurseSDK", "ID解密前：" + HexString.toHexString(response));
+            LogUtils.e("BlePurseSDK", "Encrypted ID: " + HexString.toHexString(response));
             byte[] bytes = TrustDes.doCrypto(Utils.addBytes(response, 0, response.length - 2), skDec, 274);
-            LogUtils.e("BlePurseSDK", "skDec：" + HexString.toHexString(skDec));
+            LogUtils.e("BlePurseSDK", "skDec: " + HexString.toHexString(skDec));
             if (bytes.length == 8) {
                 bytes = Utils.addBytes(bytes, 0, 6);
-                LogUtils.e("BlePurseSDK", "ID解密后：" + HexString.toHexString(bytes));
+                LogUtils.e("BlePurseSDK", "Decrypted ID: " + HexString.toHexString(bytes));
                 return bytes;
             }
         } catch (InterruptedException var4) {
@@ -200,7 +200,7 @@ public class BlePurseSDK {
             errMsg = "";
             if (isConnetSucess && gatt != null) {
                 if (pin.length != 8) {
-                    errMsg = "传入的pin长度不对";
+                    errMsg = "PIN must contain 8 bytes";
                     return -3;
                 }
 
@@ -211,20 +211,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "校验成功";
+                    errMsg = "PIN verification succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "校验失败";
+                    errMsg = "PIN verification failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "卡片未连接";
+            errMsg = "Wallet is not connected";
             return -2;
         } catch (InterruptedException var5) {
             var5.printStackTrace();
@@ -240,12 +240,12 @@ public class BlePurseSDK {
             errMsg = "";
             if (isConnetSucess && gatt != null) {
                 if (puk.length != 8) {
-                    errMsg = "传入的puk长度不对";
+                    errMsg = "PUK must contain 8 bytes";
                     return -4;
                 }
 
                 if (pin.length != 8) {
-                    errMsg = "传入的pin长度不对";
+                    errMsg = "PIN must contain 8 bytes";
                     return -3;
                 }
 
@@ -257,20 +257,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "解锁成功";
+                    errMsg = "PIN reset succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "解锁失败";
+                    errMsg = "PIN reset failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "卡片未连接";
+            errMsg = "Wallet is not connected";
             return -2;
         } catch (InterruptedException var7) {
             var7.printStackTrace();
@@ -286,7 +286,7 @@ public class BlePurseSDK {
             errMsg = "";
             if (isConnetSucess && gatt != null) {
                 if (pin.length != 8) {
-                    errMsg = "传入的pin长度不对";
+                    errMsg = "PIN must contain 8 bytes";
                     return -3;
                 }
 
@@ -296,20 +296,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "修改pin成功";
+                    errMsg = "PIN change succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "修改pin失败";
+                    errMsg = "PIN change failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "蓝牙钱包未连接";
+            errMsg = "Bluetooth wallet is not connected";
             return -2;
         } catch (InterruptedException var5) {
             var5.printStackTrace();
@@ -330,20 +330,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "秘钥生成成功";
+                    errMsg = "Key generation succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "秘钥生成失败";
+                    errMsg = "Key generation failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "蓝牙钱包未连接";
+            errMsg = "Bluetooth wallet is not connected";
             return -2;
         } catch (InterruptedException var4) {
             var4.printStackTrace();
@@ -366,20 +366,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "秘钥重置成功";
+                    errMsg = "Key reset succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "秘钥重置失败";
+                    errMsg = "Key reset failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "蓝牙钱包未连接";
+            errMsg = "Bluetooth wallet is not connected";
             return -2;
         } catch (InterruptedException var4) {
             var4.printStackTrace();
@@ -410,20 +410,20 @@ public class BlePurseSDK {
                 String result = HexString.toHexString(response);
                 LogUtils.e("BlePurseSDK", result);
                 if (result.equals("9000")) {
-                    errMsg = "秘钥导入成功";
+                    errMsg = "Key import succeeded";
                 } else {
                     if (result.equals("100000")) {
-                        errMsg = "蓝牙钱包连接超时";
+                        errMsg = "Bluetooth wallet connection timed out";
                         return -1;
                     }
 
-                    errMsg = "秘钥导入失败";
+                    errMsg = "Key import failed";
                 }
 
                 return Integer.parseInt(result, 16);
             }
 
-            errMsg = "蓝牙钱包未连接";
+            errMsg = "Bluetooth wallet is not connected";
             return -2;
         } catch (InterruptedException var7) {
             var7.printStackTrace();
@@ -438,7 +438,7 @@ public class BlePurseSDK {
         try {
             errMsg = "";
             if (!isConnetSucess || gatt == null) {
-                errMsg = "蓝牙钱包未连接";
+                errMsg = "Bluetooth wallet is not connected";
                 return null;
             }
 
@@ -446,17 +446,17 @@ public class BlePurseSDK {
             byte[] commandEnc = commandEnc(publicKeyInstruct);
             byte[] response = gatt.transmit(commandEnc, time);
             String result = HexString.toHexString(response);
-            LogUtils.e("BlePurseSDK", "公钥解密前：" + result);
+            LogUtils.e("BlePurseSDK", "Encrypted public key: " + result);
             if (result.length() > 4) {
                 byte[] bytes = TrustDes.doCrypto(Utils.addBytes(response, 0, response.length - 2), skDec, 274);
                 result = HexString.toHexString(bytes);
-                LogUtils.e("BlePurseSDK", "skDec：" + HexString.toHexString(skDec));
-                LogUtils.e("BlePurseSDK", "公钥解密后：" + result);
-                errMsg = "公钥获取成功";
+                LogUtils.e("BlePurseSDK", "skDec: " + HexString.toHexString(skDec));
+                LogUtils.e("BlePurseSDK", "Decrypted public key: " + result);
+                errMsg = "Public key retrieval succeeded";
                 return bytes;
             }
 
-            errMsg = "未获取到公钥（设备状态 " + result + "）";
+            errMsg = "Public key was not returned (device status " + result + ")";
         } catch (InterruptedException var5) {
             var5.printStackTrace();
         } catch (GeneralSecurityException var6) {
@@ -476,21 +476,21 @@ public class BlePurseSDK {
                 byte[] commandEnc = commandEnc(signInstruct, hash);
                 byte[] response = gatt.transmit(commandEnc, time);
                 String result = HexString.toHexString(response);
-                LogUtils.e("BlePurseSDK", "签名解密前：" + result);
+                LogUtils.e("BlePurseSDK", "Encrypted signature: " + result);
                 if (result.length() > 4) {
                     byte[] bytes = TrustDes.doCrypto(Utils.addBytes(response, 0, response.length - 2), skDec, 274);
                     result = HexString.toHexString(bytes);
-                    LogUtils.e("BlePurseSDK", "skDec：" + HexString.toHexString(skDec));
-                    LogUtils.e("BlePurseSDK", "签名解密后：" + result);
-                    errMsg = "签名成功";
+                    LogUtils.e("BlePurseSDK", "skDec: " + HexString.toHexString(skDec));
+                    LogUtils.e("BlePurseSDK", "Decrypted signature: " + result);
+                    errMsg = "Signing succeeded";
                     return bytes;
                 }
 
-                errMsg = "加密失败";
+                errMsg = "Signing failed";
                 return null;
             }
 
-            errMsg = "蓝牙钱包未校验";
+            errMsg = "Bluetooth wallet is not verified";
             return null;
         } catch (InterruptedException var6) {
             var6.printStackTrace();
@@ -507,17 +507,17 @@ public class BlePurseSDK {
             if (isConnetSucess && gatt != null) {
                 int retCode = gatt.close(time);
                 if (retCode == 0) {
-                    errMsg = "蓝牙钱包已关闭";
+                    errMsg = "Bluetooth wallet disconnected";
                     isConnetSucess = false;
                     return retCode;
                 } else {
-                    errMsg = "蓝牙钱包关闭失败";
+                    errMsg = "Unable to disconnect the Bluetooth wallet";
                     LogUtils.e("ble", "disconnect failed, retCode=" + retCode);
                     Thread.sleep(5000L);
                     return retCode;
                 }
             } else {
-                errMsg = "蓝牙钱包未连接";
+                errMsg = "Bluetooth wallet is not connected";
                 return 0;
             }
         } catch (InterruptedException var1) {

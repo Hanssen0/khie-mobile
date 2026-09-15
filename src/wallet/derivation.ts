@@ -7,6 +7,7 @@ import {
 } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
+import { LocalizedError } from "../errors";
 import { CKB_DERIVATION_PATH, type AccountDescriptor } from "./types";
 
 export function normalizeMnemonic(value: string): string {
@@ -17,14 +18,20 @@ export function assertValidMnemonic(value: string): string {
   const normalized = normalizeMnemonic(value);
   const count = normalized ? normalized.split(" ").length : 0;
   if ((count !== 12 && count !== 24) || !validateMnemonic(normalized, wordlist)) {
-    throw new Error("请输入有效的 12 或 24 词英文 BIP-39 助记词");
+    throw new LocalizedError(
+      "invalidMnemonic",
+      "Enter a valid 12- or 24-word English BIP-39 mnemonic",
+    );
   }
   return normalized;
 }
 
 export function mnemonicFromEntropy(entropy: Uint8Array): string {
   if (entropy.byteLength !== 16) {
-    throw new Error("新钱包需要 128 位安全随机熵");
+    throw new LocalizedError(
+      "invalidEntropy",
+      "A new wallet requires 128 bits of secure random entropy",
+    );
   }
   return entropyToMnemonic(entropy, wordlist);
 }
@@ -38,7 +45,10 @@ export function deriveAccount(mnemonicValue: string): {
     CKB_DERIVATION_PATH,
   );
   if (!child.privateKey || !child.publicKey) {
-    throw new Error("无法从助记词派生 CKB 账户");
+    throw new LocalizedError(
+      "derivationFailed",
+      "Unable to derive a CKB account from the mnemonic",
+    );
   }
 
   return {

@@ -12,7 +12,7 @@ describe("wallet network selection", () => {
   it("maps explicit Khie network identifiers", () => {
     expect(networkFromId("ckb-testnet")).toBe("testnet");
     expect(networkFromId("ckb-mainnet")).toBe("mainnet");
-    expect(() => networkFromId("ckb-devnet")).toThrow("不支持的网络");
+    expect(() => networkFromId("ckb-devnet")).toThrow("Unsupported network");
   });
 
   it("creates the matching CCC client", () => {
@@ -38,7 +38,7 @@ describe("wallet network selection", () => {
     expect(isRpcUrl("file:///tmp/ckb.sock")).toBe(false);
     expect(isRpcUrl("not a url")).toBe(false);
     expect(() => clientForNetwork("mainnet", "not a url")).toThrow(
-      "无效的 mainnet RPC URL",
+      "Invalid mainnet RPC URL",
     );
   });
 });

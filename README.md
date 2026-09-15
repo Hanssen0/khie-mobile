@@ -9,10 +9,10 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 
 ## Included
 
-- Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics.
+- Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics, protected by one required master password and CCC-compatible keystore encryption.
 - Connect a Cryptape Trust/NKey hardware wallet over Android Bluetooth LE and use it as the active CKB signer.
 - Derive one CKB account at `m/44'/309'/0'/0/0` for each wallet.
-- Testnet/mainnet address and balance, receive QR, authenticated mnemonic/private-key export.
+- Testnet/mainnet address and balance, receive QR, password-authenticated mnemonic/private-key export, optional biometric unlock, and transactional master-password changes.
 - Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
 - System-aware and manually selectable UI languages: English, 简体中文, 正體中文 and 客家語.
 - A deliberately small React Native Paper MD3 presentation layer, with wallet-specific theme tokens and replaceable wrapper components.
@@ -28,7 +28,7 @@ As a small hardware-wallet easter egg, the Android app can connect to the experi
 
 ## Android development build
 
-Prerequisites: Node.js 24, pnpm 12, JDK 17 or newer, Android Studio/SDK, an emulator or USB device with biometric authentication enrolled.
+Prerequisites: Node.js 24, pnpm 12, JDK 17 or newer, Android Studio/SDK, and an emulator or USB device. Biometric authentication is optional.
 
 Make sure Gradle can find the SDK through `ANDROID_HOME`/`ANDROID_SDK_ROOT`, or set `sdk.dir` in `android/local.properties` after prebuild.
 

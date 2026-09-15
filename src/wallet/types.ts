@@ -19,7 +19,7 @@ export type MnemonicWalletProfile = AccountDescriptor & {
   id: string;
   createdAt: string;
   kind: "mnemonic";
-  version: 3;
+  version: 4;
 };
 
 export type CryptapeTrustWalletProfile = {
@@ -29,15 +29,17 @@ export type CryptapeTrustWalletProfile = {
   kind: "cryptape-trust";
   name: string;
   publicKey?: string;
-  version: 3;
+  version: 4;
 };
 
 export type WalletProfile = MnemonicWalletProfile | CryptapeTrustWalletProfile;
 
 export type WalletState = {
+  biometricUnlock: boolean;
+  masterPasswordSet: boolean;
   selectedWalletId?: string;
   wallets: WalletProfile[];
-  version: 3;
+  version: 4;
 };
 
 export type SigningPurpose = "message" | "transaction";
