@@ -590,7 +590,7 @@ function HomeScreen({
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
-        <PaperCard.Actions>
+        <PaperCard.Actions style={styles.cardActions}>
           <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
             {t("receive")}
           </PaperButton>
@@ -908,7 +908,7 @@ function SettingsScreen({
     }
   };
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView contentContainerStyle={[styles.page, styles.settingsPage]}>
       <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
       <PaperCard mode="elevated">
         <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
@@ -947,7 +947,7 @@ function SettingsScreen({
             {t("invalidRpcUrl")}
           </HelperText>
         </PaperCard.Content>
-        <PaperCard.Actions>
+        <PaperCard.Actions style={styles.cardActions}>
           <PaperButton
             mode="text"
             disabled={savingRpcUrls}
@@ -980,7 +980,7 @@ function SettingsScreen({
             <Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text>
           </View>
         </PaperCard.Content>
-        <PaperCard.Actions>
+        <PaperCard.Actions style={styles.cardActions}>
           <PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
           <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton>
         </PaperCard.Actions>
@@ -991,7 +991,7 @@ function SettingsScreen({
           <PaperCard.Content>
             <Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text>
           </PaperCard.Content>
-          <PaperCard.Actions>
+          <PaperCard.Actions style={styles.cardActions}>
             <PaperButton mode="text" icon="eye-off" onPress={() => setSecret(undefined)}>{t("hide")}</PaperButton>
           </PaperCard.Actions>
         </PaperCard>
@@ -1020,7 +1020,7 @@ function SettingsScreen({
             />
           ) : null}
         </PaperCard.Content>
-        <PaperCard.Actions>
+        <PaperCard.Actions style={styles.cardActions}>
           <PaperButton
             mode="text"
             icon={showRecovery ? "close" : "key-variant"}
@@ -1346,6 +1346,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   body: { flex: 1 },
   page: { padding: 20, gap: 16 },
+  settingsPage: { gap: 20 },
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
@@ -1364,12 +1365,19 @@ const styles = StyleSheet.create({
   balanceRefresh: { width: 48, margin: 0 },
   balanceFraction: { textAlign: "center", fontVariant: ["tabular-nums"] },
   cardContent: { gap: 12 },
+  cardActions: {
+    flexWrap: "wrap",
+    rowGap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
   mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
   words: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   backButton: { alignSelf: "flex-start", marginLeft: -12 },
-  networkSwitch: { width: 170, marginRight: 8 },
+  networkSwitch: { width: 184, marginRight: 8 },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
