@@ -19,7 +19,6 @@ import {
 } from "react-native";
 import {
   ActivityIndicator,
-  Appbar,
   BottomNavigation,
   Button as PaperButton,
   Card as PaperCard,
@@ -322,10 +321,6 @@ function WalletApp() {
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={theme.dark ? "light" : "dark"} />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-      <Appbar.Header statusBarHeight={0}>
-        <Appbar.Content title="Khie Wallet" />
-        <NetworkSwitch value={network} onChange={changeNetwork} />
-      </Appbar.Header>
       <View style={styles.body}>
         {screen === "home" ? (
           <HomeScreen signer={signerRef.current} network={network} onNavigate={setScreen} />
@@ -349,9 +344,11 @@ function WalletApp() {
         {screen === "settings" ? (
           <SettingsScreen
             backend={backend!}
+            network={network}
             profile={profile}
             rpcUrls={rpcUrls}
             vault={vault}
+            onChangeNetwork={changeNetwork}
             onSaveRpcUrls={async (next) => {
               await saveRpcUrls(next);
               setNotice(t("rpcUrlsSaved"));
@@ -861,16 +858,20 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
 
 function SettingsScreen({
   backend,
+  network,
   profile,
   rpcUrls,
   vault,
+  onChangeNetwork,
   onSaveRpcUrls,
   onRecovered,
 }: {
   backend: LocalMnemonicSigningBackend;
+  network: Network;
   profile: WalletProfile;
   rpcUrls: NetworkRpcUrls;
   vault: SecureStoreWalletVault;
+  onChangeNetwork: (network: Network) => void;
   onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>;
   onRecovered: (profile: WalletProfile) => void;
 }) {
@@ -914,6 +915,12 @@ function SettingsScreen({
         <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
         <PaperCard.Content>
           <LanguageMenu />
+        </PaperCard.Content>
+      </PaperCard>
+      <PaperCard mode="elevated">
+        <PaperCard.Title title={t("network")} left={(props) => <Icon {...props} source="web" />} />
+        <PaperCard.Content>
+          <NetworkSwitch value={network} onChange={onChangeNetwork} />
         </PaperCard.Content>
       </PaperCard>
       <PaperCard mode="elevated">
@@ -1377,7 +1384,7 @@ const styles = StyleSheet.create({
   mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
   words: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   backButton: { alignSelf: "flex-start", marginLeft: -12 },
-  networkSwitch: { width: 184, marginRight: 8 },
+  networkSwitch: { width: "100%" },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
