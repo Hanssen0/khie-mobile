@@ -14,6 +14,8 @@ import {
 } from "@khie/trust-wallet";
 import { PermissionsAndroid, Platform } from "react-native";
 
+import { LocalizedError } from "../errors";
+
 export type { ConnectedTrustDevice, TrustDevice };
 
 export function isTrustSupported(): boolean {
@@ -33,6 +35,87 @@ export class TrustBluetoothSetupError extends Error {
   ) {
     super(issue);
     this.name = "TrustBluetoothSetupError";
+  }
+}
+
+type TrustOperation = "scan" | "connect" | "sign" | "keyManagement" | "resetPin";
+
+function trustOperationError(cause: unknown, operation: TrustOperation): Error {
+  if (cause instanceof LocalizedError || cause instanceof TrustBluetoothSetupError) {
+    return cause;
+  }
+  const message = cause instanceof Error ? cause.message : "";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("pin verification failed")) {
+    return new LocalizedError(
+      "trustPinRejected",
+      "Cryptape Trust rejected the PIN",
+      undefined,
+      cause instanceof Error ? { cause } : undefined,
+    );
+  }
+  if (operation === "resetPin" && normalized.includes("pin reset failed")) {
+    return new LocalizedError(
+      "trustPinResetOperationFailed",
+      "Cryptape Trust could not reset the PIN",
+      undefined,
+      cause instanceof Error ? { cause } : undefined,
+    );
+  }
+  if (
+    operation === "connect" ||
+    normalized.includes("connection timed out") ||
+    normalized.includes("unable to connect")
+  ) {
+    return new LocalizedError(
+      "trustDeviceUnavailable",
+      "Cryptape Trust could not be reached",
+      undefined,
+      cause instanceof Error ? { cause } : undefined,
+    );
+  }
+  if (
+    normalized.includes("gatt") ||
+    normalized.includes("response") ||
+    normalized.includes("wallet is not connected") ||
+    normalized.includes("wallet is not verified") ||
+    normalized.includes("disconnected") ||
+    normalized.includes("write failed") ||
+    normalized.includes("timed out")
+  ) {
+    return new LocalizedError(
+      "trustCommunicationFailed",
+      "Communication with Cryptape Trust was interrupted",
+      undefined,
+      cause instanceof Error ? { cause } : undefined,
+    );
+  }
+
+  const translationKey =
+    operation === "scan"
+      ? "trustScanFailed"
+      : operation === "sign"
+        ? "trustSigningFailed"
+        : operation === "resetPin"
+          ? "trustPinResetOperationFailed"
+          : "trustKeyOperationFailedDescription";
+  return new LocalizedError(
+    translationKey,
+    "Cryptape Trust operation failed",
+    undefined,
+    cause instanceof Error ? { cause } : undefined,
+  );
+}
+
+async function runTrustOperation<T>(
+  operation: TrustOperation,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (cause) {
+    throw trustOperationError(cause, operation);
   }
 }
 
@@ -83,7 +166,7 @@ export async function ensureTrustBluetoothReady(
 
 export async function scanForTrustDevices(): Promise<TrustDevice[]> {
   await ensureTrustBluetoothReady("scan");
-  return scanTrustDevices();
+  return runTrustOperation("scan", () => scanTrustDevices());
 }
 
 export async function connectTrustWallet(
@@ -92,7 +175,9 @@ export async function connectTrustWallet(
   cachedName?: string,
 ): Promise<ConnectedTrustDevice> {
   await ensureTrustBluetoothReady("connect");
-  const device = await connectTrustDevice(deviceId, pin);
+  const device = await runTrustOperation("connect", () =>
+    connectTrustDevice(deviceId, pin),
+  );
   return cachedName ? { ...device, name: cachedName } : device;
 }
 
@@ -102,10 +187,31 @@ export async function resetTrustWalletPin(
   newPin: string,
 ): Promise<void> {
   await ensureTrustBluetoothReady("connect");
-  return resetTrustDevicePin(deviceId, puk, newPin);
+  return runTrustOperation("resetPin", () =>
+    resetTrustDevicePin(deviceId, puk, newPin),
+  );
 }
-export const generateTrustWalletKey = generateTrustDeviceKey;
-export const resetTrustWalletKey = resetTrustDeviceKey;
-export const importTrustWalletKey = importTrustDeviceKey;
+
+export function generateTrustWalletKey(pin: string): Promise<string> {
+  return runTrustOperation("keyManagement", () => generateTrustDeviceKey(pin));
+}
+
+export function resetTrustWalletKey(pin: string): Promise<void> {
+  return runTrustOperation("keyManagement", () => resetTrustDeviceKey(pin));
+}
+
+export function importTrustWalletKey(
+  privateKey: string,
+  publicKey: string,
+  pin: string,
+): Promise<string> {
+  return runTrustOperation("keyManagement", () =>
+    importTrustDeviceKey(privateKey, publicKey, pin),
+  );
+}
+
 export const disconnectTrustWallet = disconnectTrustDevice;
-export const signWithTrustWallet = signWithTrustDevice;
+
+export function signWithTrustWallet(digest: string, pin: string): Promise<string> {
+  return runTrustOperation("sign", () => signWithTrustDevice(digest, pin));
+}

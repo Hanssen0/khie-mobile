@@ -52,6 +52,7 @@ describe("Trust hardware wallet signature adapter", () => {
 
   it("releases the device connection after each signing request", async () => {
     const releaseConnection = vi.fn(async () => undefined);
+    const reportError = vi.fn();
     const backend = new TrustHardwareSigningBackend(
       {
         id: "80:EA:D3:5B:DB:11",
@@ -60,6 +61,7 @@ describe("Trust hardware wallet signature adapter", () => {
       },
       async () => "12345678",
       releaseConnection,
+      reportError,
     );
 
     await expect(
@@ -72,5 +74,7 @@ describe("Trust hardware wallet signature adapter", () => {
     ).rejects.toThrow("Signing failed");
 
     expect(releaseConnection).toHaveBeenCalledTimes(2);
+    expect(reportError).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "Signing failed" }));
   });
 });

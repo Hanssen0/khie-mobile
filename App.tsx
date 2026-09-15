@@ -862,12 +862,7 @@ function WalletApp({
           ? profile
           : undefined;
       if (disconnectedProfile) {
-        try {
-          await ensureTrustBluetoothReady("connect");
-        } catch (cause) {
-          showTrustBluetoothSetupError(cause);
-          throw cause;
-        }
+        await ensureTrustBluetoothReady("connect");
       }
 
       const pin = await requestTrustPin(purpose);
@@ -897,6 +892,21 @@ function WalletApp({
       return pin;
     },
     [profile, releaseTrustConnection, requestTrustPin, trustDevice],
+  );
+
+  const reportTrustSigningError = useCallback(
+    (cause: unknown) => {
+      if (
+        cause instanceof Error &&
+        cause.message === "Cryptape Trust signing was cancelled"
+      ) {
+        return;
+      }
+      if (!showTrustBluetoothSetupError(cause)) {
+        appDialog.show(t("trustSigningRequestFailed"), errorMessage(cause, t));
+      }
+    },
+    [appDialog, showTrustBluetoothSetupError, t],
   );
 
   const localBackend = useMemo(
@@ -929,9 +939,10 @@ function WalletApp({
             },
             requestTrustSigningPin,
             releaseTrustConnection,
+            reportTrustSigningError,
           )
         : undefined,
-    [profile, releaseTrustConnection, requestTrustSigningPin],
+    [profile, releaseTrustConnection, reportTrustSigningError, requestTrustSigningPin],
   );
   const backend = profile?.kind === "cryptape-trust" ? trustBackend : localBackend;
   const backendRef = useRef(backend);

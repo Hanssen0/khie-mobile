@@ -67,6 +67,7 @@ export class TrustHardwareSigningBackend implements SigningBackend {
     readonly device: ConnectedTrustDevice & { publicKey: string },
     private readonly requestPin: RequestTrustPin,
     private readonly releaseConnection?: () => Promise<void>,
+    private readonly reportError?: (cause: unknown) => void,
   ) {
     this.account = { publicKey: normalizeTrustPublicKey(device.publicKey) };
   }
@@ -91,6 +92,9 @@ export class TrustHardwareSigningBackend implements SigningBackend {
       return await operation(
         new SignerCkbTrustWallet(client, this.account.publicKey, pin),
       );
+    } catch (cause) {
+      this.reportError?.(cause);
+      throw cause;
     } finally {
       await this.releaseConnection?.().catch(() => undefined);
     }
