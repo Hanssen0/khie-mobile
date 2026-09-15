@@ -2061,15 +2061,25 @@ function OnboardingScreen({
         ) : null}
         <List.Item
           title={t("biometricUnlock")}
-          descriptionNumberOfLines={1}
-          description={
-            biometricAvailable
-              ? t("biometricUnlockDescription")
-              : t("biometricUnlockUnavailable")
-          }
-          left={(props) => <List.Icon {...props} icon="fingerprint" />}
-          right={() => (
-            <View pointerEvents="none" style={styles.listItemSwitch}>
+          description={({ color, fontSize }) => (
+            <Text style={{ color, fontSize }}>
+              {biometricAvailable
+                ? t("biometricUnlockDescription")
+                : t("biometricUnlockUnavailable")}
+            </Text>
+          )}
+          left={(props) => (
+            <List.Icon
+              {...props}
+              icon="fingerprint"
+              style={[props.style, styles.listItemCenteredAccessory]}
+            />
+          )}
+          right={(props) => (
+            <View
+              pointerEvents="none"
+              style={[props.style, styles.listItemCenteredAccessory]}
+            >
               <Switch
                 disabled={!biometricAvailable}
                 value={enableBiometricUnlock}
@@ -2987,15 +2997,25 @@ function SettingsScreen({
           <PaperCard.Content>
             <List.Item
               title={t("biometricUnlock")}
-              descriptionNumberOfLines={1}
-              description={
-                biometricAvailable
-                  ? t("biometricUnlockDescription")
-                  : t("biometricUnlockUnavailable")
-              }
-              left={(props) => <List.Icon {...props} icon="fingerprint" />}
-              right={() => (
-                <View pointerEvents="none" style={styles.listItemSwitch}>
+              description={({ color, fontSize }) => (
+                <Text style={{ color, fontSize }}>
+                  {biometricAvailable
+                    ? t("biometricUnlockDescription")
+                    : t("biometricUnlockUnavailable")}
+                </Text>
+              )}
+              left={(props) => (
+                <List.Icon
+                  {...props}
+                  icon="fingerprint"
+                  style={[props.style, styles.listItemCenteredAccessory]}
+                />
+              )}
+              right={(props) => (
+                <View
+                  pointerEvents="none"
+                  style={[props.style, styles.listItemCenteredAccessory]}
+                >
                   <Switch
                     disabled={updatingBiometrics || !biometricAvailable}
                     value={biometricUnlock}
@@ -4486,7 +4506,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  listItemSwitch: { alignSelf: "center" },
+  listItemCenteredAccessory: { alignSelf: "center", justifyContent: "center" },
   appInformationRow: {
     flexDirection: "row",
     alignItems: "flex-start",
