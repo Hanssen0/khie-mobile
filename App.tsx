@@ -70,6 +70,17 @@ import {
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import { resumeKhieSessionWhenActive } from "./src/khie/appLifecycle";
+import {
+  addKhieNotificationResponseListener,
+  configureKhieNotifications,
+  dismissKhieConnectionNotification,
+  dismissKhieRequestNotification,
+  getKhieNotificationPermission,
+  requestKhieNotificationPermission,
+  showKhieConnectionNotification,
+  showKhieRequestNotification,
+  type KhieNotificationPermission,
+} from "./src/khie/notifications";
 import { TransactionApprovalDetails } from "./src/khie/TransactionApprovalDetails";
 import {
   KhieProviderSession,
@@ -189,6 +200,7 @@ function WalletApp() {
   const [network, setNetwork] = useState<Network>("testnet");
   const [rpcUrls, setRpcUrls] = useState<NetworkRpcUrls>(DEFAULT_NETWORK_RPC_URLS);
   const [screen, setScreen] = useState<Screen>("home");
+  const [appState, setAppState] = useState(AppState.currentState);
   const [onboarding, setOnboarding] = useState<Onboarding>("start");
   const [addingWallet, setAddingWallet] = useState(false);
   const [approval, setApproval] = useState<ApprovalItem>();
@@ -210,6 +222,13 @@ function WalletApp() {
   const [trustNewPin, setTrustNewPin] = useState("");
   const [trustConfirmPin, setTrustConfirmPin] = useState("");
   const [resettingTrustPin, setResettingTrustPin] = useState(false);
+  const [khieNotificationPermission, setKhieNotificationPermission] =
+    useState<KhieNotificationPermission>();
+  const [khieNotificationsConfigured, setKhieNotificationsConfigured] =
+    useState(false);
+  const [khieNotificationPromptOpen, setKhieNotificationPromptOpen] =
+    useState(false);
+  const khieNotificationPromptDismissed = useRef(false);
 
   const requestTrustPin = useCallback<RequestTrustPin>(
     (purpose) =>
@@ -234,6 +253,131 @@ function WalletApp() {
         setApproval(item);
         if (item) {
           setScreen("khie");
+        }
+      }),
+    [approvalQueue],
+  );
+
+  useEffect(() => {
+    let active = true;
+    setKhieNotificationsConfigured(false);
+    void configureKhieNotifications({
+      allow: t("allow"),
+      connectionChannel: t("khieConnectionNotificationChannel"),
+      deny: t("deny"),
+      requestChannel: t("khieRequestNotificationChannel"),
+      unpair: t("unpair"),
+    })
+      .then(getKhieNotificationPermission)
+      .then((permission) => {
+        if (!active) return;
+        setKhieNotificationPermission(permission);
+        setKhieNotificationsConfigured(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        setKhieNotificationPermission("denied");
+      });
+    return () => {
+      active = false;
+    };
+  }, [t]);
+
+  useEffect(() => {
+    if (!sessionState.paired) {
+      khieNotificationPromptDismissed.current = false;
+      setKhieNotificationPromptOpen(false);
+      return;
+    }
+    if (
+      khieNotificationsConfigured &&
+      khieNotificationPermission === "prompt" &&
+      !khieNotificationPromptDismissed.current
+    ) {
+      setKhieNotificationPromptOpen(true);
+    }
+  }, [
+    khieNotificationPermission,
+    khieNotificationsConfigured,
+    sessionState.paired,
+  ]);
+
+  useEffect(() => {
+    const khieIsVisible = appState === "active" && screen === "khie";
+    if (
+      !sessionState.paired ||
+      !khieNotificationsConfigured ||
+      khieNotificationPermission !== "granted" ||
+      khieIsVisible
+    ) {
+      void dismissKhieConnectionNotification().catch(() => undefined);
+      return;
+    }
+    const connection = !sessionState.remotePeer?.active
+      ? t("inactive")
+      : sessionState.remotePeer.direct
+        ? t("direct")
+        : t("relayed");
+    void showKhieConnectionNotification(
+      t("khieConnectedNotificationTitle"),
+      t("khieConnectedNotificationBody", {
+        connection,
+        peer: sessionState.remotePeer?.name ?? t("unknown"),
+      }),
+    ).catch(() => undefined);
+  }, [
+    appState,
+    khieNotificationPermission,
+    khieNotificationsConfigured,
+    screen,
+    sessionState.paired,
+    sessionState.remotePeer?.active,
+    sessionState.remotePeer?.direct,
+    sessionState.remotePeer?.name,
+    t,
+  ]);
+
+  useEffect(() => {
+    const khieIsVisible = appState === "active" && screen === "khie";
+    if (
+      !sessionState.paired ||
+      !approval ||
+      !khieNotificationsConfigured ||
+      khieNotificationPermission !== "granted" ||
+      khieIsVisible
+    ) {
+      void dismissKhieRequestNotification().catch(() => undefined);
+      return;
+    }
+    void showKhieRequestNotification(
+      approval.id,
+      approvalTitle(approval.request, t),
+      approvalNetwork(approval.request, network, t),
+    ).catch(() => undefined);
+  }, [
+    approval,
+    appState,
+    khieNotificationPermission,
+    khieNotificationsConfigured,
+    network,
+    screen,
+    sessionState.paired,
+    t,
+  ]);
+
+  useEffect(
+    () =>
+      addKhieNotificationResponseListener((interaction) => {
+        setScreen("khie");
+        if (interaction.type === "unpair") {
+          void sessionRef.current?.unpair().catch(() => undefined);
+          return;
+        }
+        if (
+          interaction.type === "respond" &&
+          approvalQueue.current?.id === interaction.approvalId
+        ) {
+          approvalQueue.respond(interaction.approvalId, interaction.approved);
         }
       }),
     [approvalQueue],
@@ -399,12 +543,15 @@ function WalletApp() {
     return () => {
       approvalQueue.cancelAll("Khie session closed");
       sessionRef.current = undefined;
+      void dismissKhieConnectionNotification().catch(() => undefined);
+      void dismissKhieRequestNotification().catch(() => undefined);
       void session.close();
     };
   }, [approvalQueue, backend?.account.publicKey, profile?.kind]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
+      setAppState(state);
       // Android may suspend a transport in the background, but the logical
       // pairing and any pending confirmation stay valid until their own timeout.
       void resumeKhieSessionWhenActive(state, sessionRef.current);
@@ -822,6 +969,50 @@ function WalletApp() {
     </Portal>
   );
 
+  const khieNotificationPermissionDialog = (
+    <Portal>
+      <Dialog
+        visible={khieNotificationPromptOpen}
+        onDismiss={() => {
+          khieNotificationPromptDismissed.current = true;
+          setKhieNotificationPromptOpen(false);
+        }}
+      >
+        <Dialog.Icon icon="bell-outline" />
+        <Dialog.Title style={styles.centerText}>
+          {t("khieNotificationsPermissionTitle")}
+        </Dialog.Title>
+        <Dialog.Content>
+          <Text variant="bodyMedium">
+            {t("khieNotificationsPermissionDescription")}
+          </Text>
+        </Dialog.Content>
+        <Dialog.Actions style={styles.dialogActions}>
+          <PaperButton
+            onPress={() => {
+              khieNotificationPromptDismissed.current = true;
+              setKhieNotificationPromptOpen(false);
+            }}
+          >
+            {t("notNow")}
+          </PaperButton>
+          <PaperButton
+            mode="contained"
+            onPress={() => {
+              khieNotificationPromptDismissed.current = true;
+              setKhieNotificationPromptOpen(false);
+              void requestKhieNotificationPermission()
+                .then(setKhieNotificationPermission)
+                .catch(() => setKhieNotificationPermission("denied"));
+            }}
+          >
+            {t("allow")}
+          </PaperButton>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
+  );
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -992,6 +1183,7 @@ function WalletApp() {
         />
       ) : null}
       {trustDialogs}
+      {khieNotificationPermissionDialog}
     </SafeAreaView>
   );
 }
@@ -1712,7 +1904,6 @@ function KhieScreen({
 
 function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanned: (value: string) => void }) {
   const { t } = useI18n();
-  const theme = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const scanned = useRef(false);
   if (!permission) {
@@ -1720,12 +1911,33 @@ function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanne
   }
   if (!permission.granted) {
     return (
-      <View style={[styles.page, styles.center]}>
-        <Icon source="camera" size={48} color={theme.colors.primary} />
-        <Text variant="titleLarge" style={styles.centerText}>{t("cameraPermissionRequired")}</Text>
-        <Text variant="bodyMedium" style={styles.centerText}>{t("cameraPermissionReason")}</Text>
-        <PrimaryButton label={t("allowCamera")} onPress={() => void requestPermission()} />
-        <SecondaryButton label={t("back")} onPress={onCancel} />
+      <View style={styles.page}>
+        <Portal>
+          <Dialog visible onDismiss={onCancel}>
+            <Dialog.Icon icon="camera" />
+            <Dialog.Title style={styles.centerText}>
+              {t("cameraPermissionRequired")}
+            </Dialog.Title>
+            <Dialog.Content>
+              <Text variant="bodyMedium">{t("cameraPermissionReason")}</Text>
+            </Dialog.Content>
+            <Dialog.Actions style={styles.dialogActions}>
+              <PaperButton onPress={onCancel}>{t("back")}</PaperButton>
+              <PaperButton
+                mode="contained"
+                onPress={() => {
+                  if (permission.canAskAgain) {
+                    void requestPermission();
+                  } else {
+                    void Linking.openSettings();
+                  }
+                }}
+              >
+                {permission.canAskAgain ? t("allowCamera") : t("openSettings")}
+              </PaperButton>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </View>
     );
   }

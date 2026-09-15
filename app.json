@@ -39,6 +39,13 @@
       "./plugins/withAndroidAbiSplits",
       "./plugins/withTrustBluetoothPermissions",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon-monochrome.png",
+          "color": "#315DA8"
+        }
+      ],
+      [
         "expo-navigation-bar",
         {
           "enforceContrast": false
