@@ -26,6 +26,7 @@ import {
   BackHandler,
   ImageBackground,
   Linking,
+  LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -352,6 +353,7 @@ function WalletApp({
   const [walletPassword, setWalletPassword] = useState("");
   const [walletPasswordError, setWalletPasswordError] = useState<string>();
   const [unlockingWallet, setUnlockingWallet] = useState(false);
+  const [biometricUnlocking, setBiometricUnlocking] = useState(false);
   const [trustPinResetOpen, setTrustPinResetOpen] = useState(false);
   const [trustPuk, setTrustPuk] = useState("");
   const [trustNewPin, setTrustNewPin] = useState("");
@@ -419,6 +421,7 @@ function WalletApp({
       if (walletStateRef.current.biometricUnlock && !forcePassword) {
         let passwordCredential: string | null = null;
         let credentialRead = false;
+        setBiometricUnlocking(true);
         try {
           passwordCredential = await vault.readBiometricCredential(purpose);
           credentialRead = true;
@@ -431,6 +434,8 @@ function WalletApp({
         } catch {
           // Cancelling or temporarily failing system authentication falls back
           // to the wallet password without changing the biometric preference.
+        } finally {
+          setBiometricUnlocking(false);
         }
         if (credentialRead && !passwordCredential) {
           void vault
@@ -477,6 +482,7 @@ function WalletApp({
       const state = walletStateRef.current;
       if (state.biometricUnlock && !forcePassword) {
         let credentialRead = false;
+        setBiometricUnlocking(true);
         try {
           const credential = await vault.readBiometricCredential(purpose);
           credentialRead = true;
@@ -486,6 +492,8 @@ function WalletApp({
         } catch {
           // Let the master-password dialog handle cancellation, invalidation,
           // or a temporarily unavailable biometric prompt.
+        } finally {
+          setBiometricUnlocking(false);
         }
         if (credentialRead) {
           void vault.setBiometricUnlock().then(setWalletState).catch(() => undefined);
@@ -1241,6 +1249,10 @@ function WalletApp({
       if (!target) {
         throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
       }
+      if (profile?.id !== target.id && sessionState.paired) {
+        await sessionRef.current?.unpair().catch(() => undefined);
+        approvalQueue.cancelAll("Wallet changed");
+      }
       if (target.kind === "cryptape-trust") {
         if (
           trustDevice &&
@@ -1254,11 +1266,23 @@ function WalletApp({
       if (trustDevice) await clearTrustConnection();
       activateWalletState(await vault.select(walletId), false);
     },
-    [activateWalletState, clearTrustConnection, trustDevice, vault, walletState.wallets],
+    [
+      activateWalletState,
+      approvalQueue,
+      clearTrustConnection,
+      profile?.id,
+      sessionState.paired,
+      trustDevice,
+      vault,
+      walletState.wallets,
+    ],
   );
 
   const trustDialogs = (
     <Portal>
+      {biometricUnlocking ? (
+        <Notice text={t("unlockingWallet")} onDismiss={() => undefined} />
+      ) : null}
       <KeyboardAvoidingView
         behavior="height"
         pointerEvents="box-none"
@@ -2336,11 +2360,33 @@ function KhieScreen({
   const endpointCopyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const approvalScrolledId = useRef<number | undefined>(undefined);
   const [relayAddress, setRelayAddress] = useState(state.relayAddress);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const qrSize = Math.max(180, Math.min(420, width - 64));
 
   useEffect(() => setRelayAddress(state.relayAddress), [state.relayAddress]);
+
+  useEffect(() => {
+    if (!approval) {
+      approvalScrolledId.current = undefined;
+    }
+  }, [approval]);
+
+  const scrollToApproval = useCallback(
+    (event: LayoutChangeEvent) => {
+      if (!approval || approvalScrolledId.current === approval.id) return;
+      approvalScrolledId.current = approval.id;
+      const { y } = event.nativeEvent.layout;
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          y,
+          animated: true,
+        });
+      });
+    },
+    [approval],
+  );
 
   useEffect(() => {
     setEndpointCopied(false);
@@ -2458,6 +2504,7 @@ function KhieScreen({
             network={network}
             signer={signer}
             onRespond={onRespond}
+            onLayout={scrollToApproval}
           />
         </View>
       ) : (
@@ -3700,11 +3747,13 @@ function ApprovalPanel({
   network,
   signer,
   onRespond,
+  onLayout,
 }: {
   item?: ApprovalItem;
   network: Network;
   signer?: Signer;
   onRespond: (approved: boolean) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const { t } = useI18n();
   const theme = useTheme();
@@ -3717,7 +3766,7 @@ function ApprovalPanel({
   }
 
   return (
-    <View style={styles.approvalPanel}>
+    <View onLayout={onLayout} style={styles.approvalPanel}>
       <View style={styles.approvalHeading}>
         <Icon
           source={approvalIcon(item.request)}
