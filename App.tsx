@@ -24,7 +24,6 @@ import {
   Button as PaperButton,
   Card as PaperCard,
   Chip,
-  Dialog,
   Divider,
   HelperText,
   Icon,
@@ -50,6 +49,7 @@ import {
   type Translate,
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
+import { TransactionApprovalDetails } from "./src/khie/TransactionApprovalDetails";
 import {
   KhieProviderSession,
   type KhieProviderSessionState,
@@ -142,7 +142,16 @@ function WalletApp() {
   });
   const [notice, setNotice] = useState<string>();
 
-  useEffect(() => approvalQueue.subscribe(setApproval), [approvalQueue]);
+  useEffect(
+    () =>
+      approvalQueue.subscribe((item) => {
+        setApproval(item);
+        if (item) {
+          setScreen("khie");
+        }
+      }),
+    [approvalQueue],
+  );
 
   useEffect(() => {
     void Promise.all([
@@ -391,6 +400,9 @@ function WalletApp() {
           <KhieScreen
             state={sessionState}
             pairing={pairing}
+            approval={approval}
+            network={network}
+            signer={signerRef.current}
             onScan={() => setScreen("scanner")}
             onPair={pairKhieEndpoint}
             onCancelPairing={cancelKhiePairing}
@@ -398,6 +410,9 @@ function WalletApp() {
               sessionRef.current?.connectRelay(address) ?? Promise.resolve(false)
             }
             onUnpair={() => sessionRef.current?.unpair() ?? Promise.resolve()}
+            onRespond={(approved) =>
+              approval && approvalQueue.respond(approval.id, approved)
+            }
           />
         ) : null}
         {screen === "settings" ? (
@@ -448,12 +463,6 @@ function WalletApp() {
         ) : null}
       </View>
       {screen !== "scanner" ? <BottomBar current={screen} onNavigate={setScreen} /> : null}
-      <ApprovalModal
-        item={approval}
-        network={network}
-        signer={signerRef.current}
-        onRespond={(approved) => approval && approvalQueue.respond(approval.id, approved)}
-      />
     </SafeAreaView>
   );
 }
@@ -795,19 +804,27 @@ function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void
 function KhieScreen({
   state,
   pairing,
+  approval,
+  network,
+  signer,
   onScan,
   onPair,
   onCancelPairing,
   onConnectRelay,
   onUnpair,
+  onRespond,
 }: {
   state: KhieProviderSessionState;
   pairing: boolean;
+  approval?: ApprovalItem;
+  network: Network;
+  signer?: Signer;
   onScan: () => void;
   onPair: (endpoint: string) => Promise<boolean>;
   onCancelPairing: () => void;
   onConnectRelay: (address: string) => Promise<boolean>;
   onUnpair: () => Promise<void>;
+  onRespond: (approved: boolean) => void;
 }) {
   const { t } = useI18n();
   const theme = useTheme();
@@ -834,6 +851,18 @@ function KhieScreen({
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <Text variant="headlineMedium">Khie</Text>
+      <PaperCard mode="contained">
+        <PaperCard.Title
+          title={t("khieIntroductionTitle")}
+          left={(props) => <Icon {...props} source="connection" />}
+        />
+        <PaperCard.Content style={styles.khieIntroductionContent}>
+          <Text variant="bodyMedium">{t("khieIntroduction")}</Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {t("khieNameMeaning")}
+          </Text>
+        </PaperCard.Content>
+      </PaperCard>
 
       {pairing ? (
         <View style={styles.pairingProgress}>
@@ -870,17 +899,39 @@ function KhieScreen({
             </PaperButton>
           </View>
           {state.remotePeer ? (
-            <View style={styles.metadataBlock}>
-              <Text variant="labelMedium">Peer ID</Text>
-              <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
-                {state.remotePeer.id}
-              </Text>
+            <View style={styles.peerMetadata}>
+              <View style={styles.metadataBlock}>
+                <Text variant="labelMedium">Peer ID</Text>
+                <Text
+                  variant="bodySmall"
+                  selectable
+                  numberOfLines={2}
+                  style={styles.mono}
+                >
+                  {state.remotePeer.id}
+                </Text>
+              </View>
+              <View style={styles.metadataBlock}>
+                <Text variant="labelMedium">{t("lastSeen")}</Text>
+                <Text variant="bodySmall" style={styles.mono}>
+                  {state.remotePeer.active ? (
+                    t("active")
+                  ) : state.remotePeer.lastSeenAt === undefined ? (
+                    t("notAvailable")
+                  ) : (
+                    <InactiveLastSeen timestamp={state.remotePeer.lastSeenAt} />
+                  )}
+                </Text>
+              </View>
             </View>
           ) : null}
           <Divider />
-          <Text variant="bodySmall" style={styles.requestIdle}>
-            {t("readyForRequests")}
-          </Text>
+          <ApprovalPanel
+            item={approval}
+            network={network}
+            signer={signer}
+            onRespond={onRespond}
+          />
         </View>
       ) : (
         <View style={styles.khieContent}>
@@ -1305,7 +1356,7 @@ function SettingsScreen({
   );
 }
 
-function ApprovalModal({
+function ApprovalPanel({
   item,
   network,
   signer,
@@ -1318,57 +1369,63 @@ function ApprovalModal({
 }) {
   const { t } = useI18n();
   const theme = useTheme();
-  const [fee, setFee] = useState<string>();
-  useEffect(() => {
-    setFee(undefined);
-    if (item?.request.method !== "sign_transaction" || !signer) return;
-    let active = true;
-    void item.request.transaction
-      .getFee(signer.client)
-      .then((value) => active && setFee(`${fixedPointToString(value)} CKB`))
-      .catch(() => active && setFee(t("unableToParse")));
-    return () => {
-      active = false;
-    };
-  }, [item, signer, t]);
-  if (!item) return null;
+  if (!item) {
+    return (
+      <Text variant="bodySmall" style={styles.requestIdle}>
+        {t("readyForRequests")}
+      </Text>
+    );
+  }
+
   return (
-    <Portal>
-      <Dialog visible onDismiss={() => onRespond(false)}>
-        <Dialog.Icon icon={approvalIcon(item.request)} />
-        <Dialog.Title>{approvalTitle(item.request, t)}</Dialog.Title>
-        <Dialog.ScrollArea style={styles.dialogScrollArea}>
-          <ScrollView contentContainerStyle={styles.dialogContent}>
-            <View style={styles.metadataBlock}>
-              <Text variant="labelMedium">{t("network")}</Text>
-              <Text variant="bodyLarge">{approvalNetwork(item.request, network, t)}</Text>
-            </View>
-            <Divider />
-          <ApprovalDetails request={item.request} fee={fee} />
-          </ScrollView>
-        </Dialog.ScrollArea>
-        <Dialog.Actions>
-          <PaperButton
-            contentStyle={styles.extraHorizontalButtonPadding}
-            textColor={theme.colors.error}
-            onPress={() => onRespond(false)}
-          >
-            {t("deny")}
-          </PaperButton>
-          <PaperButton
-            mode="contained"
-            contentStyle={styles.extraHorizontalButtonPadding}
-            onPress={() => onRespond(true)}
-          >
-            {t("allow")}
-          </PaperButton>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+    <View style={styles.approvalPanel}>
+      <View style={styles.approvalHeading}>
+        <Icon
+          source={approvalIcon(item.request)}
+          size={24}
+          color={theme.colors.primary}
+        />
+        <Text variant="titleLarge" style={styles.flex}>
+          {approvalTitle(item.request, t)}
+        </Text>
+      </View>
+      <View style={styles.metadataBlock}>
+        <Text variant="labelMedium">{t("network")}</Text>
+        <Text variant="bodyLarge">
+          {approvalNetwork(item.request, network, t)}
+        </Text>
+      </View>
+      <ApprovalDetails request={item.request} signer={signer} />
+      <View style={styles.approvalActions}>
+        <PaperButton
+          mode="outlined"
+          contentStyle={styles.extraHorizontalButtonPadding}
+          textColor={theme.colors.error}
+          style={styles.flexAction}
+          onPress={() => onRespond(false)}
+        >
+          {t("deny")}
+        </PaperButton>
+        <PaperButton
+          mode="contained"
+          contentStyle={styles.extraHorizontalButtonPadding}
+          style={styles.flexAction}
+          onPress={() => onRespond(true)}
+        >
+          {t("allow")}
+        </PaperButton>
+      </View>
+    </View>
   );
 }
 
-function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation; fee?: string }) {
+function ApprovalDetails({
+  request,
+  signer,
+}: {
+  request: SignerJsonRpcConfirmation;
+  signer?: Signer;
+}) {
   const { t } = useI18n();
   if (request.method === "connect") {
     return <Text variant="bodyMedium">{t("connectApprovalDescription")}</Text>;
@@ -1383,29 +1440,13 @@ function ApprovalDetails({ request, fee }: { request: SignerJsonRpcConfirmation;
       </PaperCard>
     );
   }
-  const tx = request.transaction;
-  return (
-    <PaperCard mode="contained">
-      <PaperCard.Title title={t("transactionSummary")} />
-      <PaperCard.Content style={styles.cardContent}>
-        <View style={styles.metadataBlock}>
-          <Text variant="labelMedium">{t("transactionHash")}</Text>
-          <Text variant="bodySmall" selectable style={styles.mono}>{tx.hash()}</Text>
-        </View>
-        <List.Item title={t("inputCount", { count: tx.inputs.length })} left={(props) => <List.Icon {...props} icon="import" />} />
-        <List.Item title={t("outputCount", { count: tx.outputs.length })} left={(props) => <List.Icon {...props} icon="export" />} />
-        {tx.outputs.slice(0, 6).map((output, index) => (
-          <Text key={index} variant="bodySmall" style={styles.mono}>
-            #{index + 1} {fixedPointToString(output.capacity)} CKB · {output.lock.codeHash.slice(0, 14)}…
-          </Text>
-        ))}
-        <Divider />
-        <View style={styles.metadataBlock}>
-          <Text variant="labelMedium">{t("fee")}</Text>
-          <Text variant="bodyLarge">{fee ?? t("parsing")}</Text>
-        </View>
-      </PaperCard.Content>
-    </PaperCard>
+  return signer ? (
+    <TransactionApprovalDetails
+      client={signer.client}
+      transaction={request.transaction}
+    />
+  ) : (
+    <Text variant="bodyMedium">{t("unableToParse")}</Text>
   );
 }
 
@@ -1428,6 +1469,59 @@ function approvalNetwork(request: SignerJsonRpcConfirmation, fallback: Network, 
     return request.networkId;
   }
   return fallback === "mainnet" ? t("ckbMainnet") : t("ckbTestnet");
+}
+
+function InactiveLastSeen({ timestamp }: { timestamp: number }) {
+  const { t } = useI18n();
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    const timeout = setTimeout(
+      () => setNow(Date.now()),
+      nextElapsedDurationBoundary(timestamp, now),
+    );
+    return () => clearTimeout(timeout);
+  }, [now, timestamp]);
+
+  return formatElapsedDuration(timestamp, now, t);
+}
+
+function formatElapsedDuration(timestamp: number, now: number, t: Translate) {
+  const seconds = Math.max(0, Math.floor((now - timestamp) / 1_000));
+  if (seconds < 60) {
+    if (seconds === 0) return t("justNow");
+    return t(seconds === 1 ? "secondAgo" : "secondsAgo", { count: seconds });
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return t(minutes === 1 ? "minuteAgo" : "minutesAgo", { count: minutes });
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return t(hours === 1 ? "hourAgo" : "hoursAgo", { count: hours });
+  }
+
+  const days = Math.floor(hours / 24);
+  return t(days === 1 ? "dayAgo" : "daysAgo", { count: days });
+}
+
+function nextElapsedDurationBoundary(timestamp: number, now: number) {
+  const elapsed = Math.max(0, now - timestamp);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const unit =
+    elapsed < minute
+      ? 1_000
+      : elapsed < hour
+        ? minute
+        : elapsed < day
+          ? hour
+          : day;
+  const nextBoundary = timestamp + (Math.floor(elapsed / unit) + 1) * unit;
+  return Math.max(1, nextBoundary - now);
 }
 
 function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network: Network) => void }) {
@@ -1760,7 +1854,9 @@ const styles = StyleSheet.create({
   networkSwitch: { width: "100%" },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
+  khieIntroductionContent: { gap: 8 },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
+  peerMetadata: { gap: 12 },
   khieMethod: { gap: 12 },
   khieInput: { height: 56 },
   floatingInputContainer: { position: "relative" },
@@ -1773,13 +1869,15 @@ const styles = StyleSheet.create({
   },
   orDivider: { flexDirection: "row", alignItems: "center", gap: 12 },
   requestIdle: { paddingVertical: 12, textAlign: "center" },
+  approvalPanel: { gap: 20, paddingBottom: 16 },
+  approvalHeading: { flexDirection: "row", alignItems: "center", gap: 12 },
+  approvalActions: { flexDirection: "row", gap: 12 },
+  flexAction: { flex: 1 },
   advancedSettingsToggle: { alignSelf: "flex-start", marginLeft: -12 },
   relaySettings: { gap: 12 },
   qrContent: { alignItems: "center", gap: 16, paddingBottom: 24 },
   qrFrame: { alignSelf: "center", padding: 12, borderRadius: 12, backgroundColor: "white" },
   qrPlaceholder: { alignItems: "center", justifyContent: "center", gap: 12 },
-  dialogScrollArea: { maxHeight: 480, paddingHorizontal: 0 },
-  dialogContent: { gap: 16, paddingHorizontal: 24, paddingVertical: 16 },
   snackbar: { marginBottom: 88 },
   scanner: { flex: 1, backgroundColor: "black" },
   scanGuide: { position: "absolute", width: 250, height: 250, borderWidth: 3, borderColor: "white", borderRadius: 30, alignSelf: "center", top: "25%" },
