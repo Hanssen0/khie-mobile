@@ -5,6 +5,7 @@ import {
   type SignerJsonRpcConfirmation,
 } from "@ckb-ccc/core";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -85,6 +86,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      <NavigationBar style="auto" />
       <I18nProvider>
         <PaperProvider theme={theme}>
           <WalletApp />
