@@ -8,6 +8,7 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 ## Included
 
 - Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics.
+- Connect a Cryptape Trust/NKey hardware wallet over Android Bluetooth LE and use it as the active CKB signer.
 - Derive one CKB account at `m/44'/309'/0'/0/0` for each wallet.
 - Testnet/mainnet address and balance, receive QR, authenticated mnemonic/private-key export.
 - Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
@@ -62,6 +63,7 @@ pnpm doctor:expo
 ```
 
 Golden tests verify the mobile zlib pairing endpoint codec in both directions against `@ckb-ccc/libp2p`.
+The Trust/NKey bridge is adapted from the MIT-licensed [`cryptape/trust-android`](https://github.com/cryptape/trust-android) reference implementation; its license is included with the local Expo module.
 
 ## Khie behavior
 
@@ -74,4 +76,4 @@ Golden tests verify the mobile zlib pairing endpoint codec in both directions ag
 
 ## Limitations and risk
 
-This is a development MVP, not a production wallet. It has not received a security audit, release hardening or Play Store review. Testnet is the default. Mainnet use and asset risk are the user's responsibility. Real-device acceptance still requires testing both QR directions, relay-only operation and an observed `direct === true` WebRTC connection against the current CCC Connector page.
+This is a development MVP, not a production wallet. It has not received a security audit, release hardening or Play Store review. Testnet is the default. Mainnet use and asset risk are the user's responsibility. Real-device acceptance still requires testing both QR directions, relay-only operation and an observed `direct === true` WebRTC connection against the current CCC Connector page. Trust/NKey scanning, secure-channel negotiation, PIN verification and hardware signing also remain unverified on a physical device.

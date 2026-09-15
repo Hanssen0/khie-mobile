@@ -1,6 +1,7 @@
 import {
   buildSignerJsonRpcHandler,
   fixedPointToString,
+  SignerCkbPublicKey,
   type Signer,
   type SignerJsonRpcConfirmation,
 } from "@ckb-ccc/core";
@@ -12,6 +13,7 @@ import {
   Alert,
   AppState,
   BackHandler,
+  ImageBackground,
   ScrollView,
   StyleSheet,
   useColorScheme,
@@ -24,6 +26,7 @@ import {
   Button as PaperButton,
   Card as PaperCard,
   Chip,
+  Dialog,
   Divider,
   HelperText,
   Icon,
@@ -39,6 +42,12 @@ import {
   useTheme,
 } from "react-native-paper";
 import QRCode from "react-native-qrcode-svg";
+import {
+  KeyboardAvoidingView,
+  KeyboardAwareScrollView,
+  KeyboardController,
+  KeyboardProvider,
+} from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -57,6 +66,18 @@ import {
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
 import {
+  connectTrustWallet,
+  disconnectTrustWallet,
+  generateTrustWalletKey,
+  importTrustWalletKey,
+  isTrustSupported,
+  resetTrustWalletKey,
+  resetTrustWalletPin,
+  scanForTrustDevices,
+  type ConnectedTrustDevice,
+  type TrustDevice,
+} from "./src/trust/native";
+import {
   SecureStoreNetworkSettings,
 } from "./src/storage/networkSettings";
 import {
@@ -65,6 +86,10 @@ import {
 } from "./src/storage/walletVault";
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
 import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
+import {
+  TrustHardwareSigningBackend,
+  type RequestTrustPin,
+} from "./src/wallet/trustHardwareBackend";
 import {
   createMnemonicChallenges,
   type MnemonicChallenge,
@@ -76,12 +101,22 @@ import {
   networkFromId,
   type NetworkRpcUrls,
 } from "./src/wallet/network";
+import {
+  normalizeTrustPublicKey,
+  prepareTrustKeyImport,
+} from "./src/wallet/trustSignature";
 import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
 import { generateMnemonic, persistWallet, recoverWallet } from "./src/wallet/walletService";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
 
-type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
-type Onboarding = "start" | "create" | "confirm" | "restore";
+type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
+type Onboarding = "start" | "create" | "confirm" | "restore" | "trust";
+type TrustPinRequest = {
+  purpose: "connect" | "message" | "transaction" | "keyManagement";
+  deviceId?: string;
+  reject: (cause: Error) => void;
+  resolve: (pin: string) => void;
+};
 
 const endpointUrl = "https://app.ckbccc.com/khie";
 
@@ -91,12 +126,14 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationBar style="auto" />
-      <I18nProvider>
-        <PaperProvider theme={theme}>
-          <WalletApp />
-        </PaperProvider>
-      </I18nProvider>
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+        <NavigationBar style="auto" />
+        <I18nProvider>
+          <PaperProvider theme={theme}>
+            <WalletApp />
+          </PaperProvider>
+        </I18nProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }
@@ -125,7 +162,7 @@ function WalletApp() {
   const previousPaired = useRef(false);
 
   const [loading, setLoading] = useState(true);
-  const [walletState, setWalletState] = useState<WalletState>({ version: 2, wallets: [] });
+  const [walletState, setWalletState] = useState<WalletState>({ version: 3, wallets: [] });
   const [network, setNetwork] = useState<Network>("testnet");
   const [rpcUrls, setRpcUrls] = useState<NetworkRpcUrls>(DEFAULT_NETWORK_RPC_URLS);
   const [screen, setScreen] = useState<Screen>("home");
@@ -142,6 +179,23 @@ function WalletApp() {
     relayConnecting: false,
   });
   const [notice, setNotice] = useState<string>();
+  const [trustDevice, setTrustDevice] = useState<ConnectedTrustDevice>();
+  const [trustPinRequest, setTrustPinRequest] = useState<TrustPinRequest>();
+  const [trustPin, setTrustPin] = useState("");
+  const [trustPinResetOpen, setTrustPinResetOpen] = useState(false);
+  const [trustPuk, setTrustPuk] = useState("");
+  const [trustNewPin, setTrustNewPin] = useState("");
+  const [trustConfirmPin, setTrustConfirmPin] = useState("");
+  const [resettingTrustPin, setResettingTrustPin] = useState(false);
+
+  const requestTrustPin = useCallback<RequestTrustPin>(
+    (purpose) =>
+      new Promise((resolve, reject) => {
+        setTrustPin("");
+        setTrustPinRequest({ purpose, reject, resolve });
+      }),
+    [],
+  );
 
   useEffect(
     () =>
@@ -178,10 +232,64 @@ function WalletApp() {
     walletState.wallets.find((wallet) => wallet.id === walletState.selectedWalletId) ??
     walletState.wallets[0];
 
-  const backend = useMemo(
-    () => profile && new LocalMnemonicSigningBackend(profile, vault, profile.id),
+  const releaseTrustConnection = useCallback(async () => {
+    try {
+      await disconnectTrustWallet();
+    } finally {
+      setTrustDevice(undefined);
+    }
+  }, []);
+
+  const requestTrustSigningPin = useCallback<RequestTrustPin>(
+    async (purpose) => {
+      const pin = await requestTrustPin(purpose);
+      if (
+        (purpose !== "message" && purpose !== "transaction") ||
+        profile?.kind !== "cryptape-trust" ||
+        !profile.publicKey ||
+        trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase()
+      ) {
+        return pin;
+      }
+
+      const device = await connectTrustWallet(profile.deviceId, pin);
+      if (
+        !device.publicKey ||
+        normalizeTrustPublicKey(device.publicKey) !==
+          normalizeTrustPublicKey(profile.publicKey)
+      ) {
+        await releaseTrustConnection().catch(() => undefined);
+        throw new Error("Cryptape Trust public key has changed");
+      }
+      setTrustDevice(device);
+      return pin;
+    },
+    [profile, releaseTrustConnection, requestTrustPin, trustDevice],
+  );
+
+  const localBackend = useMemo(
+    () =>
+      profile?.kind === "mnemonic"
+        ? new LocalMnemonicSigningBackend(profile, vault, profile.id)
+        : undefined,
     [profile, vault],
   );
+  const trustBackend = useMemo(
+    () =>
+      profile?.kind === "cryptape-trust" && profile.publicKey
+        ? new TrustHardwareSigningBackend(
+            {
+              id: profile.deviceId,
+              name: profile.name,
+              publicKey: profile.publicKey,
+            },
+            requestTrustSigningPin,
+            releaseTrustConnection,
+          )
+        : undefined,
+    [profile, releaseTrustConnection, requestTrustSigningPin],
+  );
+  const backend = profile?.kind === "cryptape-trust" ? trustBackend : localBackend;
   const backendRef = useRef(backend);
   backendRef.current = backend;
 
@@ -210,7 +318,9 @@ function WalletApp() {
     }
     const handler = buildSignerJsonRpcHandler({
       getSigner: () => signerRef.current,
-      getSignerMetadata: () => ({ name: "Khie Wallet" }),
+      getSignerMetadata: () => ({
+        name: profile?.kind === "cryptape-trust" ? "Cryptape Trust" : "Khie Wallet",
+      }),
       confirmRequest: (request) => approvalQueue.enqueue(request),
       connect: async (networkId) => {
         const currentBackend = backendRef.current;
@@ -243,7 +353,7 @@ function WalletApp() {
       sessionRef.current = undefined;
       void session.close();
     };
-  }, [approvalQueue, profile?.id]);
+  }, [approvalQueue, backend?.account.publicKey, profile?.kind]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -317,7 +427,7 @@ function WalletApp() {
   }, []);
 
   const activateWalletState = useCallback(
-    (next: WalletState) => {
+    (next: WalletState, navigateHome = true) => {
       const nextProfile =
         next.wallets.find((wallet) => wallet.id === next.selectedWalletId) ?? next.wallets[0];
       if (profile && profile.id !== nextProfile?.id) {
@@ -327,16 +437,346 @@ function WalletApp() {
         approvalQueue.cancelAll("Wallet changed");
       }
       setWalletState(next);
-      setScreen("home");
+      if (navigateHome) {
+        setScreen("home");
+      }
     },
     [approvalQueue, profile, sessionState.paired],
+  );
+
+  const connectTrust = useCallback(
+    async (deviceId: string) => {
+      const pin = await new Promise<string>((resolve, reject) => {
+        setTrustPin("");
+        setTrustPinRequest({ purpose: "connect", deviceId, reject, resolve });
+      });
+      const device = await connectTrustWallet(deviceId, pin);
+      setTrustDevice(device);
+      return device;
+    },
+    [],
+  );
+
+  const clearTrustConnection = useCallback(async () => {
+    await releaseTrustConnection();
+    approvalQueue.cancelAll("Wallet changed");
+  }, [approvalQueue, releaseTrustConnection]);
+
+  const addTrustWallet = useCallback(
+    async (deviceId: string) => {
+      try {
+        const device = await connectTrust(deviceId);
+        setWalletState(await vault.saveCryptapeTrust(device));
+        setOnboarding("start");
+        setAddingWallet(false);
+        setScreen("trust");
+      } finally {
+        await releaseTrustConnection().catch(() => undefined);
+      }
+    },
+    [connectTrust, releaseTrustConnection, vault],
+  );
+
+  const activateTrustKey = useCallback(
+    async (device: ConnectedTrustDevice, publicKey: string) => {
+      const next = { ...device, publicKey };
+      approvalQueue.cancelAll("Wallet changed");
+      setTrustDevice(next);
+      setWalletState(await vault.saveCryptapeTrust(next));
+    },
+    [approvalQueue, vault],
+  );
+
+  const prepareTrustKeyOperation = useCallback(async () => {
+    if (profile?.kind !== "cryptape-trust") {
+      throw new Error("Cryptape Trust wallet is unavailable");
+    }
+    const pin = await requestTrustPin("keyManagement");
+    if (trustDevice?.id.toLowerCase() === profile.deviceId.toLowerCase()) {
+      return { device: trustDevice, pin };
+    }
+
+    const device = await connectTrustWallet(profile.deviceId, pin);
+    setTrustDevice(device);
+    setWalletState(await vault.saveCryptapeTrust(device));
+    if (hasTrustPublicKeyChanged(profile.publicKey, device.publicKey)) {
+      approvalQueue.cancelAll("Wallet changed");
+      if (sessionState.paired) {
+        void sessionRef.current?.unpair().catch(() => undefined);
+      }
+      throw new Error("Cryptape Trust public key has changed");
+    }
+    return { device, pin };
+  }, [approvalQueue, profile, requestTrustPin, sessionState.paired, trustDevice, vault]);
+
+  const performTrustKeyOperation = useCallback(
+    async <T,>(
+      operation: (device: ConnectedTrustDevice, pin: string) => Promise<T>,
+    ): Promise<T> => {
+      try {
+        const { device, pin } = await prepareTrustKeyOperation();
+        return await operation(device, pin);
+      } finally {
+        await releaseTrustConnection().catch(() => undefined);
+      }
+    },
+    [prepareTrustKeyOperation, releaseTrustConnection],
+  );
+
+  const generateTrustKey = useCallback(async () => {
+    await performTrustKeyOperation(async (device, pin) => {
+      await activateTrustKey(device, await generateTrustWalletKey(pin));
+    });
+  }, [activateTrustKey, performTrustKeyOperation]);
+
+  const importTrustKey = useCallback(
+    async (value: string) => {
+      const pair = prepareTrustKeyImport(value);
+      await performTrustKeyOperation(async (device, pin) => {
+        const publicKey = await importTrustWalletKey(
+          pair.privateKey,
+          pair.publicKey,
+          pin,
+        );
+        if (publicKey.toLowerCase() !== pair.publicKey.toLowerCase()) {
+          throw new Error("Cryptape Trust returned a different public key after import");
+        }
+        await activateTrustKey(device, publicKey);
+      });
+    },
+    [activateTrustKey, performTrustKeyOperation],
+  );
+
+  const resetTrustKey = useCallback(async () => {
+    await performTrustKeyOperation(async (device, pin) => {
+      await resetTrustWalletKey(pin);
+      approvalQueue.cancelAll("Wallet changed");
+      setWalletState(
+        await vault.saveCryptapeTrust({ ...device, publicKey: undefined }),
+      );
+    });
+  }, [approvalQueue, performTrustKeyOperation, vault]);
+
+  const refreshSelectedTrust = useCallback(async () => {
+    if (profile?.kind !== "cryptape-trust") {
+      throw new Error("Cryptape Trust wallet is unavailable");
+    }
+    try {
+      const device = await connectTrust(profile.deviceId);
+      if (hasTrustPublicKeyChanged(profile.publicKey, device.publicKey)) {
+        approvalQueue.cancelAll("Wallet changed");
+        if (sessionState.paired) {
+          void sessionRef.current?.unpair().catch(() => undefined);
+        }
+      }
+      setWalletState(await vault.saveCryptapeTrust(device));
+    } finally {
+      await releaseTrustConnection().catch(() => undefined);
+    }
+  }, [
+    approvalQueue,
+    connectTrust,
+    profile,
+    releaseTrustConnection,
+    sessionState.paired,
+    vault,
+  ]);
+
+  const selectWallet = useCallback(
+    async (walletId: string) => {
+      const target = walletState.wallets.find((wallet) => wallet.id === walletId);
+      if (!target) throw new Error("Unknown wallet");
+      if (target.kind === "cryptape-trust") {
+        if (
+          trustDevice &&
+          trustDevice.id.toLowerCase() !== target.deviceId.toLowerCase()
+        ) {
+          await clearTrustConnection();
+        }
+        activateWalletState(await vault.select(walletId), false);
+        return;
+      }
+      if (trustDevice) await clearTrustConnection();
+      activateWalletState(await vault.select(walletId), false);
+    },
+    [activateWalletState, clearTrustConnection, trustDevice, vault, walletState.wallets],
+  );
+
+  const trustDialogs = (
+    <Portal>
+      <KeyboardAvoidingView
+        behavior="height"
+        pointerEvents="box-none"
+        style={styles.keyboardDialogLayer}
+      >
+        <Dialog
+          visible={Boolean(trustPinRequest) && !trustPinResetOpen}
+          dismissable={false}
+          style={styles.keyboardDialog}
+        >
+          <Dialog.Title>
+            {t(
+              trustPinRequest?.purpose === "connect"
+                ? "trustPinConnect"
+                : trustPinRequest?.purpose === "transaction"
+                  ? "trustPinTransaction"
+                  : trustPinRequest?.purpose === "keyManagement"
+                    ? "trustPinKeyManagement"
+                    : "trustPinMessage",
+            )}
+          </Dialog.Title>
+          <KeyboardDialogContent>
+            <Text variant="bodyMedium">{t("trustPinDescription")}</Text>
+            <WalletTextInput
+              autoFocus
+              label={t("trustPin")}
+              keyboardType="number-pad"
+              maxLength={8}
+              secureTextEntry
+              value={trustPin}
+              onChangeText={(value) => setTrustPin(value.replace(/\D/g, ""))}
+            />
+          </KeyboardDialogContent>
+          <Dialog.Actions style={styles.dialogActions}>
+            {trustPinRequest?.purpose === "connect" ? (
+              <PaperButton
+                contentStyle={styles.extraHorizontalButtonPadding}
+                onPress={() => {
+                  setTrustPuk("");
+                  setTrustNewPin("");
+                  setTrustConfirmPin("");
+                  setTrustPinResetOpen(true);
+                }}
+              >
+                {t("resetWithPuk")}
+              </PaperButton>
+            ) : null}
+            <PaperButton
+              contentStyle={styles.extraHorizontalButtonPadding}
+              onPress={() => {
+                const request = trustPinRequest;
+                request?.reject(
+                  new Error(
+                    request.purpose === "keyManagement"
+                      ? "Cryptape Trust key operation was cancelled"
+                      : "Cryptape Trust signing was cancelled",
+                  ),
+                );
+                setTrustPinRequest(undefined);
+                setTrustPin("");
+              }}
+            >
+              {t("cancel")}
+            </PaperButton>
+            <PaperButton
+              mode="contained"
+              contentStyle={styles.extraHorizontalButtonPadding}
+              disabled={trustPin.length !== 8}
+              onPress={() => {
+                trustPinRequest?.resolve(trustPin);
+                setTrustPinRequest(undefined);
+                setTrustPin("");
+              }}
+            >
+              {t("continue")}
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
+        <Dialog
+          visible={trustPinResetOpen}
+          dismissable={false}
+          style={styles.keyboardDialog}
+        >
+          <Dialog.Title>{t("resetTrustPinTitle")}</Dialog.Title>
+          <KeyboardDialogContent>
+            <Text variant="bodyMedium">{t("resetTrustPinDescription")}</Text>
+            <WalletTextInput
+              autoCapitalize="characters"
+              label={t("trustPuk")}
+              maxLength={16}
+              secureTextEntry
+              value={trustPuk}
+              onChangeText={(value) =>
+                setTrustPuk(value.replace(/[^0-9a-f]/gi, "").toUpperCase())
+              }
+            />
+            <WalletTextInput
+              label={t("newTrustPin")}
+              keyboardType="number-pad"
+              maxLength={8}
+              secureTextEntry
+              value={trustNewPin}
+              onChangeText={(value) => setTrustNewPin(value.replace(/\D/g, ""))}
+            />
+            <WalletTextInput
+              label={t("confirmTrustPin")}
+              keyboardType="number-pad"
+              maxLength={8}
+              secureTextEntry
+              value={trustConfirmPin}
+              onChangeText={(value) => setTrustConfirmPin(value.replace(/\D/g, ""))}
+            />
+            {trustConfirmPin.length === 8 && trustConfirmPin !== trustNewPin ? (
+              <HelperText type="error" visible>
+                {t("trustPinMismatch")}
+              </HelperText>
+            ) : null}
+          </KeyboardDialogContent>
+          <Dialog.Actions style={styles.dialogActions}>
+            <PaperButton
+              contentStyle={styles.extraHorizontalButtonPadding}
+              disabled={resettingTrustPin}
+              onPress={() => setTrustPinResetOpen(false)}
+            >
+              {t("cancel")}
+            </PaperButton>
+            <PaperButton
+              mode="contained"
+              contentStyle={styles.extraHorizontalButtonPadding}
+              loading={resettingTrustPin}
+              disabled={
+                resettingTrustPin ||
+                trustPuk.length !== 16 ||
+                trustNewPin.length !== 8 ||
+                trustNewPin !== trustConfirmPin
+              }
+              onPress={() => {
+                const request = trustPinRequest;
+                if (!request?.deviceId) return;
+                setResettingTrustPin(true);
+                void resetTrustWalletPin(request.deviceId, trustPuk, trustNewPin)
+                  .then(() => {
+                    const newPin = trustNewPin;
+                    setTrustPinResetOpen(false);
+                    setTrustPuk("");
+                    setTrustNewPin("");
+                    setTrustConfirmPin("");
+                    setTrustPinRequest(undefined);
+                    request.resolve(newPin);
+                    setNotice(t("trustPinResetSuccess"));
+                  })
+                  .catch((cause: unknown) =>
+                    Alert.alert(t("trustPinResetFailed"), errorMessage(cause, t)),
+                  )
+                  .finally(() => setResettingTrustPin(false));
+              }}
+            >
+              {t("resetTrustPin")}
+            </PaperButton>
+          </Dialog.Actions>
+        </Dialog>
+      </KeyboardAvoidingView>
+    </Portal>
   );
 
   if (loading) {
     return <LoadingScreen />;
   }
 
-  const finishOnboarding = (next: WalletState) => {
+  const finishOnboarding = async (next: WalletState) => {
+    if (trustDevice) {
+      await clearTrustConnection();
+    }
     activateWalletState(next);
     setOnboarding("start");
     setAddingWallet(false);
@@ -352,8 +792,10 @@ function WalletApp() {
           vault={vault}
           onMode={setOnboarding}
           onComplete={finishOnboarding}
+          onConnectTrust={addTrustWallet}
           onError={(cause) => setNotice(errorMessage(cause, t))}
         />
+        {trustDialogs}
       </SafeAreaView>
     );
   }
@@ -368,15 +810,26 @@ function WalletApp() {
           vault={vault}
           onMode={setOnboarding}
           onComplete={finishOnboarding}
+          onConnectTrust={addTrustWallet}
           onCancel={() => {
             setAddingWallet(false);
             setOnboarding("start");
           }}
           onError={(cause) => setNotice(errorMessage(cause, t))}
         />
+        {trustDialogs}
       </SafeAreaView>
     );
   }
+
+  const displayedTrustDevice =
+    profile.kind === "cryptape-trust"
+      ? {
+          id: profile.deviceId,
+          name: profile.name,
+          publicKey: profile.publicKey,
+        }
+      : undefined;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
@@ -390,9 +843,7 @@ function WalletApp() {
             profile={profile}
             wallets={walletState.wallets}
             onSelectWallet={(walletId) => {
-              void vault
-                .select(walletId)
-                .then(activateWalletState)
+              void selectWallet(walletId)
                 .catch((cause: unknown) => setNotice(errorMessage(cause, t)));
             }}
             onNavigate={setScreen}
@@ -420,25 +871,38 @@ function WalletApp() {
             }
           />
         ) : null}
+        {screen === "trust" && displayedTrustDevice ? (
+          <TrustDeviceScreen
+            device={displayedTrustDevice}
+            onRefresh={refreshSelectedTrust}
+            onGenerate={generateTrustKey}
+            onImport={importTrustKey}
+            onReset={resetTrustKey}
+          />
+        ) : null}
         {screen === "settings" ? (
           <SettingsScreen
             key={profile.id}
-            backend={backend!}
+            backend={localBackend}
             network={network}
             profile={profile}
             wallets={walletState.wallets}
             rpcUrls={rpcUrls}
             vault={vault}
             onChangeNetwork={changeNetwork}
-            onSelectWallet={async (walletId) => {
-              await vault.select(walletId).then(activateWalletState);
-              setScreen("settings");
-            }}
+            onSelectWallet={selectWallet}
             onAddWallet={() => {
               setOnboarding("start");
               setAddingWallet(true);
             }}
             onRemoveWallet={async (walletId) => {
+              const removed = walletState.wallets.find((wallet) => wallet.id === walletId);
+              if (
+                removed?.kind === "cryptape-trust" &&
+                trustDevice?.id.toLowerCase() === removed.deviceId.toLowerCase()
+              ) {
+                await clearTrustConnection();
+              }
               if (walletId === profile.id && sessionState.paired) {
                 void sessionRef.current?.unpair().catch(() => undefined);
               }
@@ -467,7 +931,14 @@ function WalletApp() {
           />
         ) : null}
       </View>
-      {screen !== "scanner" ? <BottomBar current={screen} onNavigate={setScreen} /> : null}
+      {screen !== "scanner" ? (
+        <BottomBar
+          current={screen}
+          showTrust={profile.kind === "cryptape-trust"}
+          onNavigate={setScreen}
+        />
+      ) : null}
+      {trustDialogs}
     </SafeAreaView>
   );
 }
@@ -490,13 +961,15 @@ function OnboardingScreen({
   vault,
   onMode,
   onComplete,
+  onConnectTrust,
   onCancel,
   onError,
 }: {
   mode: Onboarding;
   vault: SecureStoreWalletVault;
   onMode: (mode: Onboarding) => void;
-  onComplete: (state: WalletState) => void;
+  onComplete: (state: WalletState) => Promise<void> | void;
+  onConnectTrust: (deviceId: string) => Promise<void>;
   onCancel?: () => void;
   onError: (cause: unknown) => void;
 }) {
@@ -539,7 +1012,7 @@ function OnboardingScreen({
   const save = async (value: string) => {
     setBusy(true);
     try {
-      onComplete(await persistWallet(vault, value));
+      await onComplete(await persistWallet(vault, value));
     } catch (cause) {
       onError(cause);
     } finally {
@@ -579,6 +1052,7 @@ function OnboardingScreen({
             <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
             <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
             <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
+            <LinkButton label={t("connectTrustWallet")} onPress={() => onMode("trust")} />
             <HelperText type="error" visible style={styles.centerText}>
               {t("developmentWarning")}
             </HelperText>
@@ -594,7 +1068,20 @@ function OnboardingScreen({
         <Text variant="displaySmall">{t("addWallet")}</Text>
         <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
         <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
+        <LinkButton label={t("connectTrustWallet")} onPress={() => onMode("trust")} />
       </View>
+    );
+  }
+
+  if (mode === "trust") {
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <BackButton onPress={() => onMode("start")} />
+        <TrustWalletBanner />
+        <Text variant="headlineMedium">{t("connectTrustWallet")}</Text>
+        <Text variant="bodyMedium">{t("trustWalletScanHint")}</Text>
+        <TrustWalletPicker onConnect={onConnectTrust} />
+      </ScrollView>
     );
   }
 
@@ -733,7 +1220,33 @@ function HomeScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <WalletMenu wallets={wallets} selected={profile.id} onSelect={onSelectWallet} />
+      <WalletMenu
+        wallets={wallets}
+        selected={profile.id}
+        onSelect={onSelectWallet}
+      />
+      {profile.kind === "cryptape-trust" && !signer ? (
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title="Cryptape Trust"
+            subtitle={walletLabel(wallets, profile.id, t)}
+            left={(props) => <Icon {...props} source="bluetooth" />}
+          />
+          <PaperCard.Content>
+            <Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text>
+          </PaperCard.Content>
+          <PaperCard.Actions style={styles.cardActions}>
+            <PaperButton
+              mode="contained"
+              icon="tune-variant"
+              onPress={() => onNavigate("trust")}
+            >
+              {t("manageTrustDevice")}
+            </PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
+      ) : (
+        <>
       <View style={styles.balanceBlock}>
         <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
         <View style={styles.balanceValue}>
@@ -776,12 +1289,14 @@ function HomeScreen({
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
-        <PaperCard.Actions style={[styles.cardActions, styles.addressCardActions]}>
+        <PaperCard.Actions style={styles.cardActions}>
           <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
             {t("receive")}
           </PaperButton>
         </PaperCard.Actions>
       </PaperCard>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -1097,7 +1612,7 @@ function SettingsScreen({
   onSaveRpcUrls,
   onRecovered,
 }: {
-  backend: LocalMnemonicSigningBackend;
+  backend?: LocalMnemonicSigningBackend;
   network: Network;
   profile: WalletProfile;
   wallets: WalletProfile[];
@@ -1117,7 +1632,32 @@ function SettingsScreen({
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
   const [recovering, setRecovering] = useState(false);
+  const [walletAddresses, setWalletAddresses] = useState<Record<string, string>>({});
   useEffect(() => setRpcDraft(rpcUrls), [rpcUrls]);
+  useEffect(() => {
+    let active = true;
+    setWalletAddresses({});
+    const client = clientForNetwork(network, rpcUrls[network]);
+    for (const wallet of wallets) {
+      if (wallet.kind !== "mnemonic") continue;
+      void new SignerCkbPublicKey(client, wallet.publicKey)
+        .getRecommendedAddress()
+        .then((address) => {
+          if (!active) return;
+          setWalletAddresses((current) => ({ ...current, [wallet.id]: address }));
+        })
+        .catch(() => {
+          if (!active) return;
+          setWalletAddresses((current) => ({
+            ...current,
+            [wallet.id]: t("addressReadFailed"),
+          }));
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [network, rpcUrls, t, wallets]);
   const testnetRpcValid = isRpcUrl(rpcDraft.testnet);
   const mainnetRpcValid = isRpcUrl(rpcDraft.mainnet);
   const rpcUrlsChanged =
@@ -1134,6 +1674,7 @@ function SettingsScreen({
     }
   };
   const reveal = async (kind: "mnemonic" | "privateKey") => {
+    if (!backend) return;
     try {
       setSecret({
         label: kind === "mnemonic" ? t("mnemonic") : t("privateKey"),
@@ -1146,7 +1687,7 @@ function SettingsScreen({
   const confirmRemove = (wallet: WalletProfile) => {
     Alert.alert(
       t("deleteWalletTitle", { wallet: walletLabel(wallets, wallet.id, t) }),
-      t("deleteWalletDescription"),
+      t(wallet.kind === "cryptape-trust" ? "removeTrustWalletDescription" : "deleteWalletDescription"),
       [
         { text: t("cancel"), style: "cancel" },
         {
@@ -1162,30 +1703,41 @@ function SettingsScreen({
     );
   };
   return (
-    <ScrollView contentContainerStyle={[styles.page, styles.settingsPage]}>
+    <KeyboardAwareScrollView
+      bottomOffset={16}
+      contentContainerStyle={[styles.page, styles.settingsPage]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
       <PaperCard mode="elevated">
         <PaperCard.Title title={t("wallets")} left={(props) => <Icon {...props} source="wallet" />} />
-        <PaperCard.Content>
+        <PaperCard.Content style={styles.walletListContent}>
           {wallets.map((wallet) => {
             const selected = wallet.id === profile.id;
+            const walletDetail =
+              wallet.kind === "cryptape-trust"
+                ? wallet.deviceId
+                : walletAddresses[wallet.id] ?? t("addressGenerating");
             return (
               <List.Item
                 key={wallet.id}
+                style={styles.walletListItem}
                 title={walletLabel(wallets, wallet.id, t)}
                 description={
                   selected
-                    ? `${t("current")} · ${shortPublicKey(wallet.publicKey)}`
-                    : shortPublicKey(wallet.publicKey)
+                    ? `${t("current")} · ${walletDetail}`
+                    : walletDetail
                 }
+                descriptionEllipsizeMode="middle"
                 descriptionNumberOfLines={1}
                 left={(props) => (
                   <List.Icon {...props} icon={selected ? "wallet" : "wallet-outline"} />
                 )}
-                right={() => (
+                right={(props) => (
                   <IconButton
                     icon="delete-outline"
                     accessibilityLabel={t("delete")}
+                    style={[props.style, styles.walletDeleteButton]}
                     onPress={() => confirmRemove(wallet)}
                   />
                 )}
@@ -1269,25 +1821,27 @@ function SettingsScreen({
           </PaperButton>
         </PaperCard.Actions>
       </PaperCard>
-      <PaperCard mode="elevated">
-        <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
-        <PaperCard.Content style={styles.cardContent}>
-          <View style={styles.metadataBlock}>
-            <Text variant="labelMedium">{t("derivationPath")}</Text>
-            <Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text>
-          </View>
-          <Divider />
-          <View style={styles.metadataBlock}>
-            <Text variant="labelMedium">{t("publicKey")}</Text>
-            <Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text>
-          </View>
-        </PaperCard.Content>
-        <PaperCard.Actions style={styles.cardActions}>
-          <PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
-          <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton>
-        </PaperCard.Actions>
-      </PaperCard>
-      {secret ? (
+      {profile.kind === "mnemonic" && backend ? (
+        <PaperCard mode="elevated">
+          <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
+          <PaperCard.Content style={styles.cardContent}>
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">{t("derivationPath")}</Text>
+              <Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text>
+            </View>
+            <Divider />
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">{t("publicKey")}</Text>
+              <Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text>
+            </View>
+          </PaperCard.Content>
+          <PaperCard.Actions style={styles.cardActions}>
+            <PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
+            <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
+      ) : null}
+      {profile.kind === "mnemonic" && secret ? (
         <PaperCard mode="contained">
           <PaperCard.Title title={secret.label} left={(props) => <Icon {...props} source="shield-key" />} />
           <PaperCard.Content>
@@ -1298,10 +1852,12 @@ function SettingsScreen({
           </PaperCard.Actions>
         </PaperCard>
       ) : null}
-      <HelperText type="error" visible>
-        {t("exportWarning")}
-      </HelperText>
-      <PaperCard mode="elevated">
+      {profile.kind === "mnemonic" ? (
+        <HelperText type="error" visible>
+          {t("exportWarning")}
+        </HelperText>
+      ) : null}
+      {profile.kind === "mnemonic" ? <PaperCard mode="elevated">
         <PaperCard.Title
           title={t("keyRecovery")}
           left={(props) => <Icon {...props} source="backup-restore" />}
@@ -1356,8 +1912,322 @@ function SettingsScreen({
             </PaperButton>
           ) : null}
         </PaperCard.Actions>
-      </PaperCard>
-    </ScrollView>
+      </PaperCard> : null}
+    </KeyboardAwareScrollView>
+  );
+}
+
+function TrustWalletPicker({
+  onConnect,
+}: {
+  onConnect: (deviceId: string) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [devices, setDevices] = useState<TrustDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [connectingId, setConnectingId] = useState<string>();
+  const supported = isTrustSupported();
+
+  const scan = async () => {
+    setScanning(true);
+    setDevices([]);
+    try {
+      setDevices(await scanForTrustDevices());
+    } catch (cause) {
+      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const connect = async (device: TrustDevice) => {
+    setConnectingId(device.id);
+    try {
+      await onConnect(device.id);
+      setDevices([]);
+    } catch (cause) {
+      Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t));
+    } finally {
+      setConnectingId(undefined);
+    }
+  };
+
+  return (
+    <View style={styles.trustPicker}>
+      {!supported ? (
+        <Text variant="bodyMedium">{t("trustWalletAndroidBuildOnly")}</Text>
+      ) : null}
+      {devices.map((device) => (
+        <List.Item
+          key={device.id}
+          title={device.name}
+          description={device.id}
+          left={(props) => <List.Icon {...props} icon="memory" />}
+          right={() => (
+            <PaperButton
+              mode="text"
+              compact
+              loading={connectingId === device.id}
+              disabled={Boolean(connectingId)}
+              labelStyle={styles.linkButtonLabel}
+              onPress={() => void connect(device)}
+            >
+              {t("connect")}
+            </PaperButton>
+          )}
+        />
+      ))}
+      <View style={styles.trustPickerActions}>
+        <PaperButton
+          mode="contained"
+          icon="bluetooth"
+          loading={scanning}
+          disabled={!supported || scanning || Boolean(connectingId)}
+          onPress={() => void scan()}
+        >
+          {t("scanTrustWallets")}
+        </PaperButton>
+      </View>
+    </View>
+  );
+}
+
+function TrustWalletBanner() {
+  const { t } = useI18n();
+  const theme = useTheme();
+
+  return (
+    <ImageBackground
+      accessibilityLabel={t("trustWallet")}
+      imageStyle={styles.trustBannerImage}
+      resizeMode="cover"
+      source={require("./assets/cryptape-trust-device-banner.jpg")}
+      style={styles.trustBanner}
+    >
+      <View
+        style={[
+          styles.trustBannerTint,
+          {
+            backgroundColor: theme.dark
+              ? "rgba(0, 35, 33, 0.30)"
+              : "rgba(0, 96, 84, 0.12)",
+          },
+        ]}
+      />
+    </ImageBackground>
+  );
+}
+
+function TrustDeviceScreen({
+  device,
+  onRefresh,
+  onGenerate,
+  onImport,
+  onReset,
+}: {
+  device: ConnectedTrustDevice;
+  onRefresh: () => Promise<void>;
+  onGenerate: () => Promise<void>;
+  onImport: (privateKey: string) => Promise<void>;
+  onReset: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const theme = useTheme();
+  const [action, setAction] = useState<"generate" | "import" | "reset">();
+  const [privateKey, setPrivateKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refreshingDevice, setRefreshingDevice] = useState(false);
+  const privateKeyValid = /^[0-9a-fA-F]{64}$/.test(privateKey);
+
+  const closeAction = () => {
+    if (busy) return;
+    void KeyboardController.dismiss({ animated: false });
+    setAction(undefined);
+    setPrivateKey("");
+  };
+
+  const runAction = async () => {
+    const selectedAction = action;
+    if (!selectedAction) return;
+    const importedPrivateKey = privateKey;
+    await KeyboardController.dismiss({ animated: false });
+    setAction(undefined);
+    setPrivateKey("");
+    setBusy(true);
+    try {
+      if (selectedAction === "generate") await onGenerate();
+      if (selectedAction === "import") await onImport(importedPrivateKey);
+      if (selectedAction === "reset") await onReset();
+    } catch (cause) {
+      if (
+        cause instanceof Error &&
+        cause.message === "Cryptape Trust key operation was cancelled"
+      ) return;
+      Alert.alert(t("trustKeyOperationFailed"), errorMessage(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const actionTitle =
+    action === "generate"
+      ? t("generateTrustKey")
+      : action === "import"
+        ? t("importTrustKey")
+        : t("resetTrustKey");
+  const actionDescription =
+    action === "generate"
+      ? t("generateTrustKeyDescription")
+      : action === "import"
+        ? t("importTrustKeyDescription")
+        : t("resetTrustKeyDescription");
+
+  return (
+    <>
+      <ScrollView contentContainerStyle={[styles.page, styles.settingsPage]}>
+        <Text variant="headlineMedium">{t("trustDevice")}</Text>
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title={device.name}
+            left={(props) => <Icon {...props} source="bluetooth" />}
+          />
+          <PaperCard.Content style={styles.cardContent}>
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">{t("deviceAddress")}</Text>
+              <Text variant="bodyMedium" selectable style={styles.mono}>
+                {device.id}
+              </Text>
+            </View>
+            <Divider />
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">{t("publicKey")}</Text>
+              {device.publicKey ? (
+                <Text variant="bodySmall" selectable style={styles.mono}>
+                  {device.publicKey}
+                </Text>
+              ) : (
+                <Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text>
+              )}
+            </View>
+          </PaperCard.Content>
+          <PaperCard.Actions style={styles.cardActions}>
+            <PaperButton
+              mode="contained-tonal"
+              icon="refresh"
+              loading={refreshingDevice}
+              disabled={refreshingDevice}
+              onPress={() => {
+                setRefreshingDevice(true);
+                void onRefresh()
+                  .catch((cause: unknown) =>
+                    Alert.alert(t("trustWalletConnectionFailed"), errorMessage(cause, t)),
+                  )
+                  .finally(() => setRefreshingDevice(false));
+              }}
+            >
+              {t("refresh")}
+            </PaperButton>
+          </PaperCard.Actions>
+        </PaperCard>
+
+        <PaperCard mode="elevated">
+          <PaperCard.Title
+            title={t("trustKeyManagement")}
+            left={(props) => <Icon {...props} source="key-chain-variant" />}
+          />
+          <PaperCard.Content style={styles.cardContent}>
+            <Text variant="bodyMedium">
+              {device.publicKey
+                ? t("trustKeyPresentDescription")
+                : t("trustKeyMissingDescription")}
+            </Text>
+          </PaperCard.Content>
+          <PaperCard.Actions style={styles.cardActions}>
+            {device.publicKey ? (
+              <PaperButton
+                mode="text"
+                icon="key-remove"
+                textColor={theme.colors.error}
+                onPress={() => setAction("reset")}
+              >
+                {t("resetTrustKey")}
+              </PaperButton>
+            ) : null}
+            {!device.publicKey ? (
+              <PaperButton
+                mode="text"
+                icon="key-plus"
+                onPress={() => setAction("import")}
+              >
+                {t("importTrustKey")}
+              </PaperButton>
+            ) : null}
+            {!device.publicKey ? (
+              <PaperButton
+                mode="contained"
+                icon="key-plus"
+                onPress={() => setAction("generate")}
+              >
+                {t("generateTrustKey")}
+              </PaperButton>
+            ) : null}
+          </PaperCard.Actions>
+        </PaperCard>
+      </ScrollView>
+
+      <Portal>
+        <KeyboardAvoidingView
+          behavior="height"
+          pointerEvents="box-none"
+          style={styles.keyboardDialogLayer}
+        >
+          <Dialog
+            visible={Boolean(action)}
+            dismissable={!busy}
+            onDismiss={closeAction}
+            style={styles.keyboardDialog}
+          >
+            <Dialog.Title>{actionTitle}</Dialog.Title>
+            <KeyboardDialogContent>
+              <Text variant="bodyMedium">{actionDescription}</Text>
+              {action === "import" ? (
+                <WalletTextInput
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  label={t("trustPrivateKey")}
+                  maxLength={64}
+                  secureTextEntry
+                  value={privateKey}
+                  onChangeText={(value) =>
+                    setPrivateKey(value.replace(/[^0-9a-f]/gi, ""))
+                  }
+                />
+              ) : null}
+            </KeyboardDialogContent>
+            <Dialog.Actions style={styles.dialogActions}>
+              <PaperButton
+                contentStyle={styles.extraHorizontalButtonPadding}
+                disabled={busy}
+                onPress={closeAction}
+              >
+                {t("cancel")}
+              </PaperButton>
+              <PaperButton
+                mode="contained"
+                contentStyle={styles.extraHorizontalButtonPadding}
+                buttonColor={action === "reset" ? theme.colors.error : undefined}
+                loading={busy}
+                disabled={busy || (action === "import" && !privateKeyValid)}
+                onPress={() => void runAction()}
+              >
+                {action === "reset" ? t("resetTrustKey") : t("continue")}
+              </PaperButton>
+            </Dialog.Actions>
+          </Dialog>
+        </KeyboardAvoidingView>
+      </Portal>
+    </>
   );
 }
 
@@ -1551,7 +2421,7 @@ function WalletMenu({
   onSelect,
 }: {
   wallets: WalletProfile[];
-  selected: string;
+  selected?: string;
   onSelect: (walletId: string) => void;
 }) {
   const { t } = useI18n();
@@ -1567,7 +2437,7 @@ function WalletMenu({
           onPress={() => setVisible(true)}
           style={styles.walletMenu}
         >
-          {walletLabel(wallets, selected, t)}
+          {walletLabel(wallets, selected ?? "", t)}
         </PaperButton>
       }
     >
@@ -1578,7 +2448,9 @@ function WalletMenu({
           title={walletLabel(wallets, wallet.id, t)}
           onPress={() => {
             setVisible(false);
-            if (wallet.id !== selected) onSelect(wallet.id);
+            if (wallet.id !== selected) {
+              onSelect(wallet.id);
+            }
           }}
         />
       ))}
@@ -1586,11 +2458,29 @@ function WalletMenu({
   );
 }
 
-function BottomBar({ current, onNavigate }: { current: Screen; onNavigate: (screen: Screen) => void }) {
+function BottomBar({
+  current,
+  showTrust,
+  onNavigate,
+}: {
+  current: Screen;
+  showTrust: boolean;
+  onNavigate: (screen: Screen) => void;
+}) {
   const { t } = useI18n();
   const routes = [
     { key: "home", title: t("account"), focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
     { key: "khie", title: "Khie", focusedIcon: "connection", unfocusedIcon: "connection" },
+    ...(showTrust
+      ? [
+          {
+            key: "trust",
+            title: "Cryptape Trust",
+            focusedIcon: "usb-flash-drive",
+            unfocusedIcon: "usb-flash-drive-outline",
+          },
+        ]
+      : []),
     { key: "settings", title: t("settings"), focusedIcon: "cog", unfocusedIcon: "cog-outline" },
   ];
   const selected = current === "receive" ? "home" : current;
@@ -1643,12 +2533,17 @@ function LanguageMenu() {
 }
 
 function walletLabel(wallets: WalletProfile[], walletId: string, t: Translate): string {
+  const wallet = wallets.find((item) => item.id === walletId);
+  if (wallet?.kind === "cryptape-trust") {
+    return `Cryptape Trust · ${wallet.deviceId.slice(-5)}`;
+  }
   const index = wallets.findIndex((wallet) => wallet.id === walletId);
   return t("walletNumber", { number: Math.max(0, index) + 1 });
 }
 
-function shortPublicKey(publicKey: string): string {
-  return `${publicKey.slice(0, 8)}…${publicKey.slice(-6)}`;
+function hasTrustPublicKeyChanged(cached?: string, connected?: string): boolean {
+  if (!cached || !connected) return Boolean(cached) !== Boolean(connected);
+  return normalizeTrustPublicKey(cached) !== normalizeTrustPublicKey(connected);
 }
 
 function PrimaryButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
@@ -1673,8 +2568,37 @@ function SecondaryButton({ label, onPress, disabled, danger }: { label: string; 
   );
 }
 
+function LinkButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <PaperButton
+      compact
+      mode="text"
+      labelStyle={styles.linkButtonLabel}
+      onPress={onPress}
+    >
+      {label}
+    </PaperButton>
+  );
+}
+
 function WalletTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
   return <PaperTextInput mode="outlined" {...props} />;
+}
+
+function KeyboardDialogContent({ children }: { children: React.ReactNode }) {
+  return (
+    <Dialog.Content style={styles.keyboardDialogContent}>
+      <ScrollView
+        bounces={false}
+        contentContainerStyle={styles.cardContent}
+        keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+    </Dialog.Content>
+  );
 }
 
 function FloatingLabelTextInput({
@@ -1769,6 +2693,13 @@ function errorMessage(cause: unknown, t: Translate): string {
     "助记词与当前账户不匹配": "mnemonicMismatch",
     "请先在 Android 系统中启用生物识别认证": "biometricRequired",
     "Invalid profile": "invalidProfile",
+    "Bluetooth permission is required to find Cryptape Trust devices": "trustBluetoothPermissionRequired",
+    "Bluetooth is not available": "trustBluetoothUnavailable",
+    "Bluetooth is not available on this device": "trustBluetoothUnavailable",
+    "Turn on Bluetooth to find Cryptape Trust devices": "trustBluetoothDisabled",
+    "Cryptape Trust signing was cancelled": "trustSigningCancelled",
+    "Cryptape Trust PIN must contain 8 digits": "trustPinInvalid",
+    "Cryptape Trust public key has changed": "trustPublicKeyChanged",
   };
   const key = exactErrors[cause.message];
   if (key) return t(key);
@@ -1825,6 +2756,21 @@ const styles = StyleSheet.create({
   settingsPage: { gap: 20 },
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
+  linkButtonLabel: { textDecorationLine: "underline" },
+  trustBanner: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: 24,
+    overflow: "hidden",
+  },
+  trustBannerImage: { borderRadius: 24 },
+  trustBannerTint: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
   balanceBlock: { alignItems: "center", gap: 4, paddingVertical: 24 },
   balanceValue: { width: "100%", alignItems: "center" },
   balanceIntegerRow: { width: "100%", flexDirection: "row", alignItems: "center" },
@@ -1841,14 +2787,27 @@ const styles = StyleSheet.create({
   balanceRefresh: { width: 48, margin: 0 },
   balanceFraction: { textAlign: "center", fontVariant: ["tabular-nums"] },
   cardContent: { gap: 12 },
+  keyboardDialogLayer: { flex: 1 },
+  keyboardDialog: { marginVertical: 24, maxHeight: "90%" },
+  keyboardDialogContent: { flexShrink: 1, minHeight: 0 },
+  dialogActions: {
+    flexWrap: "wrap",
+    rowGap: 8,
+    paddingHorizontal: 24,
+  },
+  trustPicker: { gap: 16 },
+  trustPickerActions: { alignItems: "flex-end" },
+  inlineProgress: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardActions: {
     flexWrap: "wrap",
     rowGap: 8,
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 20,
     paddingBottom: 16,
   },
-  addressCardActions: { paddingTop: 20 },
+  walletListContent: { paddingHorizontal: 0 },
+  walletListItem: { paddingRight: 16 },
+  walletDeleteButton: { marginRight: 0, marginVertical: 0 },
   walletMenu: { alignSelf: "center" },
   extraHorizontalButtonPadding: { paddingHorizontal: 8 },
   metadataBlock: { gap: 4 },

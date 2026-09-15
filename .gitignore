@@ -1,7 +1,7 @@
 node_modules/
 .expo/
-android/
-ios/
+/android/
+/ios/
 dist/
 coverage/
 *.jks

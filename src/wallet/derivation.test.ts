@@ -80,10 +80,11 @@ describe("BIP-39 CKB wallet", () => {
 function vaultWithMnemonic(value: string): WalletVault {
   return {
     clear: async () => {},
-    loadWallets: async () => ({ version: 2, wallets: [] }),
+    loadWallets: async () => ({ version: 3, wallets: [] }),
     readMnemonic: async () => value,
-    remove: async () => ({ version: 2, wallets: [] }),
-    save: async () => ({ version: 2, wallets: [] }),
-    select: async () => ({ version: 2, wallets: [] }),
+    remove: async () => ({ version: 3, wallets: [] }),
+    save: async () => ({ version: 3, wallets: [] }),
+    saveCryptapeTrust: async () => ({ version: 3, wallets: [] }),
+    select: async () => ({ version: 3, wallets: [] }),
   };
 }

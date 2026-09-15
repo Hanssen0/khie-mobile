@@ -10,23 +10,40 @@ export type AccountDescriptor = {
   publicKey: string;
 };
 
-export type WalletProfile = AccountDescriptor & {
+export type SigningAccountDescriptor = {
+  derivationPath?: typeof CKB_DERIVATION_PATH;
+  publicKey: string;
+};
+
+export type MnemonicWalletProfile = AccountDescriptor & {
   id: string;
   createdAt: string;
-  mnemonicStorageVersion: 1 | 2;
-  version: 2;
+  kind: "mnemonic";
+  version: 3;
 };
+
+export type CryptapeTrustWalletProfile = {
+  id: string;
+  createdAt: string;
+  deviceId: string;
+  kind: "cryptape-trust";
+  name: string;
+  publicKey?: string;
+  version: 3;
+};
+
+export type WalletProfile = MnemonicWalletProfile | CryptapeTrustWalletProfile;
 
 export type WalletState = {
   selectedWalletId?: string;
   wallets: WalletProfile[];
-  version: 2;
+  version: 3;
 };
 
 export type SigningPurpose = "message" | "transaction";
 
 export interface SigningBackend {
-  readonly account: AccountDescriptor;
+  readonly account: SigningAccountDescriptor;
   readonly capabilities: ReadonlySet<SigningCapability>;
   getReadOnlySigner(client: Client): Signer;
   withSigner<T>(

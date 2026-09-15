@@ -1,11 +1,15 @@
 import * as SecureStore from "expo-secure-store";
 
-import type { AccountDescriptor, WalletProfile, WalletState } from "../wallet/types";
+import type {
+  AccountDescriptor,
+  MnemonicWalletProfile,
+  CryptapeTrustWalletProfile,
+  WalletProfile,
+  WalletState,
+} from "../wallet/types";
 
-const LEGACY_MNEMONIC_KEY = "khie.wallet.mnemonic.v1";
-const LEGACY_PROFILE_KEY = "khie.wallet.profile.v1";
-const WALLET_STATE_KEY = "khie.wallet.state.v2";
-const MNEMONIC_KEY_PREFIX = "khie.wallet.mnemonic.v2.";
+const WALLET_STATE_KEY = "khie.wallet.state.v3";
+const MNEMONIC_KEY_PREFIX = "khie.wallet.mnemonic.v3.";
 
 export type WalletAuthenticationPurpose =
   | "useWallet"
@@ -29,6 +33,11 @@ export class WalletSecretUnavailableError extends Error {
 export interface WalletVault {
   loadWallets(): Promise<WalletState>;
   save(account: AccountDescriptor, mnemonic: string): Promise<WalletState>;
+  saveCryptapeTrust(device: {
+    id: string;
+    name: string;
+    publicKey?: string;
+  }): Promise<WalletState>;
   select(walletId: string): Promise<WalletState>;
   readMnemonic(walletId: string, purpose?: WalletAuthenticationPurpose): Promise<string>;
   remove(walletId: string): Promise<WalletState>;
@@ -53,47 +62,7 @@ export class SecureStoreWalletVault implements WalletVault {
     if (value) {
       return parseWalletState(value);
     }
-
-    const legacyValue = await SecureStore.getItemAsync(LEGACY_PROFILE_KEY);
-    if (!legacyValue) {
-      return emptyWalletState();
-    }
-
-    try {
-      const profile = JSON.parse(legacyValue) as {
-        version?: number;
-        publicKey?: string;
-        derivationPath?: string;
-        createdAt?: string;
-      };
-      if (
-        profile.version !== 1 ||
-        typeof profile.publicKey !== "string" ||
-        typeof profile.derivationPath !== "string" ||
-        typeof profile.createdAt !== "string"
-      ) {
-        throw new Error("Invalid profile");
-      }
-      const migrated: WalletProfile = {
-        createdAt: profile.createdAt,
-        derivationPath: profile.derivationPath as AccountDescriptor["derivationPath"],
-        id: walletIdFromPublicKey(profile.publicKey),
-        mnemonicStorageVersion: 1,
-        publicKey: profile.publicKey,
-        version: 2,
-      };
-      const state: WalletState = {
-        selectedWalletId: migrated.id,
-        version: 2,
-        wallets: [migrated],
-      };
-      await this.writeState(state);
-      return state;
-    } catch (cause) {
-      throw new WalletSecretUnavailableError("钱包资料已损坏，请使用助记词恢复钱包", {
-        cause,
-      });
-    }
+    return emptyWalletState();
   }
 
   async save(account: AccountDescriptor, mnemonic: string): Promise<WalletState> {
@@ -103,14 +72,14 @@ export class SecureStoreWalletVault implements WalletVault {
     const current = await this.loadWallets();
     const id = walletIdFromPublicKey(account.publicKey);
     const existing = current.wallets.find((wallet) => wallet.id === id);
-    const profile: WalletProfile = existing
-      ? { ...existing, mnemonicStorageVersion: 2 }
+    const profile: MnemonicWalletProfile = existing?.kind === "mnemonic"
+      ? existing
       : {
           ...account,
           createdAt: new Date().toISOString(),
           id,
-          mnemonicStorageVersion: 2,
-          version: 2,
+          kind: "mnemonic",
+          version: 3,
         };
     const secretKey = mnemonicKey(id);
     await SecureStore.setItemAsync(
@@ -121,21 +90,12 @@ export class SecureStoreWalletVault implements WalletVault {
     try {
       const state: WalletState = {
         selectedWalletId: id,
-        version: 2,
+        version: 3,
         wallets: existing
           ? current.wallets.map((wallet) => (wallet.id === id ? profile : wallet))
           : [...current.wallets, profile],
       };
       await this.writeState(state);
-      if (existing?.mnemonicStorageVersion === 1) {
-        await Promise.all([
-          SecureStore.deleteItemAsync(
-            LEGACY_MNEMONIC_KEY,
-            this.authenticatedOptions("useWallet"),
-          ),
-          SecureStore.deleteItemAsync(LEGACY_PROFILE_KEY),
-        ]).catch(() => undefined);
-      }
       return state;
     } catch (cause) {
       if (!existing) {
@@ -143,6 +103,34 @@ export class SecureStoreWalletVault implements WalletVault {
       }
       throw cause;
     }
+  }
+
+  async saveCryptapeTrust(device: {
+    id: string;
+    name: string;
+    publicKey?: string;
+  }): Promise<WalletState> {
+    const current = await this.loadWallets();
+    const id = cryptapeTrustWalletId(device.id);
+    const existing = current.wallets.find((wallet) => wallet.id === id);
+    const profile: CryptapeTrustWalletProfile = {
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      deviceId: normalizeCryptapeTrustDeviceId(device.id),
+      id,
+      kind: "cryptape-trust",
+      name: device.name,
+      ...(device.publicKey ? { publicKey: device.publicKey } : {}),
+      version: 3,
+    };
+    const state: WalletState = {
+      selectedWalletId: id,
+      version: 3,
+      wallets: existing
+        ? current.wallets.map((wallet) => (wallet.id === id ? profile : wallet))
+        : [...current.wallets, profile],
+    };
+    await this.writeState(state);
+    return state;
   }
 
   async select(walletId: string): Promise<WalletState> {
@@ -161,13 +149,13 @@ export class SecureStoreWalletVault implements WalletVault {
   ): Promise<string> {
     const state = await this.loadWallets();
     const wallet = state.wallets.find((profile) => profile.id === walletId);
-    if (!wallet) {
+    if (!wallet || wallet.kind !== "mnemonic") {
       throw new WalletSecretUnavailableError();
     }
     let value: string | null;
     try {
       value = await SecureStore.getItemAsync(
-        wallet.mnemonicStorageVersion === 1 ? LEGACY_MNEMONIC_KEY : mnemonicKey(walletId),
+        mnemonicKey(walletId),
         this.authenticatedOptions(purpose),
       );
     } catch (cause) {
@@ -189,16 +177,15 @@ export class SecureStoreWalletVault implements WalletVault {
     const next: WalletState = {
       selectedWalletId:
         state.selectedWalletId === walletId ? wallets[0]?.id : state.selectedWalletId,
-      version: 2,
+      version: 3,
       wallets,
     };
     await this.writeState(next);
-    await SecureStore.deleteItemAsync(
-      wallet.mnemonicStorageVersion === 1 ? LEGACY_MNEMONIC_KEY : mnemonicKey(walletId),
-      this.authenticatedOptions("useWallet"),
-    ).catch(() => undefined);
-    if (wallet.mnemonicStorageVersion === 1) {
-      await SecureStore.deleteItemAsync(LEGACY_PROFILE_KEY).catch(() => undefined);
+    if (wallet.kind === "mnemonic") {
+      await SecureStore.deleteItemAsync(
+        mnemonicKey(walletId),
+        this.authenticatedOptions("useWallet"),
+      ).catch(() => undefined);
     }
     return next;
   }
@@ -206,15 +193,12 @@ export class SecureStoreWalletVault implements WalletVault {
   async clear(): Promise<void> {
     const state = await this.loadWallets();
     await Promise.all([
-      ...state.wallets.map((wallet) =>
+      ...state.wallets.filter((wallet) => wallet.kind === "mnemonic").map((wallet) =>
         SecureStore.deleteItemAsync(
-          wallet.mnemonicStorageVersion === 1
-            ? LEGACY_MNEMONIC_KEY
-            : mnemonicKey(wallet.id),
+          mnemonicKey(wallet.id),
           this.authenticatedOptions("useWallet"),
         ),
       ),
-      SecureStore.deleteItemAsync(LEGACY_PROFILE_KEY),
       SecureStore.deleteItemAsync(WALLET_STATE_KEY),
     ]);
   }
@@ -225,7 +209,7 @@ export class SecureStoreWalletVault implements WalletVault {
 }
 
 function emptyWalletState(): WalletState {
-  return { version: 2, wallets: [] };
+  return { version: 3, wallets: [] };
 }
 
 function mnemonicKey(walletId: string): string {
@@ -240,11 +224,23 @@ export function walletIdFromPublicKey(publicKey: string): string {
   return id;
 }
 
+export function cryptapeTrustWalletId(deviceId: string): string {
+  return `cryptape-trust:${normalizeCryptapeTrustDeviceId(deviceId).replaceAll(":", "").toLowerCase()}`;
+}
+
+function normalizeCryptapeTrustDeviceId(deviceId: string): string {
+  const hex = deviceId.replace(/[^0-9a-f]/gi, "").toUpperCase();
+  if (!/^[0-9A-F]{12}$/.test(hex)) {
+    throw new Error("Invalid Cryptape Trust device address");
+  }
+  return hex.match(/../g)!.join(":");
+}
+
 function parseWalletState(value: string): WalletState {
   try {
     const state = JSON.parse(value) as WalletState;
     if (
-      state.version !== 2 ||
+      state.version !== 3 ||
       !Array.isArray(state.wallets) ||
       !state.wallets.every(isWalletProfile) ||
       new Set(state.wallets.map((wallet) => wallet.id)).size !== state.wallets.length ||
@@ -264,13 +260,27 @@ function parseWalletState(value: string): WalletState {
 function isWalletProfile(value: unknown): value is WalletProfile {
   if (!value || typeof value !== "object") return false;
   const profile = value as Partial<WalletProfile>;
+  if (
+    profile.version !== 3 ||
+    typeof profile.id !== "string" ||
+    typeof profile.createdAt !== "string"
+  ) return false;
+  if (profile.kind === "cryptape-trust") {
+    try {
+      return (
+        typeof profile.deviceId === "string" &&
+        profile.id === cryptapeTrustWalletId(profile.deviceId) &&
+        typeof profile.name === "string" &&
+        (profile.publicKey === undefined || typeof profile.publicKey === "string")
+      );
+    } catch {
+      return false;
+    }
+  }
+  if (profile.kind !== "mnemonic") return false;
   return (
-    profile.version === 2 &&
-    typeof profile.id === "string" &&
     profile.id === walletIdFromPublicKey(profile.publicKey ?? "") &&
     typeof profile.publicKey === "string" &&
-    typeof profile.derivationPath === "string" &&
-    typeof profile.createdAt === "string" &&
-    (profile.mnemonicStorageVersion === 1 || profile.mnemonicStorageVersion === 2)
+    typeof profile.derivationPath === "string"
   );
 }

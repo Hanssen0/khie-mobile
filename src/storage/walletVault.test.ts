@@ -11,14 +11,18 @@ const secureStore = vi.hoisted(() => ({
 vi.mock("expo-secure-store", () => secureStore);
 
 import { CKB_DERIVATION_PATH } from "../wallet/types";
-import { SecureStoreWalletVault, WalletSecretUnavailableError } from "./walletVault";
+import {
+  SecureStoreWalletVault,
+  WalletSecretUnavailableError,
+  cryptapeTrustWalletId,
+} from "./walletVault";
 
 const publicKey =
   "0x0371e69290d7de7de8f8c3619f300ad27fdb96f4aa903e81e0d75a8dfcfaf285b4";
 const secondPublicKey = `0x02${"11".repeat(32)}`;
 const walletId = publicKey.slice(2);
-const stateKey = "khie.wallet.state.v2";
-const mnemonicKey = `khie.wallet.mnemonic.v2.${walletId}`;
+const stateKey = "khie.wallet.state.v3";
+const mnemonicKey = `khie.wallet.mnemonic.v3.${walletId}`;
 
 describe("SecureStoreWalletVault", () => {
   const values = new Map<string, string>();
@@ -57,32 +61,6 @@ describe("SecureStoreWalletVault", () => {
     );
   });
 
-  it("migrates the legacy profile without reading its protected mnemonic", async () => {
-    values.set(
-      "khie.wallet.profile.v1",
-      JSON.stringify({
-        createdAt: "2026-01-01T00:00:00.000Z",
-        derivationPath: CKB_DERIVATION_PATH,
-        publicKey,
-        version: 1,
-      }),
-    );
-    values.set("khie.wallet.mnemonic.v1", "legacy mnemonic");
-    const vault = new SecureStoreWalletVault();
-
-    const state = await vault.loadWallets();
-
-    expect(state.selectedWalletId).toBe(walletId);
-    expect(state.wallets[0]).toMatchObject({
-      id: walletId,
-      mnemonicStorageVersion: 1,
-      publicKey,
-      version: 2,
-    });
-    expect(values.has(stateKey)).toBe(true);
-    expect(await vault.readMnemonic(walletId)).toBe("legacy mnemonic");
-  });
-
   it("stores, selects and removes independent wallets", async () => {
     const vault = new SecureStoreWalletVault();
     await vault.save(
@@ -116,6 +94,60 @@ describe("SecureStoreWalletVault", () => {
     expect(values.has(mnemonicKey)).toBe(false);
   });
 
+  it("stores Cryptape Trust wallets by normalized MAC address", async () => {
+    const vault = new SecureStoreWalletVault();
+    await vault.save(
+      { derivationPath: CKB_DERIVATION_PATH, publicKey },
+      "first mnemonic",
+    );
+
+    const added = await vault.saveCryptapeTrust({
+      id: "80:ea:d3:5b:db:11",
+      name: "NKeyD35BDB11",
+      publicKey: `0x${"22".repeat(64)}`,
+    });
+    const trustId = cryptapeTrustWalletId("80EAD35BDB11");
+
+    expect(added.selectedWalletId).toBe(trustId);
+    expect(added.wallets).toContainEqual({
+      createdAt: expect.any(String),
+      deviceId: "80:EA:D3:5B:DB:11",
+      id: trustId,
+      kind: "cryptape-trust",
+      name: "NKeyD35BDB11",
+      publicKey: `0x${"22".repeat(64)}`,
+      version: 3,
+    });
+    expect(
+      (await new SecureStoreWalletVault().loadWallets()).wallets.find(
+        (wallet) => wallet.id === trustId,
+      ),
+    ).toHaveProperty("publicKey", `0x${"22".repeat(64)}`);
+
+    const updated = await vault.saveCryptapeTrust({
+      id: "80-EA-D3-5B-DB-11",
+      name: "NKeyD35BDB11",
+    });
+    expect(updated.wallets).toHaveLength(2);
+    expect(updated.wallets.find((wallet) => wallet.id === trustId)).not.toHaveProperty(
+      "publicKey",
+    );
+
+    const secondDevice = await vault.saveCryptapeTrust({
+      id: "80:EA:D3:5B:DB:12",
+      name: "NKeyD35BDB12",
+    });
+    expect(secondDevice.wallets).toHaveLength(3);
+    expect(secondDevice.selectedWalletId).not.toBe(trustId);
+
+    secureStore.deleteItemAsync.mockClear();
+    await vault.remove(trustId);
+    expect(secureStore.deleteItemAsync).not.toHaveBeenCalledWith(
+      expect.stringContaining(trustId),
+      expect.anything(),
+    );
+  });
+
   it("classifies invalidated authenticated entries as recovery-required", async () => {
     values.set(stateKey, JSON.stringify(walletState()));
     secureStore.getItemAsync.mockImplementation(async (key: string) => {
@@ -138,15 +170,15 @@ describe("SecureStoreWalletVault", () => {
 function walletState() {
   return {
     selectedWalletId: walletId,
-    version: 2,
+    version: 3,
     wallets: [
       {
         createdAt: "2026-01-01T00:00:00.000Z",
         derivationPath: CKB_DERIVATION_PATH,
         id: walletId,
-        mnemonicStorageVersion: 2,
+        kind: "mnemonic",
         publicKey,
-        version: 2,
+        version: 3,
       },
     ],
   };
