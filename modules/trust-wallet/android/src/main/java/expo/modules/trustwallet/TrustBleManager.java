@@ -39,6 +39,7 @@ public final class TrustBleManager extends BleManager {
   private BluetoothDatagram responseDatagram = BluetoothDatagramFactory.createDatagram(0, new XOR());
   private PendingResponse pendingResponse;
   private volatile boolean disconnected;
+  private final Object transmitLock = new Object();
 
   public TrustBleManager(final Context context) {
     super(context.getApplicationContext());
@@ -82,7 +83,14 @@ public final class TrustBleManager extends BleManager {
     return operation.await(timeoutMs);
   }
 
-  public synchronized byte[] transmit(final byte[] buffer, final int timeoutMs)
+  public byte[] transmit(final byte[] buffer, final int timeoutMs)
+      throws InterruptedException, GattError {
+    synchronized (transmitLock) {
+      return transmitSerially(buffer, timeoutMs);
+    }
+  }
+
+  private byte[] transmitSerially(final byte[] buffer, final int timeoutMs)
       throws InterruptedException, GattError {
     assertWorkerThread();
     if (!isReady() || writeCharacteristic == null || notifyCharacteristic == null || disconnected) {
@@ -90,26 +98,34 @@ public final class TrustBleManager extends BleManager {
     }
 
     final PendingResponse response = new PendingResponse();
-    pendingResponse = response;
+    synchronized (this) {
+      pendingResponse = response;
+    }
     final List<byte[]> packets = BluetoothDatagramFactory
         .createDatagram(0, Arrays.copyOf(buffer, buffer.length), new XOR())
         .split(BluetoothDatagram.MAX_CHARACTERISTIC_SIZE);
 
     for (final byte[] packet : packets) {
       final Operation write = new Operation();
-      writeCharacteristic(writeCharacteristic, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+      // Preserve the write type advertised by the legacy device. In particular, CD20 may use
+      // WRITE_TYPE_NO_RESPONSE; forcing a write request causes GATT_NO_RESOURCES on the wallet.
+      writeCharacteristic(writeCharacteristic, packet)
           .done(ignored -> write.succeed())
           .fail((ignored, status) -> write.fail(status))
           .enqueue();
       final int status = write.await(timeoutMs);
       if (status != BluetoothGatt.GATT_SUCCESS) {
-        pendingResponse = null;
+        synchronized (this) {
+          pendingResponse = null;
+        }
         throw new GattError("Bluetooth wallet write failed", status);
       }
     }
 
     final int status = response.await(timeoutMs);
-    pendingResponse = null;
+    synchronized (this) {
+      pendingResponse = null;
+    }
     if (status == GATT_TIMEOUT) throw new GattError("Recv Response Timeout", status);
     if (status != BluetoothGatt.GATT_SUCCESS) {
       throw new GattError("Response Verification Failure", status);
