@@ -52,6 +52,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { RecommendedAppIcon } from "./src/components/RecommendedAppIcon";
+import { KhieIcon } from "./src/components/KhieIcon";
 import {
   I18nProvider,
   languageLabel,
@@ -1429,14 +1430,22 @@ function KhieScreen({
       : t("relayed");
 
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView
+      bottomOffset={16}
+      contentContainerStyle={styles.page}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text variant="headlineMedium">Khie</Text>
       <PaperCard mode="contained">
-        <PaperCard.Title
-          title={t("khieIntroductionTitle")}
-          left={(props) => <Icon {...props} source="connection" />}
-        />
         <PaperCard.Content style={styles.khieIntroductionContent}>
+          <View style={styles.khieIntroductionHeader}>
+            <View style={styles.khieIntroductionIcon}>
+              <KhieIcon size={32} color={theme.colors.primary} />
+            </View>
+            <Text variant="titleMedium" style={styles.flex}>
+              {t("khieIntroductionTitle")}
+            </Text>
+          </View>
           <Text variant="bodyMedium">{t("khieIntroduction")}</Text>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
             {t("khieNameMeaning")}
@@ -1614,7 +1623,7 @@ function KhieScreen({
           {formatKhieError(state.error, t)}
         </HelperText>
       ) : null}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -2895,7 +2904,14 @@ const styles = StyleSheet.create({
   networkSwitch: { width: "100%" },
   pairingProgress: { minHeight: 320, alignItems: "center", justifyContent: "center", gap: 16 },
   khieContent: { gap: 16 },
-  khieIntroductionContent: { gap: 8 },
+  khieIntroductionContent: { gap: 12, paddingTop: 16 },
+  khieIntroductionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  khieIntroductionIcon: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
   peerMetadata: { gap: 12 },
   khieMethod: { gap: 12 },
