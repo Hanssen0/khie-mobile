@@ -762,7 +762,7 @@ function HomeScreen({
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
         </PaperCard.Content>
-        <PaperCard.Actions style={styles.cardActions}>
+        <PaperCard.Actions style={[styles.cardActions, styles.addressCardActions]}>
           <PaperButton icon="qrcode" mode="contained" onPress={() => onNavigate("receive")}>
             {t("receive")}
           </PaperButton>
@@ -784,7 +784,7 @@ function ReceiveScreen({ signer, onBack }: { signer?: Signer; onBack: () => void
       <Text variant="headlineMedium">{t("receive")}</Text>
       <PaperCard mode="elevated">
         <PaperCard.Content style={styles.qrContent}>
-          {address ? <QRCode value={address} size={230} /> : <ActivityIndicator />}
+          {address ? <QuietQrCode value={address} size={230} /> : <ActivityIndicator />}
           <Text variant="bodyMedium" selectable style={[styles.mono, styles.centerText]}>{address}</Text>
         </PaperCard.Content>
       </PaperCard>
@@ -888,9 +888,7 @@ function KhieScreen({
             <Text variant="titleSmall">{t("letConnectorScanThis")}</Text>
             {state.endpoint ? (
               <>
-                <View style={styles.qrFrame}>
-                  <QRCode value={state.endpoint} size={qrSize} />
-                </View>
+                <QuietQrCode value={state.endpoint} size={qrSize} />
                 <Text variant="labelSmall" selectable numberOfLines={2} style={[styles.mono, styles.centerText]}>
                   {state.endpoint}
                 </Text>
@@ -926,9 +924,9 @@ function KhieScreen({
             <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
               {t("scanConnectorCode")}
             </PaperButton>
-            <WalletTextInput
-              dense
-              label={t("pastePairingCode")}
+            <FloatingLabelTextInput
+              label={t("khieEndpoint")}
+              placeholder={t("pastePairingCode")}
               autoCapitalize="none"
               autoCorrect={false}
               value={endpoint}
@@ -953,9 +951,7 @@ function KhieScreen({
           </PaperButton>
           {advancedSettingsOpen ? (
             <View style={styles.relaySettings}>
-              <Text variant="titleSmall">{t("relayMultiaddr")}</Text>
-              <WalletTextInput
-                dense
+              <FloatingLabelTextInput
                 label={t("relayMultiaddr")}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -1352,8 +1348,20 @@ function ApprovalModal({
           </ScrollView>
         </Dialog.ScrollArea>
         <Dialog.Actions>
-          <PaperButton textColor={theme.colors.error} onPress={() => onRespond(false)}>{t("deny")}</PaperButton>
-          <PaperButton mode="contained" onPress={() => onRespond(true)}>{t("allow")}</PaperButton>
+          <PaperButton
+            contentStyle={styles.extraHorizontalButtonPadding}
+            textColor={theme.colors.error}
+            onPress={() => onRespond(false)}
+          >
+            {t("deny")}
+          </PaperButton>
+          <PaperButton
+            mode="contained"
+            contentStyle={styles.extraHorizontalButtonPadding}
+            onPress={() => onRespond(true)}
+          >
+            {t("allow")}
+          </PaperButton>
         </Dialog.Actions>
       </Dialog>
     </Portal>
@@ -1455,7 +1463,6 @@ function WalletMenu({
       onDismiss={() => setVisible(false)}
       anchor={
         <PaperButton
-          compact
           mode="contained-tonal"
           icon="wallet"
           onPress={() => setVisible(true)}
@@ -1571,6 +1578,68 @@ function WalletTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
   return <PaperTextInput mode="outlined" {...props} />;
 }
 
+function FloatingLabelTextInput({
+  label,
+  accessibilityLabel,
+  onBlur,
+  onFocus,
+  style,
+  ...props
+}: React.ComponentProps<typeof PaperTextInput> & { label: string }) {
+  const theme = useTheme();
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <View style={styles.floatingInputContainer}>
+      <WalletTextInput
+        {...props}
+        accessibilityLabel={accessibilityLabel ?? label}
+        style={[styles.khieInput, style]}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          onBlur?.(event);
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.floatingInputLabel,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Text
+          variant="bodySmall"
+          style={{
+            color: focused
+              ? theme.colors.primary
+              : theme.colors.onSurfaceVariant,
+          }}
+        >
+          {label}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function QuietQrCode({ value, size }: { value: string; size: number }) {
+  return (
+    <View style={styles.qrFrame}>
+      <QRCode
+        value={value}
+        size={size}
+        color="black"
+        backgroundColor="white"
+        quietZone={12}
+      />
+    </View>
+  );
+}
+
 function BackButton({ onPress }: { onPress: () => void }) {
   const { t } = useI18n();
   return <PaperButton compact icon="arrow-left" onPress={onPress} style={styles.backButton}>{t("back")}</PaperButton>;
@@ -1680,7 +1749,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
   },
+  addressCardActions: { paddingTop: 20 },
   walletMenu: { alignSelf: "center" },
+  extraHorizontalButtonPadding: { paddingHorizontal: 8 },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
   mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
@@ -1691,6 +1762,15 @@ const styles = StyleSheet.create({
   khieContent: { gap: 16 },
   peerOverview: { flexDirection: "row", alignItems: "center", gap: 8 },
   khieMethod: { gap: 12 },
+  khieInput: { height: 56 },
+  floatingInputContainer: { position: "relative" },
+  floatingInputLabel: {
+    position: "absolute",
+    top: -8,
+    left: 12,
+    zIndex: 1,
+    paddingHorizontal: 4,
+  },
   orDivider: { flexDirection: "row", alignItems: "center", gap: 12 },
   requestIdle: { paddingVertical: 12, textAlign: "center" },
   advancedSettingsToggle: { alignSelf: "flex-start", marginLeft: -12 },
