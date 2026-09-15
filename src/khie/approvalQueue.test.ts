@@ -23,13 +23,13 @@ describe("ApprovalQueue", () => {
     await expect(second).resolves.toBe(false);
   });
 
-  it("rejects all pending work when backgrounded or unpaired", async () => {
+  it("rejects all pending work when explicitly invalidated", async () => {
     const queue = new ApprovalQueue();
     const first = queue.enqueue(request("ckb-testnet"));
     const second = queue.enqueue(request("ckb-mainnet"));
-    queue.cancelAll("background");
-    await expect(first).rejects.toThrow("background");
-    await expect(second).rejects.toThrow("background");
+    queue.cancelAll("session closed");
+    await expect(first).rejects.toThrow("session closed");
+    await expect(second).rejects.toThrow("session closed");
     expect(queue.current).toBeUndefined();
   });
 

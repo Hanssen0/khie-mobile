@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { PeerId } from "@libp2p/interface";
+import { multiaddr } from "@multiformats/multiaddr";
 
 import { KhieProviderSession } from "./KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./protocol";
@@ -55,5 +57,63 @@ describe("KhieProviderSession relay address", () => {
       relayAddress: "/dns4/custom.example/tcp/443/wss",
       relayConnecting: true,
     });
+  });
+});
+
+describe("KhieProviderSession pairing lifetime", () => {
+  it("redials without unpairing after a transport interruption", async () => {
+    const id = "12D3KooWEUcGkHCFDcU5HucKpknW8iLt36UdGoxD2sGNkXQ8U8db";
+    const peerId = {
+      equals: (other: PeerId) => other.toString() === id,
+      toString: () => id,
+    } as PeerId;
+    const address = multiaddr(`/dns4/peer.example/tcp/443/wss/p2p/${id}`);
+    const dial = vi.fn(async () => ({ status: "open" }));
+    const unpair = vi.fn(async () => {});
+    const peerStore = {
+      get: vi.fn(async () => ({
+        addresses: [{ multiaddr: address }],
+        metadata: new Map(),
+      })),
+    };
+    const session = createSession();
+    Object.assign(session, {
+      node: {
+        dial,
+        getConnections: () => [],
+        peerStore,
+        services: { pairing: { unpair } },
+      },
+      pairedPeer: peerId,
+      relayConnection: { status: "open" },
+      state: { ...session.snapshot, paired: true },
+    });
+
+    await session.resume();
+
+    expect(dial).toHaveBeenCalledOnce();
+    expect(unpair).not.toHaveBeenCalled();
+    expect(session.snapshot).toMatchObject({
+      paired: true,
+      remotePeer: { active: false, id },
+    });
+  });
+
+  it("only sends unpair for an explicit unpair action", async () => {
+    const id = "12D3KooWEUcGkHCFDcU5HucKpknW8iLt36UdGoxD2sGNkXQ8U8db";
+    const peerId = {
+      equals: (other: PeerId) => other.toString() === id,
+      toString: () => id,
+    } as PeerId;
+    const unpair = vi.fn(async () => {});
+    const session = createSession();
+    Object.assign(session, {
+      node: { services: { pairing: { unpair } } },
+      pairedPeer: peerId,
+    });
+
+    await session.unpair();
+
+    expect(unpair).toHaveBeenCalledWith(peerId);
   });
 });

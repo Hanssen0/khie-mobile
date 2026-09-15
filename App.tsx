@@ -49,6 +49,7 @@ import {
   type Translate,
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
+import { resumeKhieSessionWhenActive } from "./src/khie/appLifecycle";
 import { TransactionApprovalDetails } from "./src/khie/TransactionApprovalDetails";
 import {
   KhieProviderSession,
@@ -181,6 +182,8 @@ function WalletApp() {
     () => profile && new LocalMnemonicSigningBackend(profile, vault, profile.id),
     [profile, vault],
   );
+  const backendRef = useRef(backend);
+  backendRef.current = backend;
 
   const selectNetwork = useCallback(
     (next: Network) => {
@@ -202,7 +205,7 @@ function WalletApp() {
   }, [backend]);
 
   useEffect(() => {
-    if (!backend) {
+    if (!backendRef.current) {
       return;
     }
     const handler = buildSignerJsonRpcHandler({
@@ -210,9 +213,13 @@ function WalletApp() {
       getSignerMetadata: () => ({ name: "Khie Wallet" }),
       confirmRequest: (request) => approvalQueue.enqueue(request),
       connect: async (networkId) => {
+        const currentBackend = backendRef.current;
+        if (!currentBackend) {
+          throw new Error("Wallet is unavailable");
+        }
         const next = networkFromId(networkId);
         networkRef.current = next;
-        const signer = new KhieSignerAdapter(clients.current[next], backend);
+        const signer = new KhieSignerAdapter(clients.current[next], currentBackend);
         signerRef.current = signer;
         setNetwork(next);
         return signer;
@@ -236,18 +243,16 @@ function WalletApp() {
       sessionRef.current = undefined;
       void session.close();
     };
-  }, [approvalQueue, backend]);
+  }, [approvalQueue, profile?.id]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        void sessionRef.current?.resume();
-      } else {
-        approvalQueue.cancelAll("App entered background");
-      }
+      // Android may suspend a transport in the background, but the logical
+      // pairing and any pending confirmation stay valid until their own timeout.
+      void resumeKhieSessionWhenActive(state, sessionRef.current);
     });
     return () => subscription.remove();
-  }, [approvalQueue]);
+  }, []);
 
   useEffect(() => {
     if (screen !== "receive") {
