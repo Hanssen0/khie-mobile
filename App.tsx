@@ -14,6 +14,7 @@ import {
   AppState,
   BackHandler,
   ImageBackground,
+  Linking,
   ScrollView,
   StyleSheet,
   useColorScheme,
@@ -50,6 +51,7 @@ import {
 } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import { RecommendedAppIcon } from "./src/components/RecommendedAppIcon";
 import {
   I18nProvider,
   languageLabel,
@@ -1218,6 +1220,27 @@ function HomeScreen({
 
   useEffect(() => void refresh(), [refresh, network]);
 
+  const recommendedApps = [
+    {
+      name: "NervDAO",
+      description: t("nervDaoDescription"),
+      icon: "nervdao",
+      url: "https://nervdao.com/",
+    },
+    {
+      name: "Omiga",
+      description: t("omigaDescription"),
+      icon: "omiga",
+      url: "https://omiga.io/",
+    },
+    {
+      name: "CCC App",
+      description: t("cccAppDescription"),
+      icon: "ccc",
+      url: "https://app.ckbccc.com/",
+    },
+  ] as const;
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <WalletMenu
@@ -1297,6 +1320,43 @@ function HomeScreen({
       </PaperCard>
         </>
       )}
+      <View style={styles.recommendedSection}>
+        <Text variant="titleLarge">{t("recommendedApps")}</Text>
+        <View style={styles.recommendedApps}>
+          {recommendedApps.map((app) => (
+            <PaperCard
+              key={app.url}
+              mode="elevated"
+              onPress={() => void Linking.openURL(app.url).catch(() => undefined)}
+            >
+              <PaperCard.Content style={styles.recommendedAppContent}>
+                <View style={styles.recommendedAppLogo}>
+                  <RecommendedAppIcon
+                    name={app.icon}
+                    size={32}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <View style={styles.recommendedAppCopy}>
+                  <Text variant="titleMedium" numberOfLines={1}>{app.name}</Text>
+                  <Text
+                    variant="bodyMedium"
+                    numberOfLines={2}
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {app.description}
+                  </Text>
+                </View>
+                <Icon
+                  source="open-in-new"
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </PaperCard.Content>
+            </PaperCard>
+          ))}
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -2787,6 +2847,23 @@ const styles = StyleSheet.create({
   balanceRefresh: { width: 48, margin: 0 },
   balanceFraction: { textAlign: "center", fontVariant: ["tabular-nums"] },
   cardContent: { gap: 12 },
+  recommendedSection: { gap: 8 },
+  recommendedApps: { gap: 8 },
+  recommendedAppContent: {
+    height: 104,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 16,
+  },
+  recommendedAppLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recommendedAppCopy: { flex: 1, gap: 2 },
   keyboardDialogLayer: { flex: 1 },
   keyboardDialog: { marginVertical: 24, maxHeight: "90%" },
   keyboardDialogContent: { flexShrink: 1, minHeight: 0 },
