@@ -65,6 +65,10 @@ import {
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
 import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
 import {
+  createMnemonicChallenges,
+  type MnemonicChallenge,
+} from "./src/wallet/mnemonicChallenge";
+import {
   DEFAULT_NETWORK_RPC_URLS,
   clientForNetwork,
   isRpcUrl,
@@ -76,7 +80,7 @@ import { generateMnemonic, persistWallet, recoverWallet } from "./src/wallet/wal
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
 
 type Screen = "home" | "receive" | "khie" | "settings" | "scanner";
-type Onboarding = "start" | "create" | "restore";
+type Onboarding = "start" | "create" | "confirm" | "restore";
 
 const endpointUrl = "https://app.ckbccc.com/khie";
 
@@ -246,19 +250,6 @@ function WalletApp() {
     });
     return () => subscription.remove();
   }, [screen]);
-
-  useEffect(() => {
-    if (!addingWallet) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (onboarding !== "start") {
-        setOnboarding("start");
-      } else {
-        setAddingWallet(false);
-      }
-      return true;
-    });
-    return () => subscription.remove();
-  }, [addingWallet, onboarding]);
 
   const changeNetwork = useCallback(
     (next: Network) => {
@@ -497,15 +488,32 @@ function OnboardingScreen({
 }) {
   const { t } = useI18n();
   const theme = useTheme();
-  const [mnemonic, setMnemonic] = useState("");
-  const [word3, setWord3] = useState("");
-  const [word9, setWord9] = useState("");
+  const [generatedMnemonic, setGeneratedMnemonic] = useState("");
+  const [restoreMnemonic, setRestoreMnemonic] = useState("");
+  const [challenges, setChallenges] = useState<MnemonicChallenge[]>([]);
+  const [challengeIndex, setChallengeIndex] = useState(0);
+  const [challengeError, setChallengeError] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (mode === "start" && !onCancel) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (mode === "confirm") {
+        onMode("create");
+      } else if (mode !== "start") {
+        onMode("start");
+      } else {
+        onCancel?.();
+      }
+      return true;
+    });
+    return () => subscription.remove();
+  }, [mode, onCancel, onMode]);
 
   const beginCreate = async () => {
     setBusy(true);
     try {
-      setMnemonic(await generateMnemonic());
+      setGeneratedMnemonic(await generateMnemonic());
       onMode("create");
     } catch (cause) {
       onError(cause);
@@ -525,20 +533,53 @@ function OnboardingScreen({
     }
   };
 
+  const beginConfirmation = () => {
+    setChallenges(createMnemonicChallenges(generatedMnemonic));
+    setChallengeIndex(0);
+    setChallengeError(false);
+    onMode("confirm");
+  };
+
+  const answerChallenge = (answer: string) => {
+    const challenge = challenges[challengeIndex];
+    if (!challenge || busy) return;
+    if (answer === challenge.answer) {
+      if (challengeIndex + 1 < challenges.length) {
+        setChallengeIndex(challengeIndex + 1);
+        setChallengeError(false);
+      } else {
+        void save(generatedMnemonic);
+      }
+      return;
+    }
+    setChallengeError(true);
+  };
+
   if (mode === "start") {
+    if (!onCancel) {
+      return (
+        <View style={styles.onboardingStart}>
+          <View style={styles.onboardingContent}>
+            <Icon source="wallet" size={64} color={theme.colors.primary} />
+            <Text variant="displaySmall">Khie Wallet</Text>
+            <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
+            <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
+            <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
+            <HelperText type="error" visible style={styles.centerText}>
+              {t("developmentWarning")}
+            </HelperText>
+          </View>
+          <LanguageMenu />
+        </View>
+      );
+    }
     return (
       <View style={[styles.page, styles.center]}>
-        {onCancel ? <BackButton onPress={onCancel} /> : <LanguageMenu />}
+        <BackButton onPress={onCancel} />
         <Icon source="wallet" size={64} color={theme.colors.primary} />
-        <Text variant="displaySmall">{onCancel ? t("addWallet") : "Khie Wallet"}</Text>
-        {!onCancel ? <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text> : null}
+        <Text variant="displaySmall">{t("addWallet")}</Text>
         <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
         <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
-        {!onCancel ? (
-          <HelperText type="error" visible style={styles.centerText}>
-            {t("developmentWarning")}
-          </HelperText>
-        ) : null}
       </View>
     );
   }
@@ -556,33 +597,69 @@ function OnboardingScreen({
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="word1 word2 …"
-          value={mnemonic}
-          onChangeText={setMnemonic}
+          value={restoreMnemonic}
+          onChangeText={setRestoreMnemonic}
         />
-        <PrimaryButton label={busy ? t("saving") : t("restore")} onPress={() => void save(mnemonic)} disabled={busy} />
+        <PrimaryButton
+          label={busy ? t("saving") : t("restore")}
+          onPress={() => void save(restoreMnemonic)}
+          disabled={busy}
+        />
       </ScrollView>
     );
   }
 
-  const words = mnemonic.split(" ");
-  const confirmed = word3.trim().toLowerCase() === words[2] && word9.trim().toLowerCase() === words[8];
+  if (mode === "create") {
+    const words = generatedMnemonic.split(" ");
+    return (
+      <ScrollView contentContainerStyle={styles.page}>
+        <BackButton onPress={() => onMode("start")} />
+        <Text variant="headlineMedium">{t("backupMnemonic")}</Text>
+        <HelperText type="error" visible>
+          {t("backupWarning")}
+        </HelperText>
+        <View style={styles.words}>
+          {words.map((word, index) => (
+            <Chip key={`${word}-${index}`} compact mode="flat">
+              {index + 1}. {word}
+            </Chip>
+          ))}
+        </View>
+        <PrimaryButton label={t("continueToVerification")} onPress={beginConfirmation} />
+      </ScrollView>
+    );
+  }
+
+  const challenge = challenges[challengeIndex];
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <BackButton onPress={() => onMode("start")} />
-      <Text variant="headlineMedium">{t("backupMnemonic")}</Text>
-      <HelperText type="error" visible>
-        {t("backupWarning")}
-      </HelperText>
-      <View style={styles.words}>
-        {words.map((word, index) => (
-          <Chip key={`${word}-${index}`} compact mode="flat">
-            {index + 1}. {word}
-          </Chip>
-        ))}
-      </View>
-      <WalletTextInput label={t("enterWord3")} autoCapitalize="none" value={word3} onChangeText={setWord3} />
-      <WalletTextInput label={t("enterWord9")} autoCapitalize="none" value={word9} onChangeText={setWord9} />
-      <PrimaryButton label={busy ? t("saving") : t("confirmCreate")} onPress={() => void save(mnemonic)} disabled={!confirmed || busy} />
+    <ScrollView contentContainerStyle={styles.page}>
+      <BackButton onPress={() => onMode("create")} />
+      <Text variant="headlineMedium">{t("verifyMnemonic")}</Text>
+      <Text variant="labelLarge">
+        {t("mnemonicQuestionProgress", {
+          current: challengeIndex + 1,
+          total: challenges.length || 2,
+        })}
+      </Text>
+      <Text variant="bodyLarge">
+        {t("selectMnemonicWord", { number: challenge?.position ?? 1 })}
+      </Text>
+      {challengeError ? (
+        <HelperText type="error" visible>
+          {t("incorrectMnemonicWord")}
+        </HelperText>
+      ) : null}
+      {challenge?.options.map((option) => (
+        <PaperButton
+          key={option}
+          mode="contained-tonal"
+          disabled={busy}
+          onPress={() => answerChallenge(option)}
+        >
+          {option}
+        </PaperButton>
+      ))}
+      {busy ? <ActivityIndicator /> : null}
     </ScrollView>
   );
 }
@@ -1570,6 +1647,13 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   body: { flex: 1 },
   page: { padding: 20, gap: 16 },
+  onboardingStart: { flex: 1, alignItems: "center", padding: 20, paddingBottom: 12 },
+  onboardingContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+  },
   settingsPage: { gap: 20 },
   center: { justifyContent: "center", alignItems: "center", gap: 16 },
   centerText: { textAlign: "center" },
