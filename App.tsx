@@ -1618,7 +1618,10 @@ function WalletApp({
       : undefined;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView
+      edges={screen === "scanner" ? undefined : ["top", "right", "left"]}
+      style={[styles.safe, { backgroundColor: theme.colors.background }]}
+    >
       <StatusBar style={theme.dark ? "light" : "dark"} />
       {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
       <View style={styles.body}>
@@ -4041,7 +4044,6 @@ function BottomBar({
       compact
       shifting={false}
       navigationState={{ index, routes }}
-      safeAreaInsets={{ bottom: 0 }}
       onTabPress={({ route }) => onNavigate(route.key as Screen)}
     />
   );
