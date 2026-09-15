@@ -2517,6 +2517,67 @@ function KhieScreen({
       ) : (
         <View style={styles.khieContent}>
           <View style={styles.khieMethod}>
+            <Text variant="titleSmall">{t("scanConnectorCode")}</Text>
+            <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
+              {t("scanConnectorCode")}
+            </PaperButton>
+            <FloatingLabelTextInput
+              label={t("khieEndpoint")}
+              placeholder={t("pastePairingCode")}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={endpoint}
+              onChangeText={setEndpoint}
+              right={
+                <PaperTextInput.Icon
+                  icon="arrow-right"
+                  disabled={!endpoint.trim()}
+                  onPress={() => void pair()}
+                />
+              }
+            />
+          </View>
+          {state.error ? (
+            <View
+              onLayout={() => {
+                requestAnimationFrame(() => {
+                  scrollRef.current?.scrollToEnd({ animated: true });
+                });
+              }}
+              style={[
+                styles.khieErrorNotice,
+                { backgroundColor: theme.colors.surfaceVariant },
+              ]}
+            >
+              <Icon
+                source="information-outline"
+                color={theme.colors.onSurfaceVariant}
+                size={24}
+              />
+              <View style={[styles.flex, styles.khieErrorCopy]}>
+                <Text
+                  variant="labelLarge"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  {state.error.kind === "incompatible-pairing-code"
+                    ? t("incompatiblePairingCode")
+                    : t("operationFailed")}
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  {formatKhieError(state.error, t)}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.orDivider}>
+            <Divider style={styles.flex} />
+            <Text variant="labelMedium">{t("or")}</Text>
+            <Divider style={styles.flex} />
+          </View>
+          <View style={styles.khieMethod}>
             <Text variant="titleSmall">{t("letConnectorScanThis")}</Text>
             {state.endpoint ? (
               <>
@@ -2571,32 +2632,6 @@ function KhieScreen({
               </View>
             )}
           </View>
-          <View style={styles.orDivider}>
-            <Divider style={styles.flex} />
-            <Text variant="labelMedium">{t("or")}</Text>
-            <Divider style={styles.flex} />
-          </View>
-          <View style={styles.khieMethod}>
-            <Text variant="titleSmall">{t("scanConnectorCode")}</Text>
-            <PaperButton mode="contained" icon="qrcode-scan" onPress={onScan}>
-              {t("scanConnectorCode")}
-            </PaperButton>
-            <FloatingLabelTextInput
-              label={t("khieEndpoint")}
-              placeholder={t("pastePairingCode")}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={endpoint}
-              onChangeText={setEndpoint}
-              right={
-                <PaperTextInput.Icon
-                  icon="arrow-right"
-                  disabled={!endpoint.trim()}
-                  onPress={() => void pair()}
-                />
-              }
-            />
-          </View>
           <PaperButton
             compact
             mode="text"
@@ -2635,41 +2670,6 @@ function KhieScreen({
         </View>
       )}
 
-      {state.error && !pairing ? (
-        <View
-          onLayout={() => {
-            requestAnimationFrame(() => {
-              scrollRef.current?.scrollToEnd({ animated: true });
-            });
-          }}
-          style={[
-            styles.khieErrorNotice,
-            { backgroundColor: theme.colors.surfaceVariant },
-          ]}
-        >
-          <Icon
-            source="information-outline"
-            color={theme.colors.onSurfaceVariant}
-            size={24}
-          />
-          <View style={[styles.flex, styles.khieErrorCopy]}>
-            <Text
-              variant="labelLarge"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              {state.error.kind === "incompatible-pairing-code"
-                ? t("incompatiblePairingCode")
-                : t("operationFailed")}
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              {formatKhieError(state.error, t)}
-            </Text>
-          </View>
-        </View>
-      ) : null}
     </KeyboardAwareScrollView>
   );
 }
