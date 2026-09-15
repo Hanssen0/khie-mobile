@@ -20,6 +20,7 @@ jobs:
     env:
       CI: true
       EXPO_NO_TELEMETRY: 1
+      KHIE_BUILD_COMMIT: ${{ github.sha }}
       NODE_ENV: production
 
     steps:

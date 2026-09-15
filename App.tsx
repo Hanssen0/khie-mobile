@@ -7,6 +7,9 @@ import {
 } from "@ckb-ccc/core";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Clipboard from "expo-clipboard";
+import * as Application from "expo-application";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import { NavigationBar } from "expo-navigation-bar";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -47,6 +50,7 @@ import {
   Portal,
   SegmentedButtons,
   Snackbar,
+  Switch,
   Text,
   TextInput as PaperTextInput,
   useTheme,
@@ -117,6 +121,12 @@ import {
   type ThemePreference,
 } from "./src/storage/themeSettings";
 import {
+  defaultUpdateSettings,
+  SecureStoreUpdateSettings,
+  shouldAutomaticallyCheckForUpdates,
+  type UpdateSettings,
+} from "./src/storage/updateSettings";
+import {
   SecureStoreWalletVault,
   type WalletAuthenticationPurpose,
 } from "./src/storage/walletVault";
@@ -144,6 +154,15 @@ import {
 import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
 import { generateMnemonic, persistWallet, recoverWallet } from "./src/wallet/walletService";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
+import {
+  fetchLatestRelease,
+  GITHUB_RELEASES_URL,
+  GITHUB_REPOSITORY_URL,
+  isRetryableUpdateError,
+  isVersionNewer,
+  selectAndroidApk,
+  type ReleaseAsset,
+} from "./src/update/githubRelease";
 
 type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "confirm" | "restore" | "trust";
@@ -177,6 +196,23 @@ const AppDialogContext = createContext<AppDialogContextValue | undefined>(
 );
 
 const endpointUrl = "https://app.ckbccc.com/khie";
+const currentAppVersion =
+  Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "unknown";
+const currentBuildVersion = Application.nativeBuildVersion;
+const configuredBuildCommit = Constants.expoConfig?.extra?.buildCommit;
+const currentBuildCommit =
+  typeof configuredBuildCommit === "string" ? configuredBuildCommit : "unknown";
+const runtimeGlobals = globalThis as typeof globalThis & {
+  HermesInternal?: unknown;
+  nativeFabricUIManager?: unknown;
+};
+const currentAppArchitecture = [
+  Device.supportedCpuArchitectures?.[0],
+  runtimeGlobals.nativeFabricUIManager ? "New Architecture" : "Legacy Architecture",
+  runtimeGlobals.HermesInternal ? "Hermes" : "JSC",
+]
+  .filter(Boolean)
+  .join(" · ");
 
 export default function App() {
   const systemColorScheme = useColorScheme();
@@ -248,6 +284,7 @@ function WalletApp({
     [],
   );
   const networkSettings = useMemo(() => new SecureStoreNetworkSettings(), []);
+  const updateSettingsStore = useMemo(() => new SecureStoreUpdateSettings(), []);
   const approvalQueue = useMemo(() => new ApprovalQueue(), []);
   const clients = useRef({
     mainnet: clientForNetwork("mainnet"),
@@ -257,6 +294,11 @@ function WalletApp({
   const sessionRef = useRef<KhieProviderSession | undefined>(undefined);
   const networkRef = useRef<Network>("testnet");
   const previousPaired = useRef(false);
+  const updateSettingsRef = useRef<UpdateSettings>(defaultUpdateSettings());
+  const updateCheckInFlight = useRef(false);
+  const checkForUpdatesRef = useRef<(automatic?: boolean) => Promise<void>>(
+    async () => undefined,
+  );
 
   const [loading, setLoading] = useState(true);
   const [walletState, setWalletState] = useState<WalletState>({ version: 3, wallets: [] });
@@ -291,6 +333,12 @@ function WalletApp({
     useState(false);
   const [khieNotificationPromptOpen, setKhieNotificationPromptOpen] =
     useState(false);
+  const [updateSettings, setUpdateSettings] = useState<UpdateSettings>(
+    defaultUpdateSettings,
+  );
+  const [updateSettingsLoaded, setUpdateSettingsLoaded] = useState(false);
+  const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+  const [focusAppInformation, setFocusAppInformation] = useState(false);
   const khieNotificationPromptDismissed = useRef(false);
 
   const requestTrustPin = useCallback<RequestTrustPin>(
@@ -466,9 +514,164 @@ function WalletApp({
       .finally(() => setLoading(false));
   }, [networkSettings, vault]);
 
+  useEffect(() => {
+    let active = true;
+    void updateSettingsStore
+      .load()
+      .then((settings) => {
+        if (!active) return;
+        updateSettingsRef.current = settings;
+        setUpdateSettings(settings);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setUpdateSettingsLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [updateSettingsStore]);
+
   const profile =
     walletState.wallets.find((wallet) => wallet.id === walletState.selectedWalletId) ??
     walletState.wallets[0];
+
+  const persistUpdateSettings = useCallback(
+    async (settings: UpdateSettings) => {
+      updateSettingsRef.current = settings;
+      setUpdateSettings(settings);
+      await updateSettingsStore.save(settings);
+    },
+    [updateSettingsStore],
+  );
+
+  const checkForUpdates = useCallback(
+    async (automatic = false) => {
+      if (updateCheckInFlight.current) return;
+      updateCheckInFlight.current = true;
+      setCheckingForUpdates(true);
+      const checkedAt = Date.now();
+
+      if (automatic) {
+        const attempted = {
+          ...updateSettingsRef.current,
+          lastAutomaticCheckAt: checkedAt,
+        };
+        updateSettingsRef.current = attempted;
+        setUpdateSettings(attempted);
+        await updateSettingsStore.save(attempted).catch(() => undefined);
+      }
+
+      try {
+        const release = await fetchLatestRelease();
+        await persistUpdateSettings({
+          ...updateSettingsRef.current,
+          latestRelease: release,
+          lastCheckedAt: checkedAt,
+          lastAutomaticCheckAt: checkedAt,
+        });
+        const available = isVersionNewer(release.version, currentAppVersion);
+        if (automatic && available && profile && screen !== "settings") {
+          appDialog.confirm({
+            title: t("updateAvailable"),
+            message: t("updateAvailableDescription", {
+              version: release.tagName,
+            }),
+            cancelLabel: t("later"),
+            confirmLabel: t("viewUpdate"),
+            onConfirm: () => {
+              setFocusAppInformation(true);
+              setScreen("settings");
+            },
+          });
+        } else if (!automatic) {
+          setNotice(
+            available
+              ? t("updateAvailableStatus", { version: release.tagName })
+              : t("appIsUpToDate"),
+          );
+        }
+      } catch (cause) {
+        if (!automatic) {
+          const retryable = isRetryableUpdateError(cause);
+          appDialog.confirm({
+            title: t("unableToCheckUpdates"),
+            message: retryable
+              ? t("updateNetworkError")
+              : t("updateReleaseError"),
+            cancelLabel: t("cancel"),
+            confirmLabel: retryable ? t("retry") : t("openGitHub"),
+            onConfirm: () => {
+              if (retryable) {
+                void checkForUpdatesRef.current(false);
+              } else {
+                void Linking.openURL(GITHUB_RELEASES_URL);
+              }
+            },
+          });
+        }
+      } finally {
+        updateCheckInFlight.current = false;
+        setCheckingForUpdates(false);
+      }
+    }, [appDialog, persistUpdateSettings, profile, screen, t, updateSettingsStore]);
+  checkForUpdatesRef.current = checkForUpdates;
+
+  useEffect(() => {
+    if (
+      loading ||
+      !profile ||
+      !updateSettingsLoaded ||
+      appState !== "active" ||
+      !shouldAutomaticallyCheckForUpdates(updateSettingsRef.current)
+    ) {
+      return;
+    }
+    void checkForUpdates(true);
+  }, [appState, checkForUpdates, loading, profile, updateSettingsLoaded]);
+
+  const changeAutomaticUpdateChecks = useCallback(
+    async (automaticChecks: boolean) => {
+      const next = { ...updateSettingsRef.current, automaticChecks };
+      await persistUpdateSettings(next);
+      if (shouldAutomaticallyCheckForUpdates(next)) {
+        void checkForUpdates(true);
+      }
+    },
+    [checkForUpdates, persistUpdateSettings],
+  );
+
+  const latestRelease = updateSettings.latestRelease;
+  const updateAvailable = Boolean(
+    latestRelease && isVersionNewer(latestRelease.version, currentAppVersion),
+  );
+  const updateAsset = latestRelease
+    ? selectAndroidApk(latestRelease, Device.supportedCpuArchitectures)
+    : undefined;
+
+  const downloadUpdate = useCallback(async () => {
+    if (!updateAsset) {
+      appDialog.confirm({
+        title: t("unableToDownloadUpdate"),
+        message: t("noCompatibleUpdate"),
+        cancelLabel: t("cancel"),
+        confirmLabel: t("openGitHub"),
+        onConfirm: () => void Linking.openURL(GITHUB_RELEASES_URL),
+      });
+      return;
+    }
+    try {
+      await Linking.openURL(updateAsset.downloadUrl);
+    } catch {
+      appDialog.confirm({
+        title: t("unableToDownloadUpdate"),
+        message: t("updateDownloadError"),
+        cancelLabel: t("cancel"),
+        confirmLabel: t("openGitHub"),
+        onConfirm: () => void Linking.openURL(GITHUB_RELEASES_URL),
+      });
+    }
+  }, [appDialog, t, updateAsset]);
 
   const releaseTrustConnection = useCallback(async () => {
     try {
@@ -1201,6 +1404,15 @@ function WalletApp({
             wallets={walletState.wallets}
             rpcUrls={rpcUrls}
             themePreference={themePreference}
+            updateSettings={updateSettings}
+            checkingForUpdates={checkingForUpdates}
+            currentVersion={currentAppVersion}
+            buildVersion={currentBuildVersion}
+            buildCommit={currentBuildCommit}
+            appArchitecture={currentAppArchitecture}
+            updateAvailable={updateAvailable}
+            updateAsset={updateAsset}
+            focusAppInformation={focusAppInformation}
             vault={vault}
             onChangeNetwork={changeNetwork}
             onSelectWallet={selectWallet}
@@ -1229,6 +1441,10 @@ function WalletApp({
               setNotice(t("rpcUrlsSaved"));
             }}
             onChangeThemePreference={onChangeThemePreference}
+            onChangeAutomaticUpdateChecks={changeAutomaticUpdateChecks}
+            onCheckForUpdates={() => checkForUpdates(false)}
+            onDownloadUpdate={downloadUpdate}
+            onAppInformationFocused={() => setFocusAppInformation(false)}
             onRecovered={(next) => {
               setWalletState(next);
               setNotice(t("walletKeyRecovered"));
@@ -2101,6 +2317,15 @@ function SettingsScreen({
   wallets,
   rpcUrls,
   themePreference,
+  updateSettings,
+  checkingForUpdates,
+  currentVersion,
+  buildVersion,
+  buildCommit,
+  appArchitecture,
+  updateAvailable,
+  updateAsset,
+  focusAppInformation,
   vault,
   onChangeNetwork,
   onSelectWallet,
@@ -2108,6 +2333,10 @@ function SettingsScreen({
   onRemoveWallet,
   onSaveRpcUrls,
   onChangeThemePreference,
+  onChangeAutomaticUpdateChecks,
+  onCheckForUpdates,
+  onDownloadUpdate,
+  onAppInformationFocused,
   onRecovered,
 }: {
   backend?: LocalMnemonicSigningBackend;
@@ -2116,6 +2345,15 @@ function SettingsScreen({
   wallets: WalletProfile[];
   rpcUrls: NetworkRpcUrls;
   themePreference: ThemePreference;
+  updateSettings: UpdateSettings;
+  checkingForUpdates: boolean;
+  currentVersion: string;
+  buildVersion: string | null;
+  buildCommit: string;
+  appArchitecture: string;
+  updateAvailable: boolean;
+  updateAsset?: ReleaseAsset;
+  focusAppInformation: boolean;
   vault: SecureStoreWalletVault;
   onChangeNetwork: (network: Network) => void;
   onSelectWallet: (walletId: string) => Promise<void>;
@@ -2123,10 +2361,15 @@ function SettingsScreen({
   onRemoveWallet: (walletId: string) => Promise<void>;
   onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>;
   onChangeThemePreference: (preference: ThemePreference) => Promise<void>;
+  onChangeAutomaticUpdateChecks: (enabled: boolean) => Promise<void>;
+  onCheckForUpdates: () => Promise<void> | void;
+  onDownloadUpdate: () => Promise<void>;
+  onAppInformationFocused: () => void;
   onRecovered: (state: WalletState) => void;
 }) {
   const { t } = useI18n();
   const appDialog = useAppDialog();
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const [secret, setSecret] = useState<{ label: string; value: string }>();
   const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
   const [savingRpcUrls, setSavingRpcUrls] = useState(false);
@@ -2134,6 +2377,14 @@ function SettingsScreen({
   const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
   const [recovering, setRecovering] = useState(false);
   const [walletAddresses, setWalletAddresses] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!focusAppInformation) return;
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+      onAppInformationFocused();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusAppInformation, onAppInformationFocused]);
   useEffect(() => setRpcDraft(rpcUrls), [rpcUrls]);
   useEffect(() => {
     let active = true;
@@ -2207,6 +2458,7 @@ function SettingsScreen({
   };
   return (
     <KeyboardAwareScrollView
+      ref={scrollRef}
       bottomOffset={16}
       contentContainerStyle={[styles.page, styles.settingsPage]}
       keyboardShouldPersistTaps="handled"
@@ -2442,7 +2694,142 @@ function SettingsScreen({
           ) : null}
         </PaperCard.Actions>
       </PaperCard> : null}
+      <PaperCard mode="elevated">
+        <PaperCard.Title
+          title={t("appInformation")}
+          left={(props) => <Icon {...props} source="information-outline" />}
+        />
+        <PaperCard.Content style={styles.cardContent}>
+          <List.Item
+            style={styles.appInformationLink}
+            title={t("githubRepository")}
+            description={GITHUB_REPOSITORY_URL}
+            descriptionNumberOfLines={1}
+            descriptionEllipsizeMode="middle"
+            left={(props) => <List.Icon {...props} icon="github" />}
+            right={(props) => <List.Icon {...props} icon="open-in-new" />}
+            onPress={() => void Linking.openURL(GITHUB_REPOSITORY_URL)}
+          />
+          <Divider />
+          <AppInformationRow
+            label={t("currentVersion")}
+            value={
+              buildVersion
+                ? `${currentVersion} (${buildVersion})`
+                : currentVersion
+            }
+          />
+          <AppInformationRow
+            label={t("latestVersion")}
+            value={
+              checkingForUpdates
+                ? t("checkingForUpdates")
+                : updateSettings.latestRelease?.tagName ?? t("notChecked")
+            }
+          />
+          <AppInformationRow
+            label={t("buildCommit")}
+            value={buildCommit}
+            mono
+          />
+          <AppInformationRow
+            label={t("appArchitecture")}
+            value={appArchitecture || t("unknown")}
+          />
+          <AppInformationRow
+            label={t("lastChecked")}
+            value={
+              updateSettings.lastCheckedAt
+                ? new Date(updateSettings.lastCheckedAt).toLocaleString()
+                : t("notChecked")
+            }
+          />
+          {updateSettings.latestRelease ? (
+            <View style={styles.updateStatus}>
+              <Icon
+                source={updateAvailable ? "arrow-up-circle-outline" : "check-circle-outline"}
+                size={20}
+              />
+              <Text variant="bodyMedium" style={styles.updateStatusText}>
+                {updateAvailable
+                  ? t("updateAvailableStatus", {
+                      version: updateSettings.latestRelease.tagName,
+                    })
+                  : t("appIsUpToDate")}
+              </Text>
+            </View>
+          ) : null}
+          {updateAvailable && updateAsset ? (
+            <Text variant="bodySmall" selectable style={styles.mono}>
+              {updateAsset.name}
+            </Text>
+          ) : null}
+          <Divider />
+          <List.Item
+            style={styles.appInformationSwitch}
+            title={t("automaticUpdateChecks")}
+            description={t("automaticUpdateChecksDescription")}
+            descriptionNumberOfLines={3}
+            right={() => (
+              <View pointerEvents="none">
+                <Switch value={updateSettings.automaticChecks} />
+              </View>
+            )}
+            onPress={() => {
+              void onChangeAutomaticUpdateChecks(
+                !updateSettings.automaticChecks,
+              ).catch((cause) =>
+                appDialog.show(t("unableToSave"), errorMessage(cause, t)),
+              );
+            }}
+          />
+        </PaperCard.Content>
+        <PaperCard.Actions style={styles.cardActions}>
+          <PaperButton
+            mode="text"
+            icon="refresh"
+            loading={checkingForUpdates}
+            disabled={checkingForUpdates}
+            onPress={() => void onCheckForUpdates()}
+          >
+            {t("checkForUpdates")}
+          </PaperButton>
+          <PaperButton
+            mode="contained"
+            icon="download"
+            disabled={!updateAvailable}
+            onPress={() => void onDownloadUpdate()}
+          >
+            {t("downloadUpdate")}
+          </PaperButton>
+        </PaperCard.Actions>
+      </PaperCard>
     </KeyboardAwareScrollView>
+  );
+}
+
+function AppInformationRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <View style={styles.appInformationRow}>
+      <Text variant="labelMedium" style={styles.appInformationLabel}>
+        {label}
+      </Text>
+      <Text
+        variant="bodyMedium"
+        selectable
+        style={[styles.appInformationValue, mono && styles.mono]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -3535,6 +3922,17 @@ const styles = StyleSheet.create({
   walletMenu: { alignSelf: "center" },
   extraHorizontalButtonPadding: { paddingHorizontal: 8 },
   metadataBlock: { gap: 4 },
+  appInformationLink: { paddingHorizontal: 0 },
+  appInformationSwitch: { paddingHorizontal: 0 },
+  appInformationRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 16,
+  },
+  appInformationLabel: { width: 112 },
+  appInformationValue: { flex: 1, minWidth: 0, textAlign: "right" },
+  updateStatus: { flexDirection: "row", alignItems: "center", gap: 8 },
+  updateStatusText: { flex: 1, minWidth: 0 },
   mono: { fontFamily: "monospace" },
   mnemonicInput: { minHeight: 144, textAlignVertical: "top" },
   words: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
