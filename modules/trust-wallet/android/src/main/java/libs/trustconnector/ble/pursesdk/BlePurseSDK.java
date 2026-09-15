@@ -3,15 +3,14 @@ package libs.trustconnector.ble.pursesdk;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import expo.modules.trustwallet.TrustDes;
-import libs.general.bluetooth.le.BluetoothDeviceWrapper;
 import libs.general.bluetooth.le.GattError;
-import libs.general.bluetooth.le.RfcommGatt;
+import expo.modules.trustwallet.TrustBleManager;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 
 public class BlePurseSDK {
     private static final String TAG = "BlePurseSDK";
-    private static RfcommGatt gatt;
+    private static TrustBleManager gatt;
     private static int time = 25000;
     private static byte[] response;
     private static String errMsg = "";
@@ -40,12 +39,10 @@ public class BlePurseSDK {
     public static boolean connectPeripheral(Context context, BluetoothDevice device) {
         if (BleCommand.MACkey != null && BleCommand.ENCkey != null && BleCommand.DECkey != null) {
             isConnetSucess = false;
-            gatt = (new BluetoothDeviceWrapper(device)).createRfcommGatt(context);
-            gatt.setRecvTimeout(time);
-            RfcommGatt.CONNECTION_PARAM_UPDATE_REQ_DELAY = 500;
+            gatt = new TrustBleManager(context);
 
             try {
-                int retCode = gatt.connect(time);
+                int retCode = gatt.open(device, time);
                 if (retCode == 0) {
                     response = gatt.transmit(BleCommand.connetCommand, time);
                     String result = HexString.toHexString(response);
@@ -96,7 +93,7 @@ public class BlePurseSDK {
         }
     }
 
-    private static boolean checkBle(RfcommGatt gatt, byte[] checkCode) throws Exception {
+    private static boolean checkBle(TrustBleManager gatt, byte[] checkCode) throws Exception {
         byte[] KeyDiversificationData = Utils.addBytes(response, 0, 10);
         byte[] KeyVer = Utils.addBytes(response, 10, 1);
         byte[] SCPI = Utils.addBytes(response, 11, 1);

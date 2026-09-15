@@ -13,3 +13,8 @@ android {
     versionName '0.1.0'
   }
 }
+
+dependencies {
+  // Own the GATT operation queue instead of coordinating callbacks with wait/notify.
+  implementation 'no.nordicsemi.android:ble:2.11.0'
+}
