@@ -508,9 +508,6 @@ function WalletApp({
     () =>
       approvalQueue.subscribe((item) => {
         setApproval(item);
-        if (item) {
-          setScreen("khie");
-        }
       }),
     [approvalQueue],
   );
