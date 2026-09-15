@@ -2368,6 +2368,7 @@ function KhieScreen({
     undefined,
   );
   const approvalScrolledId = useRef<number | undefined>(undefined);
+  const khieContentOffsetY = useRef(0);
   const [relayAddress, setRelayAddress] = useState(state.relayAddress);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const qrSize = Math.max(180, Math.min(420, width - 64));
@@ -2387,7 +2388,7 @@ function KhieScreen({
       const { y } = event.nativeEvent.layout;
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({
-          y,
+          y: khieContentOffsetY.current + y,
           animated: true,
         });
       });
@@ -2451,7 +2452,12 @@ function KhieScreen({
           <PaperButton mode="text" onPress={onCancelPairing}>{t("cancel")}</PaperButton>
         </View>
       ) : state.paired ? (
-        <View style={styles.khieContent}>
+        <View
+          style={styles.khieContent}
+          onLayout={(event) => {
+            khieContentOffsetY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View style={styles.peerOverview}>
             {state.remotePeer ? (
               <>

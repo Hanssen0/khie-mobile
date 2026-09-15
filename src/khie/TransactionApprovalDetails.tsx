@@ -2,6 +2,8 @@ import {
   Address,
   Cell,
   Zero,
+  bytesFrom,
+  fixedPointFrom,
   fixedPointToString,
   numFrom,
   type CellOutput,
@@ -16,8 +18,8 @@ import {
   ActivityIndicator,
   Divider,
   Icon,
-  List,
   Text,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 
@@ -91,7 +93,7 @@ export function TransactionApprovalDetails({
             cellOutput: cell?.cellOutput,
             extraCapacity,
             key: reference,
-            label: t("inputNumber", { number: index + 1 }),
+            label: t("inputNumber", { number: index }),
             outputData: cell?.outputData,
             reference,
           };
@@ -130,7 +132,7 @@ export function TransactionApprovalDetails({
   const outputs = transaction.outputs.map((cellOutput, index) => ({
     cellOutput,
     key: `output-${index}`,
-    label: t("outputNumber", { number: index + 1 }),
+    label: t("outputNumber", { number: index }),
     outputData: transaction.outputsData[index] ?? "0x",
   }));
 
@@ -199,23 +201,12 @@ function TransactionCellGroup({
   title: string;
   t: Translate;
 }) {
-  const totalCapacity =
-    cells?.reduce(
-      (total, cell) => total + transactionCellCapacity(cell),
-      Zero,
-    ) ?? Zero;
-
   return (
     <View style={styles.cellGroup}>
       <View style={styles.cellGroupHeading}>
         <Text variant="titleMedium">{title}</Text>
         <Text variant="labelLarge">
-          {cells
-            ? t("cellGroupSummary", {
-                count: cells.length,
-                capacity: fixedPointToString(totalCapacity),
-              })
-            : t("itemCount", { count: loadingCount })}
+          {cells?.length ?? loadingCount}
         </Text>
       </View>
       <Divider />
@@ -250,6 +241,7 @@ function TransactionCellItem({
   t: Translate;
 }) {
   const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
 
   if (!cell.cellOutput) {
     return (
@@ -267,64 +259,89 @@ function TransactionCellItem({
 
   const lockAddress = Address.fromScript(cell.cellOutput.lock, client).toString();
   const capacity = transactionCellCapacity(cell);
+  const freeCapacityShare = transactionCellFreeCapacityShare(cell);
+  const capacityBarWidth = `${freeCapacityShare}%` as `${number}%`;
 
   return (
-    <List.Accordion
-      title={cell.label}
-      description={lockAddress}
-      descriptionNumberOfLines={1}
-      titleStyle={styles.cellTitle}
-      descriptionStyle={styles.mono}
-      contentStyle={styles.cellAccordionContent}
-      right={({ isExpanded }) => (
-        <View style={styles.cellRight}>
-          <Text
-            variant="labelLarge"
-            numberOfLines={2}
-            style={styles.capacity}
-          >
-            {fixedPointToString(capacity)} CKB
-          </Text>
+    <View>
+      <TouchableRipple
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((value) => !value)}
+      >
+        <View style={styles.cellHeader}>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.capacityBar,
+              {
+                backgroundColor: theme.colors.secondaryContainer,
+                width: capacityBarWidth,
+              },
+            ]}
+          />
+          <View style={styles.cellContent}>
+            <View style={styles.cellTitleRow}>
+              <Text
+                variant="titleSmall"
+                numberOfLines={1}
+                style={styles.cellTitle}
+              >
+                {cell.label}
+              </Text>
+              <Text
+                variant="labelLarge"
+                numberOfLines={1}
+                style={styles.capacity}
+              >
+                {fixedPointToString(capacity)} CKB
+              </Text>
+            </View>
+            <Text variant="bodyMedium" numberOfLines={1} style={styles.mono}>
+              {lockAddress}
+            </Text>
+          </View>
           <Icon
-            source={isExpanded ? "chevron-up" : "chevron-down"}
+            source={expanded ? "chevron-up" : "chevron-down"}
             size={24}
             color={theme.colors.onSurfaceVariant}
           />
         </View>
-      )}
-    >
-      <View
-        style={[
-          styles.expandedCell,
-          { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-      >
-        {cell.extraCapacity && cell.extraCapacity > Zero ? (
-          <TransactionCellField
-            label={t("daoCompensation")}
-            value={`${fixedPointToString(cell.extraCapacity)} CKB`}
+      </TouchableRipple>
+      {expanded ? (
+        <View
+          style={[
+            styles.expandedCell,
+            { backgroundColor: theme.colors.surfaceVariant },
+          ]}
+        >
+          {cell.extraCapacity && cell.extraCapacity > Zero ? (
+            <TransactionCellField
+              label={t("daoCompensation")}
+              value={`${fixedPointToString(cell.extraCapacity)} CKB`}
+            />
+          ) : null}
+          {cell.reference ? (
+            <TransactionCellField label={t("outpoint")} value={cell.reference} />
+          ) : null}
+          <TransactionScriptDetails
+            address={lockAddress}
+            label={t("lockScript")}
+            script={cell.cellOutput.lock}
+            t={t}
           />
-        ) : null}
-        {cell.reference ? (
-          <TransactionCellField label={t("outpoint")} value={cell.reference} />
-        ) : null}
-        <TransactionScriptDetails
-          address={lockAddress}
-          label={t("lockScript")}
-          script={cell.cellOutput.lock}
-          t={t}
-        />
-        <TransactionScriptDetails
-          label={t("typeScript")}
-          script={cell.cellOutput.type}
-          t={t}
-        />
-        <TransactionCellField
-          label={t("data")}
-          value={cell.outputData ?? "0x"}
-        />
-      </View>
-    </List.Accordion>
+          <TransactionScriptDetails
+            label={t("typeScript")}
+            script={cell.cellOutput.type}
+            t={t}
+          />
+          <TransactionCellField
+            label={t("data")}
+            value={cell.outputData ?? "0x"}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -371,6 +388,27 @@ export function transactionCellCapacity(cell: TransactionCellView): Num {
   return (cell.cellOutput?.capacity ?? Zero) + (cell.extraCapacity ?? Zero);
 }
 
+export function transactionCellFreeCapacityShare(
+  cell: TransactionCellView,
+): number {
+  const cellOutput = cell.cellOutput;
+  if (!cellOutput || cellOutput.capacity <= Zero) {
+    return 0;
+  }
+
+  const occupiedCapacity = fixedPointFrom(
+    cellOutput.occupiedSize + bytesFrom(cell.outputData ?? "0x").byteLength,
+  );
+  const freeCapacity =
+    cellOutput.capacity > occupiedCapacity
+      ? cellOutput.capacity - occupiedCapacity
+      : Zero;
+
+  return Number(
+    (freeCapacity * numFrom(1000)) / cellOutput.capacity,
+  ) / 10;
+}
+
 export function transactionFeeRate(transaction: Transaction, fee: Num): Num {
   return (fee * numFrom(1000)) / numFrom(transaction.toBytes().length + 4);
 }
@@ -403,16 +441,25 @@ const styles = StyleSheet.create({
   },
   statusText: { paddingHorizontal: 16, paddingVertical: 18 },
   unavailableCell: { gap: 4, paddingHorizontal: 16, paddingVertical: 14 },
-  cellAccordionContent: { paddingLeft: 0 },
-  cellTitle: { fontWeight: "600" },
-  cellRight: {
-    maxWidth: "48%",
+  cellHeader: {
+    position: "relative",
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 4,
+    gap: 8,
+    paddingVertical: 14,
   },
-  capacity: { flexShrink: 1, textAlign: "right" },
+  capacityBar: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    opacity: 0.45,
+  },
+  cellContent: { flex: 1, minWidth: 0, gap: 4 },
+  cellTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  cellTitle: { flexShrink: 1, fontWeight: "600" },
+  capacity: { marginLeft: "auto", flexShrink: 1, textAlign: "right" },
   expandedCell: { gap: 16, paddingHorizontal: 16, paddingVertical: 16 },
   scriptDetails: { gap: 10 },
 });
