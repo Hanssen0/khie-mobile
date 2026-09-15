@@ -49,7 +49,6 @@
     "expo-status-bar": "57.0.1",
     "expo-system-ui": "~57.0.4",
     "fflate": "0.8.2",
-    "ieee754": "^1.2.1",
     "it-length-prefixed": "11.0.1",
     "libp2p": "3.3.11",
     "process": "0.11.10",

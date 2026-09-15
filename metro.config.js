@@ -36,14 +36,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === "node:process") {
     return context.resolveRequest(context, "process/browser", platform);
   }
-  if (moduleName === "ieee754") {
-    return context.resolveRequest(
-      context,
-      path.join(__dirname, "node_modules/ieee754"),
-      platform,
-    );
-  }
-
   if (moduleName.startsWith(".")) {
     const target = path.resolve(path.dirname(context.originModulePath), moduleName);
     for (const [sourceSuffix, replacementSuffix] of platformFiles) {
