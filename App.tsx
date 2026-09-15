@@ -1342,6 +1342,7 @@ function WalletApp({
                 );
                 setTrustPinRequest(undefined);
                 setTrustPin("");
+                void KeyboardController.dismiss({ animated: false });
               }}
             >
               {t("cancel")}
@@ -1400,7 +1401,10 @@ function WalletApp({
             <PaperButton
               contentStyle={styles.extraHorizontalButtonPadding}
               disabled={resettingTrustPin}
-              onPress={() => setTrustPinResetOpen(false)}
+              onPress={() => {
+                setTrustPinResetOpen(false);
+                void KeyboardController.dismiss({ animated: false });
+              }}
             >
               {t("cancel")}
             </PaperButton>
