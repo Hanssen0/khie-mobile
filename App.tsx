@@ -2539,11 +2539,6 @@ function KhieScreen({
           </View>
           {state.error ? (
             <View
-              onLayout={() => {
-                requestAnimationFrame(() => {
-                  scrollRef.current?.scrollToEnd({ animated: true });
-                });
-              }}
               style={[
                 styles.khieErrorNotice,
                 { backgroundColor: theme.colors.surfaceVariant },
