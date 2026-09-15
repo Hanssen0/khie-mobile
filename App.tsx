@@ -553,16 +553,26 @@ function HomeScreen({
         <View style={styles.balanceValue}>
           <View style={styles.balanceIntegerRow}>
             <View style={styles.balanceActionSpacer} />
-            <Text
-              variant="displayMedium"
-              numberOfLines={1}
-              style={[
-                styles.balanceInteger,
-                { fontSize: integerFontSize, lineHeight: Math.round(integerFontSize * 1.16) },
-              ]}
-            >
-              {integerBalance}
-            </Text>
+            <View style={styles.balanceNumber}>
+              <Text
+                variant="displayMedium"
+                numberOfLines={1}
+                style={[
+                  styles.balanceInteger,
+                  { fontSize: integerFontSize, lineHeight: Math.round(integerFontSize * 1.16) },
+                ]}
+              >
+                {integerBalance}
+              </Text>
+              {fractionalBalance ? (
+                <Text
+                  variant="titleLarge"
+                  style={[styles.balanceFraction, { color: theme.colors.onSurfaceVariant }]}
+                >
+                  {fractionalBalance}
+                </Text>
+              ) : null}
+            </View>
             <IconButton
               icon="refresh"
               loading={refreshing}
@@ -572,14 +582,6 @@ function HomeScreen({
               onPress={() => void refresh()}
             />
           </View>
-          {fractionalBalance ? (
-            <Text
-              variant="titleLarge"
-              style={[styles.balanceFraction, { color: theme.colors.onSurfaceVariant }]}
-            >
-              {fractionalBalance}
-            </Text>
-          ) : null}
         </View>
         <Text variant="titleMedium">CKB</Text>
       </View>
@@ -1348,7 +1350,15 @@ const styles = StyleSheet.create({
   balanceValue: { width: "100%", alignItems: "center" },
   balanceIntegerRow: { width: "100%", flexDirection: "row", alignItems: "center" },
   balanceActionSpacer: { width: 48 },
-  balanceInteger: { flex: 1, minWidth: 0, textAlign: "center", fontVariant: ["tabular-nums"] },
+  balanceNumber: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "baseline",
+  },
+  balanceInteger: { textAlign: "center", fontVariant: ["tabular-nums"] },
   balanceRefresh: { width: 48, margin: 0 },
   balanceFraction: { textAlign: "center", fontVariant: ["tabular-nums"] },
   cardContent: { gap: 12 },
