@@ -585,7 +585,7 @@ function HomeScreen({
         </View>
         <Text variant="titleMedium">CKB</Text>
       </View>
-      <PaperCard mode="outlined">
+      <PaperCard mode="elevated">
         <PaperCard.Title title={t("walletAddress")} left={(props) => <Icon {...props} source="identifier" />} />
         <PaperCard.Content>
           <Text variant="bodyMedium" selectable style={styles.mono}>{address}</Text>
@@ -793,7 +793,7 @@ function KhieScreen({
                 onSubmitEditing={() => void onConnectRelay(relayAddress)}
               />
               <PaperButton
-                mode="outlined"
+                mode="contained-tonal"
                 icon="connection"
                 loading={state.relayConnecting}
                 disabled={state.relayConnecting || !state.ready || !relayAddress.trim()}
@@ -910,13 +910,13 @@ function SettingsScreen({
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text variant="headlineMedium">{t("settingsAndExport")}</Text>
-      <PaperCard mode="outlined">
+      <PaperCard mode="elevated">
         <PaperCard.Title title={t("language")} left={(props) => <Icon {...props} source="translate" />} />
         <PaperCard.Content>
           <LanguageMenu />
         </PaperCard.Content>
       </PaperCard>
-      <PaperCard mode="outlined">
+      <PaperCard mode="elevated">
         <PaperCard.Title
           title={t("networkRpc")}
           left={(props) => <Icon {...props} source="server-network" />}
@@ -949,6 +949,7 @@ function SettingsScreen({
         </PaperCard.Content>
         <PaperCard.Actions>
           <PaperButton
+            mode="text"
             disabled={savingRpcUrls}
             onPress={() => void applyRpcUrls({ ...DEFAULT_NETWORK_RPC_URLS })}
           >
@@ -966,7 +967,7 @@ function SettingsScreen({
           </PaperButton>
         </PaperCard.Actions>
       </PaperCard>
-      <PaperCard mode="outlined">
+      <PaperCard mode="elevated">
         <PaperCard.Title title={t("accountInformation")} left={(props) => <Icon {...props} source="account-key" />} />
         <PaperCard.Content style={styles.cardContent}>
           <View style={styles.metadataBlock}>
@@ -980,7 +981,7 @@ function SettingsScreen({
           </View>
         </PaperCard.Content>
         <PaperCard.Actions>
-          <PaperButton icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
+          <PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton>
           <PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton>
         </PaperCard.Actions>
       </PaperCard>
@@ -991,14 +992,14 @@ function SettingsScreen({
             <Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text>
           </PaperCard.Content>
           <PaperCard.Actions>
-            <PaperButton icon="eye-off" onPress={() => setSecret(undefined)}>{t("hide")}</PaperButton>
+            <PaperButton mode="text" icon="eye-off" onPress={() => setSecret(undefined)}>{t("hide")}</PaperButton>
           </PaperCard.Actions>
         </PaperCard>
       ) : null}
       <HelperText type="error" visible>
         {t("exportWarning")}
       </HelperText>
-      <PaperCard mode="outlined">
+      <PaperCard mode="elevated">
         <PaperCard.Title
           title={t("keyRecovery")}
           left={(props) => <Icon {...props} source="backup-restore" />}
@@ -1021,6 +1022,7 @@ function SettingsScreen({
         </PaperCard.Content>
         <PaperCard.Actions>
           <PaperButton
+            mode="text"
             icon={showRecovery ? "close" : "key-variant"}
             onPress={() => {
               setShowRecovery((value) => !value);
@@ -1219,7 +1221,7 @@ function LanguageMenu() {
       visible={visible}
       onDismiss={() => setVisible(false)}
       anchor={
-        <PaperButton mode="outlined" icon="translate" onPress={() => setVisible(true)}>
+        <PaperButton mode="contained-tonal" icon="translate" onPress={() => setVisible(true)}>
           {languageLabel(preference, t)}
         </PaperButton>
       }
