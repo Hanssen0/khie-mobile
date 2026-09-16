@@ -1,7 +1,6 @@
-import {
-  bytesConcat,
-  type Bytes,
-} from "@ckb-ccc/core";
+import { gcm } from "@noble/ciphers/aes.js";
+import { bytesFrom, hexFrom, type BytesLike } from "@ckb-ccc/core";
+import * as Crypto from "expo-crypto";
 import {
   entropyToMnemonic,
   mnemonicToEntropy,
@@ -9,53 +8,71 @@ import {
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
 import { assertValidMnemonic } from "./derivation";
-import { decryptKeystore, encryptKeystore } from "./keystore";
-
-const PAYLOAD_LENGTH = 64;
+const MASTER_KEY_LENGTH = 32;
+const NONCE_LENGTH = 12;
 const HEADER = Uint8Array.from([0x4b, 0x48, 0x49, 0x45, 0x01]);
 const ENTROPY_LENGTH_OFFSET = HEADER.length;
 const ENTROPY_OFFSET = ENTROPY_LENGTH_OFFSET + 1;
 
+type SerializedMnemonicKeystore = {
+  version: 1;
+  cipher: "aes-256-gcm";
+  ciphertext: string;
+  nonce: string;
+};
+
 export async function encryptMnemonicKeystore(
   mnemonicValue: string,
-  passwordCredential: string,
+  masterKeyLike: BytesLike,
+  walletId: string,
 ): Promise<string> {
   const mnemonic = assertValidMnemonic(mnemonicValue);
   const entropy = mnemonicToEntropy(mnemonic, wordlist);
-  const payload = new Uint8Array(PAYLOAD_LENGTH);
+  const payload = new Uint8Array(ENTROPY_OFFSET + entropy.length);
   payload.set(HEADER);
   payload[ENTROPY_LENGTH_OFFSET] = entropy.length;
   payload.set(entropy, ENTROPY_OFFSET);
+  const masterKey = bytesFrom(masterKeyLike);
+  const nonce = await Crypto.getRandomBytesAsync(NONCE_LENGTH);
+  if (masterKey.length !== MASTER_KEY_LENGTH) {
+    throw new Error("Invalid wallet master key");
+  }
 
   try {
-    return JSON.stringify(
-      await encryptKeystore(
-        payload.subarray(0, 32),
-        payload.subarray(32),
-        passwordCredential,
-      ),
-    );
+    const ciphertext = gcm(masterKey, nonce, mnemonicAad(walletId)).encrypt(payload);
+    const keystore: SerializedMnemonicKeystore = {
+      version: 1,
+      cipher: "aes-256-gcm",
+      ciphertext: hexFrom(ciphertext).slice(2),
+      nonce: hexFrom(nonce).slice(2),
+    };
+    return JSON.stringify(keystore);
   } finally {
     entropy.fill(0);
     payload.fill(0);
+    nonce.fill(0);
   }
 }
 
 export async function decryptMnemonicKeystore(
   serializedKeystore: string,
-  passwordCredential: string,
+  masterKeyLike: BytesLike,
+  walletId: string,
 ): Promise<string> {
-  let privateKey: Bytes | undefined;
-  let chainCode: Bytes | undefined;
-  let payload: Bytes | undefined;
+  const masterKey = bytesFrom(masterKeyLike);
+  let payload: Uint8Array | undefined;
+  let ciphertext: Uint8Array | undefined;
+  let nonce: Uint8Array | undefined;
   try {
-    ({ privateKey, chainCode } = await decryptKeystore(
-      JSON.parse(serializedKeystore),
-      passwordCredential,
-    ));
-    payload = bytesConcat(privateKey, chainCode);
+    if (masterKey.length !== MASTER_KEY_LENGTH) {
+      throw new Error("Invalid wallet master key");
+    }
+    const keystore = parseMnemonicKeystore(JSON.parse(serializedKeystore));
+    ciphertext = bytesFrom(`0x${keystore.ciphertext}`);
+    nonce = bytesFrom(`0x${keystore.nonce}`);
+    payload = gcm(masterKey, nonce, mnemonicAad(walletId)).decrypt(ciphertext);
     if (
-      payload.length !== PAYLOAD_LENGTH ||
+      (payload.length !== ENTROPY_OFFSET + 16 && payload.length !== ENTROPY_OFFSET + 32) ||
       !HEADER.every((value, index) => payload?.[index] === value)
     ) {
       throw new Error("Invalid mnemonic keystore");
@@ -71,13 +88,32 @@ export async function decryptMnemonicKeystore(
       entropy.fill(0);
     }
   } catch (cause) {
-    if (cause instanceof SyntaxError) {
-      throw new Error("Invalid mnemonic keystore", { cause });
-    }
-    throw cause;
+    throw new Error("Invalid mnemonic keystore", { cause });
   } finally {
-    privateKey?.fill(0);
-    chainCode?.fill(0);
     payload?.fill(0);
+    ciphertext?.fill(0);
+    nonce?.fill(0);
   }
+}
+
+function mnemonicAad(walletId: string): Uint8Array {
+  return bytesFrom(`khie.wallet.mnemonic.v1:${walletId}`, "utf8");
+}
+
+function parseMnemonicKeystore(value: unknown): SerializedMnemonicKeystore {
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid mnemonic keystore");
+  }
+  const keystore = value as Partial<SerializedMnemonicKeystore>;
+  if (
+    keystore.version !== 1 ||
+    keystore.cipher !== "aes-256-gcm" ||
+    typeof keystore.ciphertext !== "string" ||
+    !/^(?:[0-9a-f]{76}|[0-9a-f]{108})$/i.test(keystore.ciphertext) ||
+    typeof keystore.nonce !== "string" ||
+    !/^[0-9a-f]{24}$/i.test(keystore.nonce)
+  ) {
+    throw new Error("Invalid mnemonic keystore");
+  }
+  return keystore as SerializedMnemonicKeystore;
 }

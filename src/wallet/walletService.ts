@@ -1,11 +1,8 @@
 import * as Crypto from "expo-crypto";
 
-import type { WalletVault } from "../storage/walletVault";
+import type { WalletCredential, WalletVault } from "../storage/walletVault";
 import { assertValidMnemonic, deriveAccount, mnemonicFromEntropy } from "./derivation";
-import {
-  assertWalletPassword,
-  deriveWalletPasswordCredential,
-} from "./password";
+import { assertWalletPassword } from "./password";
 import type { WalletState } from "./types";
 
 export async function generateMnemonic(): Promise<string> {
@@ -15,12 +12,12 @@ export async function generateMnemonic(): Promise<string> {
 export async function persistWallet(
   vault: WalletVault,
   mnemonicValue: string,
-  passwordCredential: string,
+  credential: WalletCredential,
 ): Promise<WalletState> {
   const mnemonic = assertValidMnemonic(mnemonicValue);
   const { account, privateKey } = deriveAccount(mnemonic);
   privateKey.fill(0);
-  return vault.save(account, mnemonic, passwordCredential);
+  return vault.save(account, mnemonic, credential);
 }
 
 export async function persistFirstMnemonicWallet(
@@ -31,8 +28,12 @@ export async function persistFirstMnemonicWallet(
 ): Promise<WalletState> {
   const mnemonic = assertValidMnemonic(mnemonicValue);
   const password = assertWalletPassword(passwordValue);
-  const passwordCredential = await deriveWalletPasswordCredential(password);
   const { account, privateKey } = deriveAccount(mnemonic);
   privateKey.fill(0);
-  return vault.save(account, mnemonic, passwordCredential, { biometricUnlock });
+  return vault.save(
+    account,
+    mnemonic,
+    { kind: "password", value: password },
+    { biometricUnlock },
+  );
 }

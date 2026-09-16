@@ -8,30 +8,52 @@ const secureStore = vi.hoisted(() => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "WHEN_UNLOCKED_THIS_DEVICE_ONLY",
 }));
 
-const mnemonicKeystore = vi.hoisted(() => ({
-  encryptMnemonicKeystore: vi.fn(async (mnemonic: string, credential: string) =>
-    JSON.stringify({ credential, mnemonic }),
-  ),
-  decryptMnemonicKeystore: vi.fn(async (serialized: string, credential: string) => {
-    const value = JSON.parse(serialized) as { credential: string; mnemonic: string };
+const masterKey = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
+const masterKeyHex = `0x${Array.from(masterKey, (value) =>
+  value.toString(16).padStart(2, "0"),
+).join("")}`;
+
+const masterKeyEnvelope = vi.hoisted(() => ({
+  decryptMasterKey: vi.fn(async (serialized: string, credential: string) => {
+    const value = JSON.parse(serialized) as {
+      credential: string;
+      masterKey: number[];
+    };
     if (value.credential !== credential) throw new Error("Invalid password");
-    return value.mnemonic;
+    return Uint8Array.from(value.masterKey);
   }),
+  encryptMasterKey: vi.fn(async (key: Uint8Array, credential: string) =>
+    JSON.stringify({ credential, masterKey: Array.from(key) }),
+  ),
+  generateMasterKey: vi.fn(async () => Uint8Array.from(masterKey)),
 }));
 
-const masterPasswordVerifier = vi.hoisted(() => ({
-  createMasterPasswordVerifier: vi.fn(async (credential: string) =>
-    JSON.stringify({ credential }),
+const mnemonicKeystore = vi.hoisted(() => ({
+  encryptMnemonicKeystore: vi.fn(
+    async (mnemonic: string, key: Uint8Array, walletId: string) =>
+      JSON.stringify({ key: Array.from(key), mnemonic, walletId }),
   ),
-  verifyMasterPasswordCredential: vi.fn(
-    async (serialized: string, credential: string) =>
-      (JSON.parse(serialized) as { credential: string }).credential === credential,
+  decryptMnemonicKeystore: vi.fn(
+    async (serialized: string, key: Uint8Array, walletId: string) => {
+      const value = JSON.parse(serialized) as {
+        key: number[];
+        mnemonic: string;
+        walletId: string;
+      };
+      if (
+        value.walletId !== walletId ||
+        value.key.join(",") !== Array.from(key).join(",")
+      ) {
+        throw new Error("Invalid mnemonic keystore");
+      }
+      return value.mnemonic;
+    },
   ),
 }));
 
 vi.mock("expo-secure-store", () => secureStore);
+vi.mock("../wallet/masterKeyEnvelope", () => masterKeyEnvelope);
 vi.mock("../wallet/mnemonicKeystore", () => mnemonicKeystore);
-vi.mock("../wallet/masterPasswordVerifier", () => masterPasswordVerifier);
 
 import { CKB_DERIVATION_PATH } from "../wallet/types";
 import {
@@ -44,10 +66,18 @@ const publicKey =
   "0x0371e69290d7de7de8f8c3619f300ad27fdb96f4aa903e81e0d75a8dfcfaf285b4";
 const secondPublicKey = `0x02${"11".repeat(32)}`;
 const walletId = publicKey.slice(2);
-const stateKey = "khie.wallet.state.v4";
-const keystoreKey = `khie.wallet.keystore.v4.${walletId}`;
-const biometricKey = "khie.wallet.master.biometric.v4";
-const verifierKey = "khie.wallet.master.verifier.v4";
+const stateKey = "khie.wallet.state.v5";
+const keystoreKey = `khie.wallet.keystore.v5.${walletId}`;
+const biometricKey = "khie.wallet.master.biometric.v5";
+const envelopeKey = "khie.wallet.master-key.v5";
+const passwordCredential = (value: string) => ({
+  kind: "password" as const,
+  value,
+});
+const biometricCredential = () => ({
+  kind: "masterKey" as const,
+  value: masterKeyHex,
+});
 
 describe("SecureStoreWalletVault", () => {
   const values = new Map<string, string>();
@@ -67,80 +97,100 @@ describe("SecureStoreWalletVault", () => {
     });
   });
 
-  it("stores an encrypted mnemonic and optional biometric credential", async () => {
+  it("creates one master key and stores its biometric copy", async () => {
     const prompt = vi.fn(() => "Authenticate");
     const vault = new SecureStoreWalletVault(prompt);
-    await vault.save(account(publicKey), "first mnemonic", "credential-1", {
-      biometricUnlock: true,
-    });
+    await vault.save(
+      account(publicKey),
+      "first mnemonic",
+      passwordCredential("credential-1"),
+      { biometricUnlock: true },
+    );
 
+    expect(masterKeyEnvelope.encryptMasterKey).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      "credential-1",
+    );
     expect(mnemonicKeystore.encryptMnemonicKeystore).toHaveBeenCalledWith(
       "first mnemonic",
-      "credential-1",
+      expect.any(Uint8Array),
+      walletId,
     );
-    expect(await vault.readMnemonic(walletId, "credential-1")).toBe("first mnemonic");
-    expect(await vault.readBiometricCredential("signMessage")).toBe(
-      "credential-1",
+    expect(
+      await vault.readMnemonic(walletId, passwordCredential("credential-1")),
+    ).toBe("first mnemonic");
+    expect(await vault.readBiometricMasterKey("signMessage")).toBe(masterKeyHex);
+    expect(await vault.verifyMasterCredential(passwordCredential("credential-1"))).toBe(
+      true,
     );
-    expect(await vault.verifyMasterCredential("credential-1")).toBe(true);
     expect(prompt).toHaveBeenCalledWith("signMessage");
     expect(secureStore.setItemAsync).toHaveBeenCalledWith(
       biometricKey,
-      "credential-1",
+      masterKeyHex,
       expect.objectContaining({ requireAuthentication: true }),
     );
-    expect(secureStore.setItemAsync).toHaveBeenCalledWith(
-      keystoreKey,
-      expect.any(String),
-    );
-    expect(secureStore.setItemAsync).toHaveBeenCalledWith(
-      verifierKey,
-      expect.any(String),
-    );
+    expect(values.has(keystoreKey)).toBe(true);
+    expect(values.has(envelopeKey)).toBe(true);
   });
 
-  it("stores, selects and removes independent wallets", async () => {
+  it("reuses the master key for independent mnemonic wallets", async () => {
     const vault = new SecureStoreWalletVault();
-    await vault.save(account(publicKey), "first mnemonic", "credential-1", {
-      biometricUnlock: false,
-    });
+    await vault.save(
+      account(publicKey),
+      "first mnemonic",
+      passwordCredential("credential-1"),
+      { biometricUnlock: false },
+    );
     const added = await vault.save(
       account(secondPublicKey),
       "second mnemonic",
-      "credential-1",
+      passwordCredential("credential-1"),
     );
 
     expect(added.wallets).toHaveLength(2);
-    expect(added.selectedWalletId).toBe(secondPublicKey.slice(2));
-    expect(await vault.readMnemonic(walletId, "credential-1")).toBe("first mnemonic");
-    expect(await vault.readBiometricCredential()).toBeNull();
+    expect(masterKeyEnvelope.generateMasterKey).toHaveBeenCalledTimes(1);
+    expect(masterKeyEnvelope.encryptMasterKey).toHaveBeenCalledTimes(1);
+    expect(
+      await vault.readMnemonic(walletId, passwordCredential("credential-1")),
+    ).toBe("first mnemonic");
     await expect(
-      vault.save(account(`0x03${"22".repeat(32)}`), "third mnemonic", "wrong"),
+      vault.save(
+        account(`0x03${"22".repeat(32)}`),
+        "third mnemonic",
+        passwordCredential("wrong"),
+      ),
     ).rejects.toThrow("Invalid password");
 
     const selected = await vault.select(walletId);
     expect(selected.selectedWalletId).toBe(walletId);
-
     const removed = await vault.remove(walletId);
     expect(removed.wallets).toHaveLength(1);
-    expect(removed.selectedWalletId).toBe(secondPublicKey.slice(2));
     expect(values.has(keystoreKey)).toBe(false);
   });
 
-  it("enables and disables biometric unlock independently of the keystore", async () => {
+  it("enables and disables biometric unlock without changing a mnemonic", async () => {
     const vault = new SecureStoreWalletVault();
-    await vault.save(account(publicKey), "first mnemonic", "credential-1", {
-      biometricUnlock: false,
-    });
+    await vault.save(
+      account(publicKey),
+      "first mnemonic",
+      passwordCredential("credential-1"),
+      { biometricUnlock: false },
+    );
+    const serializedKeystore = values.get(keystoreKey);
 
-    const enabled = await vault.setBiometricUnlock("credential-1");
+    const enabled = await vault.setBiometricUnlock(
+      passwordCredential("credential-1"),
+    );
     expect(enabled.biometricUnlock).toBe(true);
-    expect(values.get(biometricKey)).toBe("credential-1");
+    expect(values.get(biometricKey)).toBe(masterKeyHex);
+    expect(values.get(keystoreKey)).toBe(serializedKeystore);
 
     const disabled = await vault.setBiometricUnlock();
     expect(disabled.biometricUnlock).toBe(false);
     expect(values.has(biometricKey)).toBe(false);
-    expect(await vault.readMnemonic(walletId, "credential-1")).toBe("first mnemonic");
+    expect(
+      await vault.readMnemonic(walletId, passwordCredential("credential-1")),
+    ).toBe("first mnemonic");
   });
 
   it("rejects biometric opt-in when system authentication is unavailable", async () => {
@@ -149,7 +199,7 @@ describe("SecureStoreWalletVault", () => {
       new SecureStoreWalletVault().save(
         account(publicKey),
         "first mnemonic",
-        "credential-1",
+        passwordCredential("credential-1"),
         { biometricUnlock: true },
       ),
     ).rejects.toThrow("Enable biometric authentication");
@@ -172,59 +222,82 @@ describe("SecureStoreWalletVault", () => {
       kind: "cryptape-trust",
       name: "NKeyD35BDB11",
       publicKey: `0x${"22".repeat(64)}`,
-      version: 4,
+      version: 5,
     });
   });
 
-  it("reports a missing encrypted keystore", async () => {
+  it("reports a missing encrypted mnemonic", async () => {
     values.set(stateKey, JSON.stringify(walletState()));
+    values.set(
+      envelopeKey,
+      JSON.stringify({ credential: "credential-1", masterKey: Array.from(masterKey) }),
+    );
     await expect(
-      new SecureStoreWalletVault().readMnemonic(walletId, "credential-1"),
+      new SecureStoreWalletVault().readMnemonic(
+        walletId,
+        passwordCredential("credential-1"),
+      ),
     ).rejects.toBeInstanceOf(WalletSecretUnavailableError);
   });
 
-  it("retains the master-password verifier after the last mnemonic is removed", async () => {
+  it("keeps the master-key envelope after the last mnemonic is removed", async () => {
     const vault = new SecureStoreWalletVault();
-    await vault.save(account(publicKey), "first mnemonic", "credential-1", {
-      biometricUnlock: true,
-    });
+    await vault.save(
+      account(publicKey),
+      "first mnemonic",
+      passwordCredential("credential-1"),
+      { biometricUnlock: true },
+    );
 
     const removed = await vault.remove(walletId);
 
     expect(removed.wallets).toHaveLength(0);
     expect(removed.masterPasswordSet).toBe(true);
     expect(removed.biometricUnlock).toBe(true);
-    expect(values.has(verifierKey)).toBe(true);
+    expect(values.has(envelopeKey)).toBe(true);
     expect(values.has(biometricKey)).toBe(true);
-    expect(await vault.verifyMasterCredential("credential-1")).toBe(true);
+    expect(await vault.verifyMasterCredential(passwordCredential("credential-1"))).toBe(
+      true,
+    );
   });
 
-  it("re-encrypts every mnemonic and the biometric credential when changing password", async () => {
+  it("changes password by rewrapping only the master key", async () => {
     const vault = new SecureStoreWalletVault();
-    await vault.save(account(publicKey), "first mnemonic", "credential-1", {
-      biometricUnlock: true,
-    });
+    await vault.save(
+      account(publicKey),
+      "first mnemonic",
+      passwordCredential("credential-1"),
+      { biometricUnlock: true },
+    );
     await vault.save(
       account(secondPublicKey),
       "second mnemonic",
-      "credential-1",
+      passwordCredential("credential-1"),
     );
+    const firstKeystore = values.get(keystoreKey);
+    const secondKeystore = values.get(
+      `khie.wallet.keystore.v5.${secondPublicKey.slice(2)}`,
+    );
+    mnemonicKeystore.encryptMnemonicKeystore.mockClear();
 
-    const changed = await vault.changeMasterPassword(
-      "credential-1",
-      "credential-2",
-    );
+    const changed = await vault.changeMasterPassword("credential-1", "credential-2");
 
     expect(changed.biometricUnlock).toBe(true);
-    expect(await vault.verifyMasterCredential("credential-2")).toBe(true);
-    expect(await vault.readMnemonic(walletId, "credential-2")).toBe("first mnemonic");
-    expect(
-      await vault.readMnemonic(secondPublicKey.slice(2), "credential-2"),
-    ).toBe("second mnemonic");
-    await expect(vault.readMnemonic(walletId, "credential-1")).rejects.toThrow(
-      "Invalid password",
+    expect(mnemonicKeystore.encryptMnemonicKeystore).not.toHaveBeenCalled();
+    expect(values.get(keystoreKey)).toBe(firstKeystore);
+    expect(values.get(`khie.wallet.keystore.v5.${secondPublicKey.slice(2)}`)).toBe(
+      secondKeystore,
     );
-    expect(values.get(biometricKey)).toBe("credential-2");
+    expect(values.get(biometricKey)).toBe(masterKeyHex);
+    expect(await vault.verifyMasterCredential(passwordCredential("credential-2"))).toBe(
+      true,
+    );
+    expect(await vault.readMnemonic(walletId, biometricCredential())).toBe(
+      "first mnemonic",
+    );
+    expect(await vault.verifyMasterCredential(passwordCredential("credential-1"))).toBe(
+      false,
+    );
   });
 });
 
@@ -237,7 +310,7 @@ function walletState() {
     biometricUnlock: false,
     masterPasswordSet: true,
     selectedWalletId: walletId,
-    version: 4,
+    version: 5,
     wallets: [
       {
         createdAt: "2026-01-01T00:00:00.000Z",
@@ -245,7 +318,7 @@ function walletState() {
         id: walletId,
         kind: "mnemonic",
         publicKey,
-        version: 4,
+        version: 5,
       },
     ],
   };

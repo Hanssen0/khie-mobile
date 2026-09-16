@@ -9,7 +9,7 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 
 ## Included
 
-- Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics, protected by one required master password and CCC-compatible keystore encryption.
+- Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics, protected by one required master password and an Argon2id/AES-256-GCM master-key envelope.
 - Connect a Cryptape Trust/NKey hardware wallet over Android Bluetooth LE and use it as the active CKB signer.
 - Derive one CKB account at `m/44'/309'/0'/0/0` for each wallet.
 - Testnet/mainnet address and balance, receive QR, password-authenticated mnemonic/private-key export, optional biometric unlock, and transactional master-password changes.

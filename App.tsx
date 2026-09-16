@@ -130,6 +130,7 @@ import {
 } from "./src/storage/updateSettings";
 import {
   SecureStoreWalletVault,
+  type WalletCredential,
   type WalletAuthenticationPurpose,
 } from "./src/storage/walletVault";
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
@@ -156,7 +157,6 @@ import {
 } from "./src/wallet/trustSignature";
 import {
   assertWalletPassword,
-  deriveWalletPasswordCredential,
   MIN_WALLET_PASSWORD_LENGTH,
 } from "./src/wallet/password";
 import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
@@ -180,7 +180,7 @@ type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "confirm" | "password" | "restore" | "trust";
 type WalletUnlockResult = {
   mnemonic?: string;
-  passwordCredential: string;
+  credential: WalletCredential;
 };
 type WalletPasswordRequest = {
   purpose: WalletAuthenticationPurpose;
@@ -325,7 +325,7 @@ function WalletApp({
   const [walletState, setWalletState] = useState<WalletState>({
     biometricUnlock: false,
     masterPasswordSet: false,
-    version: 4,
+    version: 5,
     wallets: [],
   });
   const [network, setNetwork] = useState<Network>("testnet");
@@ -419,16 +419,17 @@ function WalletApp({
       }
 
       if (walletStateRef.current.biometricUnlock && !forcePassword) {
-        let passwordCredential: string | null = null;
+        let masterKey: string | null = null;
         let credentialRead = false;
         setBiometricUnlocking(true);
         try {
-          passwordCredential = await vault.readBiometricCredential(purpose);
+          masterKey = await vault.readBiometricMasterKey(purpose);
           credentialRead = true;
-          if (passwordCredential) {
+          if (masterKey) {
+            const credential: WalletCredential = { kind: "masterKey", value: masterKey };
             return {
-              mnemonic: await vault.readMnemonic(walletId, passwordCredential),
-              passwordCredential,
+              mnemonic: await vault.readMnemonic(walletId, credential),
+              credential,
             };
           }
         } catch {
@@ -437,7 +438,7 @@ function WalletApp({
         } finally {
           setBiometricUnlocking(false);
         }
-        if (credentialRead && !passwordCredential) {
+        if (credentialRead && !masterKey) {
           void vault
             .setBiometricUnlock()
             .then(setWalletState)
@@ -456,14 +457,17 @@ function WalletApp({
     setUnlockingWallet(true);
     setWalletPasswordError(undefined);
     try {
-      const passwordCredential = await deriveWalletPasswordCredential(walletPassword);
+      const credential: WalletCredential = {
+        kind: "password",
+        value: walletPassword,
+      };
       const mnemonic = request.walletId
-        ? await vault.readMnemonic(request.walletId, passwordCredential)
+        ? await vault.readMnemonic(request.walletId, credential)
         : undefined;
-      if (!request.walletId && !(await vault.verifyMasterCredential(passwordCredential))) {
+      if (!request.walletId && !(await vault.verifyMasterCredential(credential))) {
         throw new LocalizedError("invalidWalletPassword", "Invalid password");
       }
-      request.resolve({ mnemonic, passwordCredential });
+      request.resolve({ mnemonic, credential });
       setWalletPasswordRequest(undefined);
       setWalletPassword("");
       void KeyboardController.dismiss({ animated: true });
@@ -478,15 +482,16 @@ function WalletApp({
     async (
       purpose: WalletAuthenticationPurpose,
       forcePassword = false,
-    ): Promise<string> => {
+    ): Promise<WalletCredential> => {
       const state = walletStateRef.current;
       if (state.biometricUnlock && !forcePassword) {
         let credentialRead = false;
         setBiometricUnlocking(true);
         try {
-          const credential = await vault.readBiometricCredential(purpose);
+          const masterKey = await vault.readBiometricMasterKey(purpose);
           credentialRead = true;
-          if (credential) {
+          if (masterKey) {
+            const credential: WalletCredential = { kind: "masterKey", value: masterKey };
             if (await vault.verifyMasterCredential(credential)) return credential;
           }
         } catch {
@@ -499,7 +504,7 @@ function WalletApp({
           void vault.setBiometricUnlock().then(setWalletState).catch(() => undefined);
         }
       }
-      return (await requestPasswordUnlock(purpose)).passwordCredential;
+      return (await requestPasswordUnlock(purpose)).credential;
     },
     [requestPasswordUnlock, vault],
   );
@@ -795,11 +800,11 @@ function WalletApp({
   const changeBiometricUnlock = useCallback(
     async (enabled: boolean) => {
       if (!walletState.masterPasswordSet) return;
-      const passwordCredential = enabled
+      const credential = enabled
         ? await requestMasterCredential("enableBiometrics", true)
         : undefined;
       setWalletState(
-        await vault.setBiometricUnlock(passwordCredential),
+        await vault.setBiometricUnlock(credential),
       );
     },
     [requestMasterCredential, vault, walletState.masterPasswordSet],
@@ -808,11 +813,7 @@ function WalletApp({
   const changeMasterPassword = useCallback(
     async (oldPassword: string, newPassword: string) => {
       assertWalletPassword(newPassword);
-      const [oldCredential, newCredential] = await Promise.all([
-        deriveWalletPasswordCredential(oldPassword),
-        deriveWalletPasswordCredential(newPassword),
-      ]);
-      const next = await vault.changeMasterPassword(oldCredential, newCredential);
+      const next = await vault.changeMasterPassword(oldPassword, newPassword);
       approvalQueue.cancelAll("Master password changed");
       setWalletState(next);
       setNotice(t("masterPasswordChanged"));
@@ -1785,7 +1786,7 @@ function OnboardingScreen({
   mode: Onboarding;
   vault: SecureStoreWalletVault;
   hasMasterPassword: boolean;
-  onUnlockMasterPassword: () => Promise<string>;
+  onUnlockMasterPassword: () => Promise<WalletCredential>;
   onMode: (mode: Onboarding) => void;
   onComplete: (state: WalletState) => Promise<void> | void;
   onConnectTrust: (device: TrustDevice) => Promise<void>;
@@ -1845,8 +1846,8 @@ function OnboardingScreen({
       const mnemonic = assertValidMnemonic(value);
       if (hasMasterPassword) {
         setBusy(true);
-        const passwordCredential = await onUnlockMasterPassword();
-        await onComplete(await persistWallet(vault, mnemonic, passwordCredential));
+        const credential = await onUnlockMasterPassword();
+        await onComplete(await persistWallet(vault, mnemonic, credential));
         return;
       }
       setPasswordMnemonic(mnemonic);

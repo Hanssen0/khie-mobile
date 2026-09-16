@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store";
+import { bytesFrom, hexFrom } from "@ckb-ccc/core";
 
 import { LocalizedError } from "../errors";
 import {
@@ -6,9 +7,10 @@ import {
   encryptMnemonicKeystore,
 } from "../wallet/mnemonicKeystore";
 import {
-  createMasterPasswordVerifier,
-  verifyMasterPasswordCredential,
-} from "../wallet/masterPasswordVerifier";
+  decryptMasterKey,
+  encryptMasterKey,
+  generateMasterKey,
+} from "../wallet/masterKeyEnvelope";
 import type {
   AccountDescriptor,
   CryptapeTrustWalletProfile,
@@ -17,15 +19,18 @@ import type {
   WalletState,
 } from "../wallet/types";
 
-const WALLET_STATE_KEY = "khie.wallet.state.v4";
-const KEYSTORE_KEY_PREFIX = "khie.wallet.keystore.v4.";
-const BIOMETRIC_CREDENTIAL_KEY = "khie.wallet.master.biometric.v4";
-const MASTER_PASSWORD_VERIFIER_KEY = "khie.wallet.master.verifier.v4";
-const PASSWORD_CHANGE_JOURNAL_KEY = "khie.wallet.master.change-journal.v4";
+const WALLET_STATE_KEY = "khie.wallet.state.v5";
+const KEYSTORE_KEY_PREFIX = "khie.wallet.keystore.v5.";
+const BIOMETRIC_MASTER_KEY = "khie.wallet.master.biometric.v5";
+const MASTER_KEY_ENVELOPE_KEY = "khie.wallet.master-key.v5";
 
 export type MasterPasswordInitialization = {
   biometricUnlock: boolean;
 };
+
+export type WalletCredential =
+  | { kind: "password"; value: string }
+  | { kind: "masterKey"; value: string };
 
 export type WalletAuthenticationPurpose =
   | "useWallet"
@@ -44,16 +49,12 @@ const defaultAuthenticationPrompt: WalletAuthenticationPrompt = () =>
 
 export class WalletSecretUnavailableError extends LocalizedError {
   constructor(
-    translationKey: "walletSecretUnavailable" | "passwordChangeRecoveryFailed" |
-      "passwordChangeDataCorrupted" | "walletDataCorrupted" =
-        "walletSecretUnavailable",
+    translationKey: "walletSecretUnavailable" | "walletDataCorrupted" =
+      "walletSecretUnavailable",
     options?: ErrorOptions,
   ) {
     const fallbackMessages = {
       walletSecretUnavailable: "Wallet secret is unavailable",
-      passwordChangeRecoveryFailed:
-        "The interrupted password change could not be recovered",
-      passwordChangeDataCorrupted: "Password change recovery data is corrupted",
       walletDataCorrupted: "Wallet data is corrupted",
     } as const;
     super(translationKey, fallbackMessages[translationKey], undefined, options);
@@ -67,7 +68,7 @@ export interface WalletVault {
   save(
     account: AccountDescriptor,
     mnemonic: string,
-    passwordCredential: string,
+    credential: WalletCredential,
     initialization?: MasterPasswordInitialization,
   ): Promise<WalletState>;
   saveCryptapeTrust(device: {
@@ -76,17 +77,17 @@ export interface WalletVault {
     publicKey?: string;
   }): Promise<WalletState>;
   select(walletId: string): Promise<WalletState>;
-  readMnemonic(walletId: string, passwordCredential: string): Promise<string>;
-  verifyMasterCredential(passwordCredential: string): Promise<boolean>;
+  readMnemonic(walletId: string, credential: WalletCredential): Promise<string>;
+  verifyMasterCredential(credential: WalletCredential): Promise<boolean>;
   changeMasterPassword(
-    oldPasswordCredential: string,
-    newPasswordCredential: string,
+    oldPassword: string,
+    newPassword: string,
   ): Promise<WalletState>;
-  readBiometricCredential(
+  readBiometricMasterKey(
     purpose?: WalletAuthenticationPurpose,
   ): Promise<string | null>;
   setBiometricUnlock(
-    passwordCredential?: string,
+    credential?: WalletCredential,
   ): Promise<WalletState>;
   remove(walletId: string): Promise<WalletState>;
   clear(): Promise<void>;
@@ -110,7 +111,6 @@ export class SecureStoreWalletVault implements WalletVault {
   }
 
   async loadWallets(): Promise<WalletState> {
-    await this.recoverInterruptedPasswordChange();
     const value = await SecureStore.getItemAsync(WALLET_STATE_KEY);
     return value ? parseWalletState(value) : emptyWalletState();
   }
@@ -118,7 +118,7 @@ export class SecureStoreWalletVault implements WalletVault {
   async save(
     account: AccountDescriptor,
     mnemonic: string,
-    passwordCredential: string,
+    credential: WalletCredential,
     initialization?: MasterPasswordInitialization,
   ): Promise<WalletState> {
     if (initialization?.biometricUnlock && !this.canUseBiometrics()) {
@@ -136,11 +136,8 @@ export class SecureStoreWalletVault implements WalletVault {
           : "Set the master password first",
       );
     }
-    if (
-      current.masterPasswordSet &&
-      !(await this.verifyMasterCredential(passwordCredential))
-    ) {
-      throw new LocalizedError("invalidWalletPassword", "Invalid password");
+    if (initialization && credential.kind !== "password") {
+      throw new LocalizedError("masterPasswordRequired", "Set the master password first");
     }
     const id = walletIdFromPublicKey(account.publicKey);
     const existing = current.wallets.find((wallet) => wallet.id === id);
@@ -149,40 +146,50 @@ export class SecureStoreWalletVault implements WalletVault {
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       id,
       kind: "mnemonic",
-      version: 4,
+      version: 5,
     };
     const keystoreKey = mnemonicKeystoreKey(id);
-    const serializedKeystore = await encryptMnemonicKeystore(
-      mnemonic,
-      passwordCredential,
-    );
-    const serializedVerifier = initialization
-      ? await createMasterPasswordVerifier(passwordCredential)
-      : undefined;
+    const masterKey = initialization
+      ? await generateMasterKey()
+      : await this.resolveMasterKey(credential);
+    let serializedMasterKey: string | undefined;
+    let serializedKeystore: string;
+    let biometricMasterKey: string | undefined;
+    try {
+      serializedMasterKey = initialization
+        ? await encryptMasterKey(masterKey, credential.value)
+        : undefined;
+      serializedKeystore = await encryptMnemonicKeystore(mnemonic, masterKey, id);
+      biometricMasterKey = initialization?.biometricUnlock
+        ? hexFrom(masterKey)
+        : undefined;
+    } finally {
+      masterKey.fill(0);
+    }
 
     await SecureStore.setItemAsync(keystoreKey, serializedKeystore);
     try {
-      if (serializedVerifier) {
+      if (serializedMasterKey) {
         await SecureStore.setItemAsync(
-          MASTER_PASSWORD_VERIFIER_KEY,
-          serializedVerifier,
+          MASTER_KEY_ENVELOPE_KEY,
+          serializedMasterKey,
         );
       }
       if (initialization?.biometricUnlock) {
         await SecureStore.setItemAsync(
-          BIOMETRIC_CREDENTIAL_KEY,
-          passwordCredential,
+          BIOMETRIC_MASTER_KEY,
+          biometricMasterKey!,
           this.authenticatedOptions("enableBiometrics"),
         );
       } else if (initialization) {
-        await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY);
+        await SecureStore.deleteItemAsync(BIOMETRIC_MASTER_KEY);
       }
       const state: WalletState = {
         biometricUnlock:
           initialization?.biometricUnlock ?? current.biometricUnlock,
         masterPasswordSet: current.masterPasswordSet || Boolean(initialization),
         selectedWalletId: id,
-        version: 4,
+        version: 5,
         wallets: existing
           ? current.wallets.map((wallet) => (wallet.id === id ? profile : wallet))
           : [...current.wallets, profile],
@@ -194,10 +201,10 @@ export class SecureStoreWalletVault implements WalletVault {
         await Promise.all([
           SecureStore.deleteItemAsync(keystoreKey).catch(() => undefined),
           ...(initialization?.biometricUnlock
-            ? [SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY).catch(() => undefined)]
+            ? [SecureStore.deleteItemAsync(BIOMETRIC_MASTER_KEY).catch(() => undefined)]
             : []),
-          ...(serializedVerifier
-            ? [SecureStore.deleteItemAsync(MASTER_PASSWORD_VERIFIER_KEY).catch(() => undefined)]
+          ...(serializedMasterKey
+            ? [SecureStore.deleteItemAsync(MASTER_KEY_ENVELOPE_KEY).catch(() => undefined)]
             : []),
         ]);
       }
@@ -220,13 +227,13 @@ export class SecureStoreWalletVault implements WalletVault {
       kind: "cryptape-trust",
       name: device.name,
       ...(device.publicKey ? { publicKey: device.publicKey } : {}),
-      version: 4,
+      version: 5,
     };
     const state: WalletState = {
       biometricUnlock: current.biometricUnlock,
       masterPasswordSet: current.masterPasswordSet,
       selectedWalletId: id,
-      version: 4,
+      version: 5,
       wallets: existing
         ? current.wallets.map((wallet) => (wallet.id === id ? profile : wallet))
         : [...current.wallets, profile],
@@ -247,7 +254,7 @@ export class SecureStoreWalletVault implements WalletVault {
 
   async readMnemonic(
     walletId: string,
-    passwordCredential: string,
+    credential: WalletCredential,
   ): Promise<string> {
     const state = await this.loadWallets();
     const wallet = state.wallets.find((profile) => profile.id === walletId);
@@ -260,85 +267,66 @@ export class SecureStoreWalletVault implements WalletVault {
     if (!serializedKeystore) {
       throw new WalletSecretUnavailableError();
     }
-    return decryptMnemonicKeystore(serializedKeystore, passwordCredential);
+    const masterKey = await this.resolveMasterKey(credential);
+    try {
+      return await decryptMnemonicKeystore(serializedKeystore, masterKey, walletId);
+    } finally {
+      masterKey.fill(0);
+    }
   }
 
-  async verifyMasterCredential(passwordCredential: string): Promise<boolean> {
+  async verifyMasterCredential(credential: WalletCredential): Promise<boolean> {
     const state = await this.loadWallets();
     if (!state.masterPasswordSet) return false;
-    const verifier = await SecureStore.getItemAsync(MASTER_PASSWORD_VERIFIER_KEY);
-    if (!verifier) throw new WalletSecretUnavailableError();
-    return verifyMasterPasswordCredential(verifier, passwordCredential);
+    try {
+      const masterKey = await this.resolveMasterKey(credential);
+      masterKey.fill(0);
+      return true;
+    } catch (cause) {
+      if (cause instanceof WalletSecretUnavailableError) throw cause;
+      return false;
+    }
   }
 
   async changeMasterPassword(
-    oldPasswordCredential: string,
-    newPasswordCredential: string,
+    oldPassword: string,
+    newPassword: string,
   ): Promise<WalletState> {
     const state = await this.loadWallets();
     if (!state.masterPasswordSet) throw new WalletSecretUnavailableError();
-    if (!(await this.verifyMasterCredential(oldPasswordCredential))) {
+    const previousEnvelope = await SecureStore.getItemAsync(MASTER_KEY_ENVELOPE_KEY);
+    if (!previousEnvelope) throw new WalletSecretUnavailableError();
+    let masterKey: Uint8Array;
+    try {
+      masterKey = await decryptMasterKey(previousEnvelope, oldPassword);
+    } catch {
       throw new LocalizedError("invalidWalletPassword", "Invalid password");
     }
-    if (oldPasswordCredential === newPasswordCredential) return state;
-
-    const verifier = await SecureStore.getItemAsync(MASTER_PASSWORD_VERIFIER_KEY);
-    if (!verifier) throw new WalletSecretUnavailableError();
-    const keystores: Record<string, string> = {};
-    const nextKeystores: Record<string, string> = {};
-    for (const wallet of state.wallets) {
-      if (wallet.kind !== "mnemonic") continue;
-      const key = mnemonicKeystoreKey(wallet.id);
-      const serialized = await SecureStore.getItemAsync(key);
-      if (!serialized) throw new WalletSecretUnavailableError();
-      keystores[key] = serialized;
-      const mnemonic = await decryptMnemonicKeystore(
-        serialized,
-        oldPasswordCredential,
-      );
-      nextKeystores[key] = await encryptMnemonicKeystore(
-        mnemonic,
-        newPasswordCredential,
-      );
+    if (oldPassword === newPassword) {
+      masterKey.fill(0);
+      return state;
     }
-    const nextVerifier = await createMasterPasswordVerifier(
-      newPasswordCredential,
-    );
-    const journal: PasswordChangeJournal = { keystores, state, verifier };
-    await SecureStore.setItemAsync(
-      PASSWORD_CHANGE_JOURNAL_KEY,
-      JSON.stringify(journal),
-    );
+    let nextEnvelope: string;
     try {
-      for (const [key, value] of Object.entries(nextKeystores)) {
-        await SecureStore.setItemAsync(key, value);
-      }
+      nextEnvelope = await encryptMasterKey(masterKey, newPassword);
+    } finally {
+      masterKey.fill(0);
+    }
+    try {
       await SecureStore.setItemAsync(
-        MASTER_PASSWORD_VERIFIER_KEY,
-        nextVerifier,
+        MASTER_KEY_ENVELOPE_KEY,
+        nextEnvelope,
       );
-      if (state.biometricUnlock) {
-        await SecureStore.setItemAsync(
-          BIOMETRIC_CREDENTIAL_KEY,
-          newPasswordCredential,
-          this.authenticatedOptions("enableBiometrics"),
-        );
-      }
-      await SecureStore.deleteItemAsync(PASSWORD_CHANGE_JOURNAL_KEY);
       return state;
     } catch (cause) {
-      try {
-        await this.recoverInterruptedPasswordChange();
-      } catch (recoveryCause) {
-        throw new WalletSecretUnavailableError("passwordChangeRecoveryFailed", {
-          cause: recoveryCause,
-        });
-      }
+      await SecureStore.setItemAsync(MASTER_KEY_ENVELOPE_KEY, previousEnvelope).catch(
+        () => undefined,
+      );
       throw cause;
     }
   }
 
-  async readBiometricCredential(
+  async readBiometricMasterKey(
     purpose: WalletAuthenticationPurpose = "useWallet",
   ): Promise<string | null> {
     const state = await this.loadWallets();
@@ -346,44 +334,61 @@ export class SecureStoreWalletVault implements WalletVault {
       return null;
     }
     return SecureStore.getItemAsync(
-      BIOMETRIC_CREDENTIAL_KEY,
+      BIOMETRIC_MASTER_KEY,
       this.authenticatedOptions(purpose),
     );
   }
 
   async setBiometricUnlock(
-    passwordCredential?: string,
+    credential?: WalletCredential,
   ): Promise<WalletState> {
     const state = await this.loadWallets();
     if (!state.masterPasswordSet) {
       throw new WalletSecretUnavailableError();
     }
-    if (passwordCredential && !this.canUseBiometrics()) {
+    if (credential && !this.canUseBiometrics()) {
       throw new LocalizedError(
         "biometricRequired",
         "Enable biometric authentication in Android first",
       );
     }
-    const biometricUnlock = Boolean(passwordCredential);
+    const biometricUnlock = Boolean(credential);
     const next: WalletState = {
       ...state,
       biometricUnlock,
     };
-    if (passwordCredential) {
+    if (credential) {
+      let masterKey: Uint8Array;
+      try {
+        masterKey = await this.resolveMasterKey(credential);
+      } catch (cause) {
+        if (credential.kind === "password") {
+          throw new LocalizedError("invalidWalletPassword", "Invalid password", undefined, {
+            cause,
+          });
+        }
+        throw cause;
+      }
+      let serializedMasterKey: string;
+      try {
+        serializedMasterKey = hexFrom(masterKey);
+      } finally {
+        masterKey.fill(0);
+      }
       await SecureStore.setItemAsync(
-        BIOMETRIC_CREDENTIAL_KEY,
-        passwordCredential,
+        BIOMETRIC_MASTER_KEY,
+        serializedMasterKey,
         this.authenticatedOptions("enableBiometrics"),
       );
       try {
         await this.writeState(next);
       } catch (cause) {
-        await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY).catch(() => undefined);
+        await SecureStore.deleteItemAsync(BIOMETRIC_MASTER_KEY).catch(() => undefined);
         throw cause;
       }
     } else {
       await this.writeState(next);
-      await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY).catch(() => undefined);
+      await SecureStore.deleteItemAsync(BIOMETRIC_MASTER_KEY).catch(() => undefined);
     }
     return next;
   }
@@ -398,7 +403,7 @@ export class SecureStoreWalletVault implements WalletVault {
       masterPasswordSet: state.masterPasswordSet,
       selectedWalletId:
         state.selectedWalletId === walletId ? wallets[0]?.id : state.selectedWalletId,
-      version: 4,
+      version: 5,
       wallets,
     };
     await this.writeState(next);
@@ -419,9 +424,8 @@ export class SecureStoreWalletVault implements WalletVault {
           : [],
       ),
       SecureStore.deleteItemAsync(WALLET_STATE_KEY),
-      SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY),
-      SecureStore.deleteItemAsync(MASTER_PASSWORD_VERIFIER_KEY),
-      SecureStore.deleteItemAsync(PASSWORD_CHANGE_JOURNAL_KEY),
+      SecureStore.deleteItemAsync(BIOMETRIC_MASTER_KEY),
+      SecureStore.deleteItemAsync(MASTER_KEY_ENVELOPE_KEY),
     ]);
   }
 
@@ -429,63 +433,27 @@ export class SecureStoreWalletVault implements WalletVault {
     return SecureStore.setItemAsync(WALLET_STATE_KEY, JSON.stringify(state));
   }
 
-  private async recoverInterruptedPasswordChange(): Promise<void> {
-    const serialized = await SecureStore.getItemAsync(PASSWORD_CHANGE_JOURNAL_KEY);
-    if (!serialized) return;
-    let journal: PasswordChangeJournal;
-    try {
-      journal = JSON.parse(serialized) as PasswordChangeJournal;
-      const recoveredState = parseWalletState(JSON.stringify(journal.state));
-      const expectedKeys = new Set(
-        recoveredState.wallets.flatMap((wallet) =>
-          wallet.kind === "mnemonic" ? [mnemonicKeystoreKey(wallet.id)] : [],
-        ),
-      );
-      if (
-        !journal ||
-        typeof journal.verifier !== "string" ||
-        !journal.keystores ||
-        typeof journal.keystores !== "object" ||
-        Object.keys(journal.keystores).length !== expectedKeys.size ||
-        !Object.keys(journal.keystores).every((key) => expectedKeys.has(key))
-      ) {
-        throw new Error("Invalid password change journal");
+  private async resolveMasterKey(credential: WalletCredential) {
+    if (credential.kind === "masterKey") {
+      try {
+        const masterKey = bytesFrom(credential.value);
+        if (masterKey.length !== 32) throw new Error("Invalid wallet master key");
+        return Uint8Array.from(masterKey);
+      } catch (cause) {
+        throw new WalletSecretUnavailableError("walletDataCorrupted", { cause });
       }
-    } catch (cause) {
-      throw new WalletSecretUnavailableError("passwordChangeDataCorrupted", {
-        cause,
-      });
     }
-    for (const [key, value] of Object.entries(journal.keystores)) {
-      if (!key.startsWith(KEYSTORE_KEY_PREFIX) || typeof value !== "string") {
-        throw new WalletSecretUnavailableError("passwordChangeDataCorrupted");
-      }
-      await SecureStore.setItemAsync(key, value);
-    }
-    await SecureStore.setItemAsync(
-      MASTER_PASSWORD_VERIFIER_KEY,
-      journal.verifier,
-    );
-    await SecureStore.setItemAsync(
-      WALLET_STATE_KEY,
-      JSON.stringify({ ...journal.state, biometricUnlock: false }),
-    );
-    await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIAL_KEY);
-    await SecureStore.deleteItemAsync(PASSWORD_CHANGE_JOURNAL_KEY);
+    const serialized = await SecureStore.getItemAsync(MASTER_KEY_ENVELOPE_KEY);
+    if (!serialized) throw new WalletSecretUnavailableError();
+    return decryptMasterKey(serialized, credential.value);
   }
 }
-
-type PasswordChangeJournal = {
-  keystores: Record<string, string>;
-  state: WalletState;
-  verifier: string;
-};
 
 function emptyWalletState(): WalletState {
   return {
     biometricUnlock: false,
     masterPasswordSet: false,
-    version: 4,
+    version: 5,
     wallets: [],
   };
 }
@@ -521,7 +489,7 @@ function parseWalletState(value: string): WalletState {
   try {
     const state = JSON.parse(value) as WalletState;
     if (
-      state.version !== 4 ||
+      state.version !== 5 ||
       typeof state.biometricUnlock !== "boolean" ||
       typeof state.masterPasswordSet !== "boolean" ||
       (state.biometricUnlock && !state.masterPasswordSet) ||
@@ -545,7 +513,7 @@ function isWalletProfile(value: unknown): value is WalletProfile {
   if (!value || typeof value !== "object") return false;
   const profile = value as Partial<WalletProfile>;
   if (
-    profile.version !== 4 ||
+    profile.version !== 5 ||
     typeof profile.id !== "string" ||
     typeof profile.createdAt !== "string"
   ) return false;
