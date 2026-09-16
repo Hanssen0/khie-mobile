@@ -1,15 +1,17 @@
-import { gcm } from "@noble/ciphers/aes.js";
-import {
-  ARGON2_VERSION_13,
-  argon2id,
-} from "@sonnetstationsolutions/expo-argon2";
 import {
   bytesFrom,
   hexFrom,
   type Bytes,
   type BytesLike,
 } from "@ckb-ccc/core";
-import * as Crypto from "expo-crypto";
+
+import {
+  ARGON2_VERSION_13,
+  decryptAes256Gcm,
+  deriveArgon2id,
+  encryptAes256Gcm,
+  secureRandomBytes,
+} from "./cryptoProvider";
 
 const MASTER_KEY_LENGTH = 32;
 const NONCE_LENGTH = 12;
@@ -43,7 +45,7 @@ type SerializedMasterKeyEnvelope = {
 };
 
 export async function generateMasterKey(): Promise<Bytes> {
-  return Crypto.getRandomBytesAsync(MASTER_KEY_LENGTH);
+  return secureRandomBytes(MASTER_KEY_LENGTH);
 }
 
 export async function encryptMasterKey(
@@ -54,8 +56,8 @@ export async function encryptMasterKey(
   if (masterKey.length !== MASTER_KEY_LENGTH) {
     throw new Error("Invalid wallet master key");
   }
-  const salt = await Crypto.getRandomBytesAsync(SALT_LENGTH);
-  const nonce = await Crypto.getRandomBytesAsync(NONCE_LENGTH);
+  const salt = secureRandomBytes(SALT_LENGTH);
+  const nonce = secureRandomBytes(NONCE_LENGTH);
   const kdfparams = {
     memory: ARGON2_MEMORY_KIB,
     iterations: ARGON2_ITERATIONS,
@@ -66,7 +68,12 @@ export async function encryptMasterKey(
   };
   const derivedKey = await deriveKey(password, salt, kdfparams);
   try {
-    const ciphertext = gcm(derivedKey, nonce, MASTER_KEY_AAD).encrypt(masterKey);
+    const ciphertext = await encryptAes256Gcm(
+      masterKey,
+      derivedKey,
+      nonce,
+      MASTER_KEY_AAD,
+    );
     const envelope: SerializedMasterKeyEnvelope = {
       version: 1,
       cipher: "aes-256-gcm",
@@ -98,7 +105,12 @@ export async function decryptMasterKey(
   const ciphertext = bytesFrom(`0x${envelope.ciphertext}`);
   const derivedKey = await deriveKey(password, salt, envelope.kdfparams);
   try {
-    const masterKey = gcm(derivedKey, nonce, MASTER_KEY_AAD).decrypt(ciphertext);
+    const masterKey = await decryptAes256Gcm(
+      ciphertext,
+      derivedKey,
+      nonce,
+      MASTER_KEY_AAD,
+    );
     if (masterKey.length !== MASTER_KEY_LENGTH) {
       masterKey.fill(0);
       throw new Error("Invalid wallet master key");
@@ -121,15 +133,7 @@ async function deriveKey(
 ): Promise<Bytes> {
   const passwordBytes = bytesFrom(password, "utf8");
   try {
-    return await argon2id({
-      password: passwordBytes,
-      salt,
-      memory: parameters.memory,
-      iterations: parameters.iterations,
-      parallelism: parameters.parallelism,
-      hashLength: parameters.hashLength,
-      version: parameters.version,
-    });
+    return await deriveArgon2id(passwordBytes, salt, parameters);
   } finally {
     passwordBytes.fill(0);
   }

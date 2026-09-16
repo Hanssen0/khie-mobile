@@ -1,6 +1,4 @@
-import { gcm } from "@noble/ciphers/aes.js";
 import { bytesFrom, hexFrom, type BytesLike } from "@ckb-ccc/core";
-import * as Crypto from "expo-crypto";
 import {
   entropyToMnemonic,
   mnemonicToEntropy,
@@ -8,6 +6,11 @@ import {
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
 import { assertValidMnemonic } from "./derivation";
+import {
+  decryptAes256Gcm,
+  encryptAes256Gcm,
+  secureRandomBytes,
+} from "./cryptoProvider";
 const MASTER_KEY_LENGTH = 32;
 const NONCE_LENGTH = 12;
 const HEADER = Uint8Array.from([0x4b, 0x48, 0x49, 0x45, 0x01]);
@@ -33,13 +36,18 @@ export async function encryptMnemonicKeystore(
   payload[ENTROPY_LENGTH_OFFSET] = entropy.length;
   payload.set(entropy, ENTROPY_OFFSET);
   const masterKey = bytesFrom(masterKeyLike);
-  const nonce = await Crypto.getRandomBytesAsync(NONCE_LENGTH);
+  const nonce = secureRandomBytes(NONCE_LENGTH);
   if (masterKey.length !== MASTER_KEY_LENGTH) {
     throw new Error("Invalid wallet master key");
   }
 
   try {
-    const ciphertext = gcm(masterKey, nonce, mnemonicAad(walletId)).encrypt(payload);
+    const ciphertext = await encryptAes256Gcm(
+      payload,
+      masterKey,
+      nonce,
+      mnemonicAad(walletId),
+    );
     const keystore: SerializedMnemonicKeystore = {
       version: 1,
       cipher: "aes-256-gcm",
@@ -70,7 +78,12 @@ export async function decryptMnemonicKeystore(
     const keystore = parseMnemonicKeystore(JSON.parse(serializedKeystore));
     ciphertext = bytesFrom(`0x${keystore.ciphertext}`);
     nonce = bytesFrom(`0x${keystore.nonce}`);
-    payload = gcm(masterKey, nonce, mnemonicAad(walletId)).decrypt(ciphertext);
+    payload = await decryptAes256Gcm(
+      ciphertext,
+      masterKey,
+      nonce,
+      mnemonicAad(walletId),
+    );
     if (
       (payload.length !== ENTROPY_OFFSET + 16 && payload.length !== ENTROPY_OFFSET + 32) ||
       !HEADER.every((value, index) => payload?.[index] === value)

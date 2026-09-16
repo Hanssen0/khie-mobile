@@ -1,31 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const argon2 = vi.hoisted(() => ({
-  ARGON2_VERSION_13: 0x13,
-  argon2id: vi.fn(async ({
-    password,
-    salt,
-  }: {
-    password: Uint8Array;
-    salt: Uint8Array;
-  }) => {
+const quickCrypto = vi.hoisted(() => ({
+  argon2: vi.fn((
+    _algorithm: string,
+    {
+      message,
+      nonce,
+    }: {
+      message: Uint8Array;
+      nonce: Uint8Array;
+    },
+    callback: (error: Error | null, result: Uint8Array) => void,
+  ) => {
     const key = new Uint8Array(32);
     for (let index = 0; index < key.length; index += 1) {
       key[index] =
-        password[index % password.length]! ^ salt[index % salt.length]! ^ index;
+        message[index % message.length]! ^ nonce[index % nonce.length]! ^ index;
     }
-    return key;
+    callback(null, key);
   }),
-}));
-
-const crypto = vi.hoisted(() => ({
-  getRandomBytesAsync: vi.fn(async (length: number) =>
+  randomBytes: vi.fn((length: number) =>
     Uint8Array.from({ length }, (_, index) => index + length),
   ),
 }));
 
-vi.mock("@sonnetstationsolutions/expo-argon2", () => argon2);
-vi.mock("expo-crypto", () => crypto);
+vi.mock("react-native-quick-crypto", async () => {
+  const { webcrypto } = await import("node:crypto");
+  return { ...quickCrypto, subtle: webcrypto.subtle };
+});
 
 import { decryptMasterKey, encryptMasterKey } from "./masterKeyEnvelope";
 
@@ -39,6 +41,8 @@ describe("master-key envelope", () => {
 
     expect(envelope).toMatchObject({
       cipher: "aes-256-gcm",
+      ciphertext:
+        "54a8ff48b8ccf77f7e383506096630fe99ec55d67bcefeaf254f3d99944c063ec6b705caf4ddc3c7592094e2e6a9e7bd",
       kdf: "argon2id",
       kdfparams: {
         hashLength: 32,
@@ -49,14 +53,16 @@ describe("master-key envelope", () => {
       },
       version: 1,
     });
-    expect(argon2.argon2id).toHaveBeenCalledWith(
+    expect(quickCrypto.argon2).toHaveBeenCalledWith(
+      "argon2id",
       expect.objectContaining({
-        hashLength: 32,
-        iterations: 3,
+        tagLength: 32,
+        passes: 3,
         memory: 131_072,
         parallelism: 4,
         version: 0x13,
       }),
+      expect.any(Function),
     );
     await expect(decryptMasterKey(serialized, "test password")).resolves.toEqual(
       masterKey,
@@ -79,8 +85,10 @@ describe("master-key envelope", () => {
     await expect(decryptMasterKey(JSON.stringify(envelope), "right")).resolves.toEqual(
       new Uint8Array(32).fill(7),
     );
-    expect(argon2.argon2id).toHaveBeenLastCalledWith(
+    expect(quickCrypto.argon2).toHaveBeenLastCalledWith(
+      "argon2id",
       expect.objectContaining({ memory: 196_608, parallelism: 2 }),
+      expect.any(Function),
     );
   });
 });

@@ -1,12 +1,11 @@
-import * as Crypto from "expo-crypto";
-
 import type { WalletCredential, WalletVault } from "../storage/walletVault";
+import { secureRandomBytes } from "./cryptoProvider";
 import { assertValidMnemonic, deriveAccount, mnemonicFromEntropy } from "./derivation";
 import { assertWalletPassword } from "./password";
 import type { WalletState } from "./types";
 
 export async function generateMnemonic(): Promise<string> {
-  return mnemonicFromEntropy(await Crypto.getRandomBytesAsync(16));
+  return mnemonicFromEntropy(secureRandomBytes(16));
 }
 
 export async function persistWallet(

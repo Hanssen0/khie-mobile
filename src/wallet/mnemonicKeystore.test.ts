@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const crypto = vi.hoisted(() => ({
-  getRandomBytesAsync: vi.fn(async (length: number) =>
+const quickCrypto = vi.hoisted(() => ({
+  argon2: vi.fn(),
+  randomBytes: vi.fn((length: number) =>
     Uint8Array.from({ length }, (_, index) => index + 1),
   ),
 }));
 
-vi.mock("expo-crypto", () => crypto);
+vi.mock("react-native-quick-crypto", async () => {
+  const { webcrypto } = await import("node:crypto");
+  return { ...quickCrypto, subtle: webcrypto.subtle };
+});
 
 import { decryptMnemonicKeystore, encryptMnemonicKeystore } from "./mnemonicKeystore";
 
@@ -23,6 +27,8 @@ describe("mnemonic keystore", () => {
 
     expect(JSON.parse(serialized)).toMatchObject({
       cipher: "aes-256-gcm",
+      ciphertext:
+        "e566e5d8317b23ed6fbdf825e3fa3d25095ef227567593b1c58d349eba776aeb8734ff3ab9ee",
       nonce: "0102030405060708090a0b0c",
       version: 1,
     });
