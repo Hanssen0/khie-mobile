@@ -42,9 +42,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       platform,
     );
   }
-  if (moduleName === "node:process") {
-    return context.resolveRequest(context, "process/browser", platform);
-  }
   if (moduleName.startsWith(".")) {
     const target = path.resolve(path.dirname(context.originModulePath), moduleName);
     for (const [sourceSuffix, replacementSuffix] of platformFiles) {

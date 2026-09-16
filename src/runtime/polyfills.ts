@@ -1,34 +1,12 @@
 import { Buffer } from "@craftzdog/react-native-buffer";
 import { getRandomValues } from "expo-crypto";
-import process from "process";
 import "react-native-url-polyfill/auto";
 
 import { installWebRtcDiagnostics } from "./webrtcDiagnostics";
 
-const eventTargetShim = require("event-target-shim") as {
-  Event: typeof globalThis.Event;
-  EventTarget: typeof globalThis.EventTarget;
-};
-const { Event, EventTarget } = eventTargetShim;
-
 const runtime = globalThis as unknown as Record<string, unknown>;
 
 runtime.Buffer ??= Buffer;
-runtime.process ??= process;
-runtime.EventTarget ??= EventTarget;
-runtime.Event ??= Event;
-
-if (runtime.CustomEvent == null) {
-  class CustomEventPolyfill<T = unknown> extends Event {
-    readonly detail: T;
-
-    constructor(type: string, init: { detail?: T } = {}) {
-      super(type);
-      this.detail = init.detail as T;
-    }
-  }
-  runtime.CustomEvent = CustomEventPolyfill;
-}
 
 const cryptoValue = (runtime.crypto ?? {}) as Crypto;
 if (cryptoValue.getRandomValues == null) {

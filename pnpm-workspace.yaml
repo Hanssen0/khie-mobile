@@ -2,5 +2,12 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - '@ckb-ccc/libp2p@0.2.1'
+  - '@expo/cli@57.0.25'
+  - '@expo/router-server@57.0.10'
+  - babel-preset-expo@57.0.12
+  - expo@57.0.23
+  - expo-notifications@57.0.19
+overrides:
+  '@react-native/metro-config': 0.86.3
 patchedDependencies:
   react-native-webrtc@124.0.8: patches/react-native-webrtc@124.0.8.patch
