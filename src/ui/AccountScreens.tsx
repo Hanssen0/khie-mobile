@@ -1,6 +1,6 @@
 import { ErrorTransactionInsufficientCapacity, fixedPointToString, type Signer, type Transaction } from "@ckb-ccc/core";
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { ActivityIndicator, Button as PaperButton, Card as PaperCard, HelperText, Icon, IconButton, SegmentedButtons, Text, TextInput as PaperTextInput, useTheme } from "react-native-paper";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -119,19 +119,34 @@ export function SendScreen({ signer, onBack, onScanAddress, scannedAddress, onSc
   const [amount, setAmount] = useState("");
   const [feeOption, setFeeOption] = useState<TransferFeeOption>("auto");
   const [customFee, setCustomFee] = useState("");
-  const [transaction, setTransaction] = useState<Transaction>();
+  const [prepared, setPrepared] = useState<{
+    feeRate?: bigint;
+    revision: number;
+    signer: Signer;
+    transaction: Transaction;
+  }>();
   const [preparing, setPreparing] = useState(false);
   const [sending, setSending] = useState(false);
+  const draftRevision = useRef(0);
+  const signerRef = useRef(signer);
+  signerRef.current = signer;
   const parsedAmount = parseCkbAmount(amount);
   const feeRate = selectedFeeRate(feeOption, customFee);
   const customFeeValid = feeOption !== "custom" || feeRate !== undefined;
 
+  const invalidateDraft = useCallback(() => {
+    draftRevision.current += 1;
+    setPrepared(undefined);
+  }, []);
+
+  useEffect(() => invalidateDraft(), [invalidateDraft, signer]);
+
   useEffect(() => {
     if (!scannedAddress) return;
     setRecipient(scannedAddress);
-    setTransaction(undefined);
+    invalidateDraft();
     onScannedAddressConsumed();
-  }, [onScannedAddressConsumed, scannedAddress]);
+  }, [invalidateDraft, onScannedAddressConsumed, scannedAddress]);
 
   const reportPreparationError = (cause: unknown) => {
     const description = cause instanceof ErrorTransactionInsufficientCapacity
@@ -144,28 +159,80 @@ export function SendScreen({ signer, onBack, onScanAddress, scannedAddress, onSc
     if (!recipient.trim()) { appDialog.show(t("unableToPrepareTransaction"), t("invalidRecipientAddress")); return; }
     if (!parsedAmount) { appDialog.show(t("unableToPrepareTransaction"), t("invalidSendAmount")); return; }
     if (!customFeeValid) { appDialog.show(t("unableToPrepareTransaction"), t("invalidFeeRate")); return; }
+    const revision = draftRevision.current;
+    const requestSigner = signer;
+    const requestRecipient = recipient;
+    const requestAmount = parsedAmount;
+    const requestFeeRate = feeRate;
     setPreparing(true);
     try {
-      setTransaction(await prepareTransfer(signer, recipient, parsedAmount, feeRate));
-    } catch (cause) { reportPreparationError(cause); } finally { setPreparing(false); }
+      const transaction = await prepareTransfer(
+        requestSigner,
+        requestRecipient,
+        requestAmount,
+        requestFeeRate,
+      );
+      if (
+        draftRevision.current === revision &&
+        signerRef.current === requestSigner
+      ) {
+        setPrepared({
+          feeRate: requestFeeRate,
+          revision,
+          signer: requestSigner,
+          transaction,
+        });
+      }
+    } catch (cause) {
+      if (draftRevision.current === revision && signerRef.current === requestSigner) {
+        reportPreparationError(cause);
+      }
+    } finally { setPreparing(false); }
   };
   const useMaximum = async () => {
     if (!signer) return;
     if (!recipient.trim()) { appDialog.show(t("unableToPrepareTransaction"), t("invalidRecipientAddress")); return; }
     if (!customFeeValid) { appDialog.show(t("unableToPrepareTransaction"), t("invalidFeeRate")); return; }
+    const revision = draftRevision.current;
+    const requestSigner = signer;
+    const requestRecipient = recipient;
+    const requestFeeRate = feeRate;
     setPreparing(true);
     try {
-      const resolvedFeeRate = feeRate ?? await signer.client.getFeeRate();
-      const maximum = await prepareMaximumTransfer(signer, recipient, resolvedFeeRate);
-      setAmount(fixedPointToString(maximum));
-    } catch (cause) { reportPreparationError(cause); } finally { setPreparing(false); }
+      const resolvedFeeRate = requestFeeRate ?? await requestSigner.client.getFeeRate();
+      const maximum = await prepareMaximumTransfer(
+        requestSigner,
+        requestRecipient,
+        resolvedFeeRate,
+      );
+      if (
+        draftRevision.current === revision &&
+        signerRef.current === requestSigner
+      ) {
+        draftRevision.current += 1;
+        setAmount(fixedPointToString(maximum));
+        setPrepared(undefined);
+      }
+    } catch (cause) {
+      if (draftRevision.current === revision && signerRef.current === requestSigner) {
+        reportPreparationError(cause);
+      }
+    } finally { setPreparing(false); }
   };
   const send = async () => {
-    if (!signer || !transaction) return;
+    if (!signer || !prepared) return;
+    if (
+      signer !== prepared.signer ||
+      draftRevision.current !== prepared.revision
+    ) {
+      invalidateDraft();
+      appDialog.show(t("transactionSendFailed"), t("transferDraftChanged"));
+      return;
+    }
     setSending(true);
     try {
-      const hash = await signer.sendTransaction(transaction);
-      setTransaction(undefined);
+      const hash = await prepared.signer.sendTransaction(prepared.transaction);
+      setPrepared(undefined);
       appDialog.show(t("transactionSent"), hash);
       onBack();
     } catch (cause) {
@@ -173,23 +240,23 @@ export function SendScreen({ signer, onBack, onScanAddress, scannedAddress, onSc
     } finally { setSending(false); }
   };
 
-  if (transaction && signer) return <ScrollView contentContainerStyle={styles.page}>
-    <BackButton onPress={() => setTransaction(undefined)} />
+  if (prepared && signer === prepared.signer && draftRevision.current === prepared.revision) return <ScrollView contentContainerStyle={styles.page}>
+    <BackButton onPress={() => setPrepared(undefined)} />
     <Text variant="headlineMedium">{t("reviewTransaction")}</Text>
-    <TransactionApprovalDetails client={signer.client} transaction={transaction} requestedFeeRate={feeOption === "auto" ? undefined : feeRate} />
-    <View style={styles.approvalActions}><PaperButton mode="outlined" style={styles.flexAction} onPress={() => setTransaction(undefined)}>{t("back")}</PaperButton><PaperButton mode="contained" style={styles.flexAction} icon="send" loading={sending} disabled={sending} onPress={() => void send()}>{t("send")}</PaperButton></View>
+    <TransactionApprovalDetails client={prepared.signer.client} transaction={prepared.transaction} requestedFeeRate={feeOption === "auto" ? undefined : prepared.feeRate} />
+    <View style={styles.approvalActions}><PaperButton mode="outlined" style={styles.flexAction} onPress={() => setPrepared(undefined)}>{t("back")}</PaperButton><PaperButton mode="contained" style={styles.flexAction} icon="send" loading={sending} disabled={sending} onPress={() => void send()}>{t("send")}</PaperButton></View>
   </ScrollView>;
 
   return <KeyboardAwareScrollView bottomOffset={16} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <BackButton onPress={onBack} />
     <Text variant="headlineMedium">{t("sendCkb")}</Text>
-    <FloatingLabelTextInput label={t("recipientAddress")} placeholder={t("recipientAddressPlaceholder")} autoCapitalize="none" autoCorrect={false} multiline numberOfLines={3} textAlignVertical="top" style={styles.recipientAddressInput} value={recipient} onChangeText={(value) => { setRecipient(value); setTransaction(undefined); }} right={<PaperTextInput.Icon icon="qrcode-scan" accessibilityLabel={t("scanWalletAddress")} onPress={onScanAddress} />} />
-    <View style={styles.amountRow}><View style={styles.amountInput}><FloatingLabelTextInput label={t("amount")} keyboardType="decimal-pad" value={amount} onChangeText={(value) => { setAmount(value.replace(/[^0-9.]/g, "")); setTransaction(undefined); }} /></View><PaperButton mode="contained-tonal" loading={preparing} disabled={preparing || !signer} onPress={() => void useMaximum()}>{t("max")}</PaperButton></View>
+    <FloatingLabelTextInput label={t("recipientAddress")} placeholder={t("recipientAddressPlaceholder")} autoCapitalize="none" autoCorrect={false} multiline numberOfLines={3} textAlignVertical="top" style={styles.recipientAddressInput} value={recipient} onChangeText={(value) => { setRecipient(value); invalidateDraft(); }} right={<PaperTextInput.Icon icon="qrcode-scan" accessibilityLabel={t("scanWalletAddress")} onPress={onScanAddress} />} />
+    <View style={styles.amountRow}><View style={styles.amountInput}><FloatingLabelTextInput label={t("amount")} keyboardType="decimal-pad" value={amount} onChangeText={(value) => { setAmount(value.replace(/[^0-9.]/g, "")); invalidateDraft(); }} /></View><PaperButton mode="contained-tonal" loading={preparing} disabled={preparing || !signer} onPress={() => void useMaximum()}>{t("max")}</PaperButton></View>
     {amount.length > 0 && !parsedAmount ? <HelperText type="error" visible>{t("invalidSendAmount")}</HelperText> : null}
     <Text variant="titleMedium">{t("fee")}</Text>
-    <SegmentedButtons value={feeOption} onValueChange={(value) => { setFeeOption(value as TransferFeeOption); setTransaction(undefined); }} buttons={[{ value: "economy", label: t("feeEconomy"), showSelectedCheck: false }, { value: "auto", label: t("feeAuto"), showSelectedCheck: false }, { value: "custom", label: t("feeCustom"), showSelectedCheck: false }]} />
+    <SegmentedButtons value={feeOption} onValueChange={(value) => { setFeeOption(value as TransferFeeOption); invalidateDraft(); }} buttons={[{ value: "economy", label: t("feeEconomy"), showSelectedCheck: false }, { value: "auto", label: t("feeAuto"), showSelectedCheck: false }, { value: "custom", label: t("feeCustom"), showSelectedCheck: false }]} />
     <Text variant="bodySmall">{feeOption === "economy" ? t("feeEconomyDescription") : feeOption === "auto" ? t("feeAutoDescription") : t("feeCustomDescription")}</Text>
-    {feeOption === "custom" ? <><FloatingLabelTextInput label={t("customFeeRate")} placeholder={t("shannonsPerKb", { rate: "" })} keyboardType="number-pad" value={customFee} onChangeText={(value) => { setCustomFee(value.replace(/\D/g, "")); setTransaction(undefined); }} />{!customFeeValid ? <HelperText type="error">{t("invalidFeeRate")}</HelperText> : null}</> : null}
+    {feeOption === "custom" ? <><FloatingLabelTextInput label={t("customFeeRate")} placeholder={t("shannonsPerKb", { rate: "" })} keyboardType="number-pad" value={customFee} onChangeText={(value) => { setCustomFee(value.replace(/\D/g, "")); invalidateDraft(); }} />{!customFeeValid ? <HelperText type="error">{t("invalidFeeRate")}</HelperText> : null}</> : null}
     <PaperButton mode="contained" icon="file-search-outline" loading={preparing} disabled={preparing || !signer || !parsedAmount || !customFeeValid} onPress={() => void prepare()}>{t("reviewTransaction")}</PaperButton>
   </KeyboardAwareScrollView>;
 }

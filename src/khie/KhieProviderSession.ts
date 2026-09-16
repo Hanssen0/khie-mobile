@@ -38,7 +38,16 @@ type ProviderServices = {
 };
 
 type ProviderNode = Awaited<ReturnType<typeof createProviderNode>>;
-type Handler = (payload: ccc.JsonRpcPayload) => unknown;
+
+export type KhieRequestContext = {
+  readonly signal: AbortSignal;
+  cancel: (cause: Error) => void;
+};
+
+type Handler = (
+  payload: ccc.JsonRpcPayload,
+  context: KhieRequestContext,
+) => unknown;
 
 export type KhieRemotePeer = {
   active: boolean;
@@ -479,9 +488,19 @@ async function createProviderNode(
               });
             }
             pairing.refresh(request.peerId);
+            const controller = new AbortController();
+            const context: KhieRequestContext = {
+              signal: ccc.abortSignalAny([signal, controller.signal]),
+              cancel: (cause) => controller.abort(cause),
+            };
             return withTimeout(
-              Promise.resolve(authorizer.handle(request.peerId, request.payload, handler)),
+              Promise.resolve(
+                authorizer.handle(request.peerId, request.payload, (payload) =>
+                  handler(payload, context),
+                ),
+              ),
               JSON_RPC_TIMEOUT_MS,
+              context.cancel,
             ).then(
               (result) => {
                 khieTrace("rpc.request.completed", {
@@ -544,11 +563,16 @@ function errorDetails(cause: unknown): Record<string, unknown> {
   return { name: cause.name, message: cause.message };
 }
 
-function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+  cancel: (cause: Error) => void,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
       const error = new Error("Khie request timed out");
       error.name = "TimeoutError";
+      cancel(error);
       reject(error);
     }, milliseconds);
     promise.then(

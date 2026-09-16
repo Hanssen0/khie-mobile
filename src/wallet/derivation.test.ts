@@ -4,7 +4,7 @@ import {
   Signer,
   SignerCkbPublicKey,
 } from "@ckb-ccc/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { assertValidMnemonic, deriveAccount, mnemonicFromEntropy } from "./derivation";
 import { LocalMnemonicSigningBackend } from "./localMnemonicBackend";
@@ -68,5 +68,22 @@ describe("BIP-39 CKB wallet", () => {
     await expect(
       backend.withSigner(new ClientPublicTestnet(), "message", async () => "unused"),
     ).rejects.toThrow("wallet unlock failed");
+  });
+
+  it("rechecks request validity after unlock and before signing", async () => {
+    const controller = new AbortController();
+    const backend = new LocalMnemonicSigningBackend(
+      deriveAccount(mnemonic).account,
+      async () => {
+        controller.abort(new Error("request canceled"));
+        return mnemonic;
+      },
+    ).forRequest(controller.signal, () => undefined);
+    const operation = vi.fn(async () => "signed");
+
+    await expect(
+      backend.withSigner(new ClientPublicTestnet(), "message", operation),
+    ).rejects.toThrow("request canceled");
+    expect(operation).not.toHaveBeenCalled();
   });
 });

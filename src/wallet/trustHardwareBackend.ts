@@ -26,6 +26,7 @@ const capabilities = new Set<SigningCapability>(["message", "transaction"]);
 
 export type RequestTrustPin = (
   purpose: SigningPurpose | "connect" | "keyManagement",
+  signal?: AbortSignal,
 ) => Promise<string>;
 
 class SignerCkbTrustWallet extends SignerCkbPublicKey {
@@ -68,8 +69,22 @@ export class TrustHardwareSigningBackend implements SigningBackend {
     private readonly requestPin: RequestTrustPin,
     private readonly releaseConnection?: () => Promise<void>,
     private readonly reportError?: (cause: unknown) => void,
+    private readonly request?: {
+      signal: AbortSignal;
+      validate: () => void;
+    },
   ) {
     this.account = { publicKey: normalizeTrustPublicKey(device.publicKey) };
+  }
+
+  forRequest(signal: AbortSignal, validate: () => void): TrustHardwareSigningBackend {
+    return new TrustHardwareSigningBackend(
+      this.device,
+      this.requestPin,
+      this.releaseConnection,
+      this.reportError,
+      { signal, validate },
+    );
   }
 
   getReadOnlySigner(client: Client): Signer {
@@ -82,21 +97,31 @@ export class TrustHardwareSigningBackend implements SigningBackend {
     operation: (signer: Signer) => Promise<T>,
   ): Promise<T> {
     try {
-      const pin = await this.requestPin(purpose);
+      this.assertRequestValid();
+      const pin = await this.requestPin(purpose, this.request?.signal);
+      this.assertRequestValid();
       if (!/^\d{8}$/.test(pin)) {
         throw new LocalizedError(
           "trustPinInvalid",
           "Cryptape Trust PIN must contain 8 digits",
         );
       }
-      return await operation(
+      this.assertRequestValid();
+      const result = await operation(
         new SignerCkbTrustWallet(client, this.account.publicKey, pin),
       );
+      this.assertRequestValid();
+      return result;
     } catch (cause) {
       this.reportError?.(cause);
       throw cause;
     } finally {
       await this.releaseConnection?.().catch(() => undefined);
     }
+  }
+
+  private assertRequestValid(): void {
+    this.request?.signal.throwIfAborted();
+    this.request?.validate();
   }
 }

@@ -25,8 +25,20 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
     readonly account: AccountDescriptor,
     private readonly unlock: (
       purpose: WalletAuthenticationPurpose,
+      signal?: AbortSignal,
     ) => Promise<string>,
+    private readonly request?: {
+      signal: AbortSignal;
+      validate: () => void;
+    },
   ) {}
+
+  forRequest(signal: AbortSignal, validate: () => void): LocalMnemonicSigningBackend {
+    return new LocalMnemonicSigningBackend(this.account, this.unlock, {
+      signal,
+      validate,
+    });
+  }
 
   getReadOnlySigner(client: Client): Signer {
     return new SignerCkbPublicKey(client, this.account.publicKey);
@@ -37,9 +49,12 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
     purpose: SigningPurpose,
     operation: (signer: Signer) => Promise<T>,
   ): Promise<T> {
+    this.assertRequestValid();
     const mnemonic = await this.unlock(
       purpose === "message" ? "signMessage" : "signTransaction",
+      this.request?.signal,
     );
+    this.assertRequestValid();
     const { account, privateKey } = deriveAccount(mnemonic);
     try {
       if (account.publicKey !== this.account.publicKey) {
@@ -48,23 +63,36 @@ export class LocalMnemonicSigningBackend implements ExportableSigningBackend {
           "The mnemonic does not match this account",
         );
       }
-      return await operation(new SignerCkbPrivateKey(client, privateKey));
+      this.assertRequestValid();
+      const result = await operation(new SignerCkbPrivateKey(client, privateKey));
+      this.assertRequestValid();
+      return result;
     } finally {
       privateKey.fill(0);
     }
   }
 
-  exportMnemonic(): Promise<string> {
-    return this.unlock("viewMnemonic");
+  async exportMnemonic(): Promise<string> {
+    this.assertRequestValid();
+    const mnemonic = await this.unlock("viewMnemonic", this.request?.signal);
+    this.assertRequestValid();
+    return mnemonic;
   }
 
   async exportPrivateKey(): Promise<string> {
-    const mnemonic = await this.unlock("viewPrivateKey");
+    this.assertRequestValid();
+    const mnemonic = await this.unlock("viewPrivateKey", this.request?.signal);
+    this.assertRequestValid();
     const { privateKey } = deriveAccount(mnemonic);
     try {
       return hexFrom(privateKey);
     } finally {
       privateKey.fill(0);
     }
+  }
+
+  private assertRequestValid(): void {
+    this.request?.signal.throwIfAborted();
+    this.request?.validate();
   }
 }

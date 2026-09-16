@@ -47,6 +47,7 @@ export type SigningPurpose = "message" | "transaction";
 export interface SigningBackend {
   readonly account: SigningAccountDescriptor;
   readonly capabilities: ReadonlySet<SigningCapability>;
+  forRequest(signal: AbortSignal, validate: () => void): SigningBackend;
   getReadOnlySigner(client: Client): Signer;
   withSigner<T>(
     client: Client,

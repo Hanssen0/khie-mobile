@@ -13,14 +13,56 @@ describe("ApprovalQueue", () => {
 
   it("presents requests serially", async () => {
     const queue = new ApprovalQueue(10_000);
-    const first = queue.enqueue(request("ckb-testnet"));
+    const firstController = new AbortController();
+    const firstContext = {
+      signal: firstController.signal,
+      cancel: (cause: Error) => firstController.abort(cause),
+    };
+    const first = queue.enqueue(request("ckb-testnet"), firstContext);
     const second = queue.enqueue(request("ckb-mainnet"));
     expect(queue.current?.request).toEqual(request("ckb-testnet"));
     queue.respond(queue.current!.id, true);
     await expect(first).resolves.toBe(true);
+    expect(queue.current).toBeUndefined();
+    queue.complete(firstContext);
     expect(queue.current?.request).toEqual(request("ckb-mainnet"));
     queue.respond(queue.current!.id, false);
     await expect(second).resolves.toBe(false);
+  });
+
+  it("cancels an approved request that is still executing", async () => {
+    const queue = new ApprovalQueue(10_000);
+    const controller = new AbortController();
+    const context = {
+      signal: controller.signal,
+      cancel: (cause: Error) => controller.abort(cause),
+    };
+    const approved = queue.enqueue(request("ckb-testnet"), context);
+    queue.respond(queue.current!.id, true);
+    await expect(approved).resolves.toBe(true);
+
+    queue.cancelAll("peer unpaired");
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ message: "peer unpaired" });
+  });
+
+  it("keeps the timeout active after approval", async () => {
+    vi.useFakeTimers();
+    const queue = new ApprovalQueue(120_000);
+    const controller = new AbortController();
+    const context = {
+      signal: controller.signal,
+      cancel: (cause: Error) => controller.abort(cause),
+    };
+    const approved = queue.enqueue(request("ckb-testnet"), context);
+    queue.respond(queue.current!.id, true);
+    await expect(approved).resolves.toBe(true);
+
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ name: "TimeoutError" });
   });
 
   it("rejects all pending work when explicitly invalidated", async () => {

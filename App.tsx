@@ -1,5 +1,6 @@
 import {
   buildSignerJsonRpcHandler,
+  type JsonRpcPayload,
   type Signer,
 } from "@ckb-ccc/core";
 import * as Application from "expo-application";
@@ -53,6 +54,7 @@ import {
 } from "./src/khie/notifications";
 import {
   KhieProviderSession,
+  type KhieRequestContext,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
@@ -131,16 +133,20 @@ type WalletUnlockResult = {
   credential: WalletCredential;
 };
 type WalletPasswordRequest = {
+  active: () => boolean;
   purpose: WalletAuthenticationPurpose;
   reject: (cause: Error) => void;
   resolve: (result: WalletUnlockResult) => void;
+  signal?: AbortSignal;
   walletId?: string;
 };
 type TrustPinRequest = {
+  active: () => boolean;
   purpose: "connect" | "message" | "transaction" | "keyManagement";
   deviceId?: string;
   reject: (cause: Error) => void;
   resolve: (pin: string) => void;
+  signal?: AbortSignal;
 };
 const endpointUrl = "https://app.ckbccc.com/khie";
 const currentAppVersion =
@@ -207,6 +213,13 @@ export default function App() {
       </KeyboardProvider>
     </SafeAreaProvider>
   );
+}
+
+function requestAbortReason(signal?: AbortSignal): Error {
+  if (signal?.reason instanceof Error) return signal.reason;
+  const error = new Error("Request was cancelled");
+  error.name = "AbortError";
+  return error;
 }
 
 function WalletApp({
@@ -300,30 +313,95 @@ function WalletApp({
   walletStateRef.current = walletState;
 
   const requestTrustPin = useCallback<RequestTrustPin>(
-    (purpose) =>
+    (purpose, signal) =>
       new Promise((resolve, reject) => {
+        signal?.throwIfAborted();
+        let settled = false;
+        const onAbort = () => {
+          request.reject(requestAbortReason(signal));
+          setTrustPinRequest((current) =>
+            current === request ? undefined : current,
+          );
+          setTrustPin("");
+        };
+        const settle = <T,>(callback: (value: T) => void, value: T) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          callback(value);
+        };
+        const request: TrustPinRequest = {
+          active: () => !settled,
+          purpose,
+          signal,
+          reject: (cause) => settle(reject, cause),
+          resolve: (pin) => settle(resolve, pin),
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
         setTrustPin("");
-        setTrustPinRequest({ purpose, reject, resolve });
+        setTrustPinRequest((current) => {
+          current?.reject(new Error("Cryptape Trust PIN request was cancelled"));
+          return request;
+        });
       }),
     [],
   );
 
   const submitTrustPin = useCallback(() => {
     if (!trustPinRequest || trustPin.length !== 8) return;
+    if (trustPinRequest.signal?.aborted) {
+      trustPinRequest.reject(requestAbortReason(trustPinRequest.signal));
+      setTrustPinRequest((current) =>
+        current === trustPinRequest ? undefined : current,
+      );
+      setTrustPin("");
+      return;
+    }
     trustPinRequest.resolve(trustPin);
-    setTrustPinRequest(undefined);
+    setTrustPinRequest((current) =>
+      current === trustPinRequest ? undefined : current,
+    );
     setTrustPin("");
     void KeyboardController.dismiss({ animated: true });
   }, [trustPin, trustPinRequest]);
 
   const requestPasswordUnlock = useCallback(
-    (purpose: WalletAuthenticationPurpose, walletId?: string) =>
+    (
+      purpose: WalletAuthenticationPurpose,
+      walletId?: string,
+      signal?: AbortSignal,
+    ) =>
       new Promise<WalletUnlockResult>((resolve, reject) => {
+        signal?.throwIfAborted();
+        let settled = false;
+        const onAbort = () => {
+          request.reject(requestAbortReason(signal));
+          setWalletPasswordRequest((current) =>
+            current === request ? undefined : current,
+          );
+          setWalletPassword("");
+          setWalletPasswordError(undefined);
+        };
+        const settle = <T,>(callback: (value: T) => void, value: T) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          callback(value);
+        };
+        const request: WalletPasswordRequest = {
+          active: () => !settled,
+          purpose,
+          signal,
+          walletId,
+          reject: (cause) => settle(reject, cause),
+          resolve: (result) => settle(resolve, result),
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
         setWalletPassword("");
         setWalletPasswordError(undefined);
         setWalletPasswordRequest((current) => {
           current?.reject(new Error("Wallet unlock was cancelled"));
-          return { purpose, reject, resolve, walletId };
+          return request;
         });
       }),
     [],
@@ -334,7 +412,9 @@ function WalletApp({
       walletId: string,
       purpose: WalletAuthenticationPurpose,
       forcePassword = false,
+      signal?: AbortSignal,
     ): Promise<WalletUnlockResult> => {
+      signal?.throwIfAborted();
       const wallet = walletStateRef.current.wallets.find(
         (candidate) => candidate.id === walletId,
       );
@@ -348,15 +428,19 @@ function WalletApp({
         setBiometricUnlocking(true);
         try {
           masterKey = await vault.readBiometricMasterKey(purpose);
+          signal?.throwIfAborted();
           credentialRead = true;
           if (masterKey) {
             const credential: WalletCredential = { kind: "masterKey", value: masterKey };
+            const mnemonic = await vault.readMnemonic(walletId, credential);
+            signal?.throwIfAborted();
             return {
-              mnemonic: await vault.readMnemonic(walletId, credential),
+              mnemonic,
               credential,
             };
           }
-        } catch {
+        } catch (cause) {
+          if (signal?.aborted) throw requestAbortReason(signal);
           // Cancelling or temporarily failing system authentication falls back
           // to the wallet password without changing the biometric preference.
         } finally {
@@ -370,7 +454,8 @@ function WalletApp({
         }
       }
 
-      return requestPasswordUnlock(purpose, walletId);
+      signal?.throwIfAborted();
+      return requestPasswordUnlock(purpose, walletId, signal);
     },
     [requestPasswordUnlock, vault],
   );
@@ -391,12 +476,18 @@ function WalletApp({
       if (!request.walletId && !(await vault.verifyMasterCredential(credential))) {
         throw new LocalizedError("invalidWalletPassword", "Invalid password");
       }
+      request.signal?.throwIfAborted();
+      if (!request.active()) return;
       request.resolve({ mnemonic, credential });
-      setWalletPasswordRequest(undefined);
+      setWalletPasswordRequest((current) =>
+        current === request ? undefined : current,
+      );
       setWalletPassword("");
       void KeyboardController.dismiss({ animated: true });
     } catch (cause) {
-      setWalletPasswordError(errorMessage(cause, t));
+      if (request.active()) {
+        setWalletPasswordError(errorMessage(cause, t));
+      }
     } finally {
       setUnlockingWallet(false);
     }
@@ -778,7 +869,8 @@ function WalletApp({
   }, []);
 
   const requestTrustSigningPin = useCallback<RequestTrustPin>(
-    async (purpose) => {
+    async (purpose, signal) => {
+      signal?.throwIfAborted();
       const disconnectedProfile =
         (purpose === "message" || purpose === "transaction") &&
         profile?.kind === "cryptape-trust" &&
@@ -788,9 +880,11 @@ function WalletApp({
           : undefined;
       if (disconnectedProfile) {
         await ensureTrustBluetoothReady("connect");
+        signal?.throwIfAborted();
       }
 
-      const pin = await requestTrustPin(purpose);
+      const pin = await requestTrustPin(purpose, signal);
+      signal?.throwIfAborted();
       if (!disconnectedProfile) {
         return pin;
       }
@@ -802,6 +896,7 @@ function WalletApp({
         pin,
         disconnectedProfile.name,
       );
+      signal?.throwIfAborted();
       if (
         !device.publicKey ||
         normalizeTrustPublicKey(device.publicKey) !==
@@ -823,7 +918,9 @@ function WalletApp({
     (cause: unknown) => {
       if (
         cause instanceof Error &&
-        cause.message === "Cryptape Trust signing was cancelled"
+        (cause.name === "AbortError" ||
+          cause.name === "TimeoutError" ||
+          cause.message === "Cryptape Trust signing was cancelled")
       ) {
         return;
       }
@@ -839,8 +936,10 @@ function WalletApp({
       profile?.kind === "mnemonic"
         ? new LocalMnemonicSigningBackend(
             profile,
-            async (purpose) => {
-              const mnemonic = (await requestWalletUnlock(profile.id, purpose)).mnemonic;
+            async (purpose, signal) => {
+              const mnemonic = (
+                await requestWalletUnlock(profile.id, purpose, false, signal)
+              ).mnemonic;
               if (!mnemonic) {
                 throw new LocalizedError(
                   "walletUnavailable",
@@ -896,25 +995,85 @@ function WalletApp({
     if (!backendRef.current) {
       return;
     }
-    const handler = buildSignerJsonRpcHandler({
-      getSigner: () => signerRef.current,
-      getSignerMetadata: () => ({
-        name: profile?.kind === "cryptape-trust" ? "Cryptape Trust" : "Khie Wallet",
-      }),
-      confirmRequest: (request) => approvalQueue.enqueue(request),
-      connect: async (networkId) => {
-        const currentBackend = backendRef.current;
-        if (!currentBackend) {
-          throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
+    const handler = async (
+      payload: JsonRpcPayload,
+      context: KhieRequestContext,
+    ) => {
+      let approved:
+        | {
+            backend: NonNullable<typeof backendRef.current>;
+            client: Signer["client"];
+            network: Network;
+          }
+        | undefined;
+      const validateApprovedContext = () => {
+        context.signal.throwIfAborted();
+        if (
+          !approved ||
+          backendRef.current !== approved.backend ||
+          networkRef.current !== approved.network ||
+          clients.current[approved.network] !== approved.client
+        ) {
+          const error = new Error("Khie request context changed");
+          error.name = "AbortError";
+          context.cancel(error);
+          throw error;
         }
-        const next = networkFromId(networkId);
-        networkRef.current = next;
-        const signer = new KhieSignerAdapter(clients.current[next], currentBackend);
-        signerRef.current = signer;
-        setNetwork(next);
-        return signer;
-      },
-    });
+      };
+      const requestHandler = buildSignerJsonRpcHandler({
+        getSigner: () => {
+          if (!approved) return signerRef.current;
+          validateApprovedContext();
+          return new KhieSignerAdapter(
+            approved.client,
+            approved.backend.forRequest(
+              context.signal,
+              validateApprovedContext,
+            ),
+          );
+        },
+        getSignerMetadata: () => ({
+          name:
+            profile?.kind === "cryptape-trust"
+              ? "Cryptape Trust"
+              : "Khie Wallet",
+        }),
+        confirmRequest: (request) => {
+          const currentBackend = backendRef.current;
+          if (!currentBackend) {
+            throw new LocalizedError(
+              "walletUnavailable",
+              "Wallet is unavailable",
+            );
+          }
+          const currentNetwork = networkRef.current;
+          approved = {
+            backend: currentBackend,
+            client: clients.current[currentNetwork],
+            network: currentNetwork,
+          };
+          return approvalQueue.enqueue(request, context);
+        },
+        connect: async (networkId) => {
+          validateApprovedContext();
+          const next = networkFromId(networkId);
+          const signer = new KhieSignerAdapter(
+            clients.current[next],
+            approved!.backend,
+          );
+          context.signal.throwIfAborted();
+          networkRef.current = next;
+          signerRef.current = signer;
+          setNetwork(next);
+          return signer;
+        },
+      });
+      try {
+        return await requestHandler(payload);
+      } finally {
+        approvalQueue.complete(context);
+      }
+    };
     const session = new KhieProviderSession({
       endpointUrl,
       handler,
@@ -1020,8 +1179,23 @@ function WalletApp({
     async (deviceId: string, cachedName?: string) => {
       await ensureTrustBluetoothReady("connect");
       const pin = await new Promise<string>((resolve, reject) => {
+        let active = true;
         setTrustPin("");
-        setTrustPinRequest({ purpose: "connect", deviceId, reject, resolve });
+        setTrustPinRequest({
+          active: () => active,
+          purpose: "connect",
+          deviceId,
+          reject: (cause) => {
+            if (!active) return;
+            active = false;
+            reject(cause);
+          },
+          resolve: (value) => {
+            if (!active) return;
+            active = false;
+            resolve(value);
+          },
+        });
       });
       const device = await connectTrustWallet(deviceId, pin, cachedName);
       setTrustDevice(device);

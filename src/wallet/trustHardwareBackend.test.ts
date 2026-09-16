@@ -77,4 +77,25 @@ describe("Trust hardware wallet signature adapter", () => {
     expect(reportError).toHaveBeenCalledOnce();
     expect(reportError).toHaveBeenCalledWith(expect.objectContaining({ message: "Signing failed" }));
   });
+
+  it("does not start signing when the request is canceled during PIN entry", async () => {
+    const controller = new AbortController();
+    const backend = new TrustHardwareSigningBackend(
+      {
+        id: "80:EA:D3:5B:DB:11",
+        name: "Cryptape Trust",
+        publicKey: hexFrom(uncompressed),
+      },
+      async () => {
+        controller.abort(new Error("request canceled"));
+        return "12345678";
+      },
+    ).forRequest(controller.signal, () => undefined);
+    const operation = vi.fn(async () => "signed");
+
+    await expect(
+      backend.withSigner(null as never, "transaction", operation),
+    ).rejects.toThrow("request canceled");
+    expect(operation).not.toHaveBeenCalled();
+  });
 });

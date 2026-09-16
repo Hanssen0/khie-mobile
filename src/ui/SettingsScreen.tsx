@@ -1,6 +1,7 @@
 import { SignerCkbPublicKey } from "@ckb-ccc/core";
-import { useEffect, useRef, useState } from "react";
-import { Linking, View } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Linking, View } from "react-native";
 import { Button as PaperButton, Card as PaperCard, Divider, HelperText, Icon, IconButton, List, Portal, Dialog, SegmentedButtons, Switch, Text } from "react-native-paper";
 import { KeyboardAvoidingView, KeyboardAwareScrollView, KeyboardController, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 
@@ -16,19 +17,54 @@ import { errorMessage, KeyboardDialogContent, useAppDialog, WalletTextInput } fr
 import { LanguageMenu, NetworkSwitch, walletLabel } from "./navigation";
 import { styles } from "./styles";
 
+const SECRET_REVEAL_TIMEOUT_MS = 60_000;
+
 export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, themePreference, updateSettings, checkingForUpdates, currentVersion, buildCommit, appArchitecture, updateAvailable, updateAsset, focusAppInformation, biometricAvailable, biometricUnlock, masterPasswordSet, onChangeNetwork, onChangeBiometricUnlock, onChangeMasterPassword, onSelectWallet, onAddWallet, onRemoveWallet, onSaveRpcUrls, onChangeThemePreference, onChangeAutomaticUpdateChecks, onCheckForUpdates, onDownloadUpdate, onAppInformationFocused }: {
   backend?: LocalMnemonicSigningBackend; network: Network; profile: WalletProfile; wallets: WalletProfile[]; rpcUrls: NetworkRpcUrls; themePreference: ThemePreference; updateSettings: UpdateSettings; checkingForUpdates: boolean; currentVersion: string; buildCommit: string; appArchitecture: string; updateAvailable: boolean; updateAsset?: ReleaseAsset; focusAppInformation: boolean; biometricAvailable: boolean; biometricUnlock: boolean; masterPasswordSet: boolean;
   onChangeNetwork: (network: Network) => void; onChangeBiometricUnlock: (enabled: boolean) => Promise<void>; onChangeMasterPassword: (oldPassword: string, newPassword: string) => Promise<void>; onSelectWallet: (walletId: string) => Promise<void>; onAddWallet: () => void; onRemoveWallet: (walletId: string) => Promise<void>; onSaveRpcUrls: (urls: NetworkRpcUrls) => Promise<void>; onChangeThemePreference: (preference: ThemePreference) => Promise<void>; onChangeAutomaticUpdateChecks: (enabled: boolean) => Promise<void>; onCheckForUpdates: () => Promise<void> | void; onDownloadUpdate: () => Promise<void>; onAppInformationFocused: () => void;
 }) {
   const { t } = useI18n();
   const appDialog = useAppDialog();
+  const isFocused = useIsFocused();
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  const revealController = useRef<AbortController | undefined>(undefined);
+  const revealGeneration = useRef(0);
   const [secret, setSecret] = useState<{ label: string; value: string }>();
   const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
   const [savingRpcUrls, setSavingRpcUrls] = useState(false);
   const [updatingBiometrics, setUpdatingBiometrics] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [walletAddresses, setWalletAddresses] = useState<Record<string, string>>({});
+  const invalidateSecret = useCallback(() => {
+    const error = new Error("Secret reveal was cancelled");
+    error.name = "AbortError";
+    revealController.current?.abort(error);
+    revealController.current = undefined;
+    revealGeneration.current += 1;
+    setSecret(undefined);
+  }, []);
+  useEffect(() => {
+    if (!isFocused) invalidateSecret();
+    return () => {
+      const error = new Error("Secret reveal was cancelled");
+      error.name = "AbortError";
+      revealController.current?.abort(error);
+      revealController.current = undefined;
+      revealGeneration.current += 1;
+    };
+  }, [invalidateSecret, isFocused]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") invalidateSecret();
+    });
+    return () => subscription.remove();
+  }, [invalidateSecret]);
+  useEffect(() => invalidateSecret(), [backend, invalidateSecret, profile.id]);
+  useEffect(() => {
+    if (!secret) return;
+    const timeout = setTimeout(invalidateSecret, SECRET_REVEAL_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, [invalidateSecret, secret]);
   useEffect(() => { if (!focusAppInformation) return; const frame = requestAnimationFrame(() => { scrollRef.current?.scrollToEnd({ animated: true }); onAppInformationFocused(); }); return () => cancelAnimationFrame(frame); }, [focusAppInformation, onAppInformationFocused]);
   useEffect(() => setRpcDraft(rpcUrls), [rpcUrls]);
   useEffect(() => {
@@ -42,7 +78,55 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
   const rpcUrlsChanged = rpcDraft.testnet.trim() !== rpcUrls.testnet || rpcDraft.mainnet.trim() !== rpcUrls.mainnet;
   const applyRpcUrls = async (next: NetworkRpcUrls) => { setSavingRpcUrls(true); try { await onSaveRpcUrls(next); } catch (cause) { appDialog.show(t("unableToSave"), errorMessage(cause, t)); } finally { setSavingRpcUrls(false); } };
   const toggleBiometricUnlock = () => { if (updatingBiometrics || !biometricAvailable) return; setUpdatingBiometrics(true); void onChangeBiometricUnlock(!biometricUnlock).catch((cause: unknown) => appDialog.show(t("unableToSave"), errorMessage(cause, t))).finally(() => setUpdatingBiometrics(false)); };
-  const reveal = async (kind: "mnemonic" | "privateKey") => { if (!backend) return; try { setSecret({ label: kind === "mnemonic" ? t("mnemonic") : t("privateKey"), value: kind === "mnemonic" ? await backend.exportMnemonic() : await backend.exportPrivateKey() }); } catch (cause) { appDialog.show(t("unableToDisplay"), errorMessage(cause, t)); } };
+  const reveal = async (kind: "mnemonic" | "privateKey") => {
+    if (!backend || !isFocused || AppState.currentState !== "active") return;
+    invalidateSecret();
+    const generation = revealGeneration.current;
+    const controller = new AbortController();
+    revealController.current = controller;
+    const assertActive = () => {
+      controller.signal.throwIfAborted();
+      if (
+        revealGeneration.current !== generation ||
+        !isFocused ||
+        AppState.currentState !== "active"
+      ) {
+        const error = new Error("Secret reveal is no longer active");
+        error.name = "AbortError";
+        throw error;
+      }
+    };
+    const requestBackend = backend.forRequest(
+      controller.signal,
+      assertActive,
+    );
+    try {
+      const value = kind === "mnemonic"
+        ? await requestBackend.exportMnemonic()
+        : await requestBackend.exportPrivateKey();
+      if (
+        revealGeneration.current !== generation ||
+        !isFocused ||
+        AppState.currentState !== "active"
+      ) return;
+      setSecret({
+        label: kind === "mnemonic" ? t("mnemonic") : t("privateKey"),
+        value,
+      });
+    } catch (cause) {
+      if (
+        revealGeneration.current === generation &&
+        isFocused &&
+        AppState.currentState === "active"
+      ) {
+        appDialog.show(t("unableToDisplay"), errorMessage(cause, t));
+      }
+    } finally {
+      if (revealController.current === controller) {
+        revealController.current = undefined;
+      }
+    }
+  };
   const confirmRemove = (wallet: WalletProfile) => appDialog.confirm({ title: t("deleteWalletTitle", { wallet: walletLabel(wallets, wallet.id, t) }), message: t(wallet.kind === "cryptape-trust" ? "removeTrustWalletDescription" : "deleteWalletDescription"), cancelLabel: t("cancel"), confirmLabel: t("delete"), destructive: true, onConfirm: () => { void onRemoveWallet(wallet.id).catch((cause: unknown) => appDialog.show(t("unableToDeleteWallet"), errorMessage(cause, t))); } });
   return <>
     <KeyboardAwareScrollView ref={scrollRef} bottomOffset={16} contentContainerStyle={[styles.page, styles.settingsPage]} keyboardShouldPersistTaps="handled">
@@ -60,7 +144,7 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
         <WalletTextInput label={t("mainnetRpcUrl")} autoCapitalize="none" autoCorrect={false} keyboardType="url" value={rpcDraft.mainnet} error={!mainnetRpcValid} onChangeText={(mainnet) => setRpcDraft((current) => ({ ...current, mainnet }))} /><HelperText type="error" visible={!mainnetRpcValid}>{t("invalidRpcUrl")}</HelperText>
       </PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" disabled={savingRpcUrls} onPress={() => void applyRpcUrls({ ...DEFAULT_NETWORK_RPC_URLS })}>{t("restoreDefaults")}</PaperButton><PaperButton mode="contained" loading={savingRpcUrls} disabled={savingRpcUrls || !rpcUrlsChanged || !testnetRpcValid || !mainnetRpcValid} onPress={() => void applyRpcUrls(rpcDraft)}>{t("save")}</PaperButton></PaperCard.Actions></PaperCard>
       {profile.kind === "mnemonic" && backend ? <PaperCard mode="elevated"><PaperCard.Title title={t("accountInformation")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="account-key" />} /><PaperCard.Content style={styles.cardContent}><View style={styles.metadataBlock}><Text variant="labelMedium">{t("derivationPath")}</Text><Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text></View><Divider /><View style={styles.metadataBlock}><Text variant="labelMedium">{t("publicKey")}</Text><Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text></View></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton><PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton></PaperCard.Actions></PaperCard> : null}
-      {profile.kind === "mnemonic" && secret ? <PaperCard mode="contained"><PaperCard.Title title={secret.label} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="shield-key" />} /><PaperCard.Content><Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="eye-off" onPress={() => setSecret(undefined)}>{t("hide")}</PaperButton></PaperCard.Actions></PaperCard> : null}
+      {profile.kind === "mnemonic" && secret ? <PaperCard mode="contained"><PaperCard.Title title={secret.label} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="shield-key" />} /><PaperCard.Content><Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="eye-off" onPress={invalidateSecret}>{t("hide")}</PaperButton></PaperCard.Actions></PaperCard> : null}
       {profile.kind === "mnemonic" ? <HelperText type="error" visible>{t("exportWarning")}</HelperText> : null}
       <PaperCard mode="elevated"><PaperCard.Title title={t("appInformation")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="information-outline" />} /><PaperCard.Content style={styles.cardContent}>
         <List.Item style={styles.appInformationLink} title={t("githubRepository")} description={GITHUB_REPOSITORY_URL} descriptionNumberOfLines={1} descriptionEllipsizeMode="middle" left={(props) => <List.Icon {...props} icon="github" />} right={(props) => <List.Icon {...props} icon="open-in-new" />} onPress={() => void Linking.openURL(GITHUB_REPOSITORY_URL)} /><Divider />
