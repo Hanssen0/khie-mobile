@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { BottomNavigation, Button as PaperButton, Divider, Menu, SegmentedButtons } from "react-native-paper";
+import type { EdgeInsets } from "react-native-safe-area-context";
 
 import { cryptapeIconSource, cryptapeOutlinedIconSource } from "../components/CryptapeIcon";
 import { khieFilledIconSource, khieIconSource } from "../components/KhieIcon";
@@ -8,6 +10,8 @@ import { normalizeTrustPublicKey } from "../wallet/trustSignature";
 import type { Network, WalletProfile } from "../wallet/types";
 import { styles } from "./styles";
 import type { Screen } from "./types";
+
+const material3BottomBarHeight = 80;
 
 export function NetworkSwitch({ value, onChange }: { value: Network; onChange: (network: Network) => void }) {
   const { t } = useI18n();
@@ -34,7 +38,7 @@ export function WalletMenu({ wallets, selected, onSelect }: { wallets: WalletPro
   );
 }
 
-export function BottomBar({ current, showTrust, onNavigate }: { current: Screen; showTrust: boolean; onNavigate: (screen: Screen) => void }) {
+export function BottomBar({ current, showTrust, insets, onNavigate }: { current: Screen; showTrust: boolean; insets: EdgeInsets; onNavigate: (screen: Screen) => void }) {
   const { t } = useI18n();
   const routes = [
     { key: "home", title: t("account"), focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
@@ -44,7 +48,10 @@ export function BottomBar({ current, showTrust, onNavigate }: { current: Screen;
   ];
   const selected = current === "receive" ? "home" : current;
   const index = Math.max(0, routes.findIndex(({ key }) => key === selected));
-  return <BottomNavigation.Bar compact shifting={false} navigationState={{ index, routes }} onTabPress={({ route }) => onNavigate(route.key as Screen)} />;
+  const containerStyle = { height: material3BottomBarHeight + insets.bottom, flexShrink: 0 };
+  return <View style={containerStyle}>
+    <BottomNavigation.Bar compact shifting={false} safeAreaInsets={insets} navigationState={{ index, routes }} onTabPress={({ route }) => onNavigate(route.key as Screen)} />
+  </View>;
 }
 
 export function LanguageMenu() {

@@ -6,7 +6,7 @@ import {
   createNavigationContainerRef,
   type Theme as NavigationTheme,
 } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createBottomTabNavigator, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { type ReactNode, useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
@@ -126,8 +126,8 @@ export function WalletRouter({
 
   const trust = profile.kind === "cryptape-trust" ? { id: profile.deviceId, name: profile.name, publicKey: profile.publicKey } : undefined;
   const initialTabRoute: TabRoute = screen === "khie" || screen === "trust" || screen === "settings" ? screen : "home";
-  const tabBar = ({ state, navigation }: { state: { index: number; routes: { name: string }[] }; navigation: { navigate: (name: TabRoute) => void } }) =>
-    <BottomBar current={state.routes[state.index]?.name as Screen} showTrust={Boolean(trust)} onNavigate={(next) => navigation.navigate(next as TabRoute)} />;
+  const tabBar = ({ state, navigation, insets }: BottomTabBarProps) =>
+    <BottomBar current={state.routes[state.index]?.name as Screen} showTrust={Boolean(trust)} insets={insets} onNavigate={(next) => navigation.navigate(next as TabRoute)} />;
   return <SafeAreaView style={[styles.safe, background]} edges={["top", "right", "left"]}>
     <StatusBar style={theme.dark ? "light" : "dark"} />
     {notice ? <Notice text={notice} onDismiss={onDismissNotice} /> : null}
