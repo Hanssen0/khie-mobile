@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BackHandler, Linking, ScrollView, View } from "react-native";
-import { ActivityIndicator, Chip, HelperText, Icon, List, Button as PaperButton, Switch, Text, useTheme } from "react-native-paper";
+import { ActivityIndicator, Card as PaperCard, Chip, HelperText, Icon, List, Button as PaperButton, Switch, Text, useTheme } from "react-native-paper";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { KhieIcon } from "../components/KhieIcon";
@@ -105,7 +105,15 @@ export function OnboardingScreen({ mode, vault, hasMasterPassword, onUnlockMaste
       <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
       <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
       <LinkButton label={t("connectTrustWallet")} onPress={() => onMode("trust")} />
-      <HelperText type="error" visible style={styles.centerText}>{t("developmentWarning")}</HelperText>
+      <PaperCard mode="elevated" style={styles.onboardingSafetyNotice}>
+        <PaperCard.Content style={styles.onboardingSafetyNoticeContent}>
+          <Icon source="shield-alert-outline" size={20} color={theme.colors.primary} />
+          <View style={styles.onboardingSafetyNoticeCopy}>
+            <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>{t("safetyNoticeTitle")}</Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurface }}>{t("safetyNotice")}</Text>
+          </View>
+        </PaperCard.Content>
+      </PaperCard>
     </View><LanguageMenu /></View>;
     return <View style={[styles.page, styles.center]}>
       <BackButton onPress={onCancel} />
