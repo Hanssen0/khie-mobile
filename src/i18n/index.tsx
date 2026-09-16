@@ -1,21 +1,9 @@
-import { useLocales } from "expo-localization";
-import * as SecureStore from "expo-secure-store";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
 import {
   languageOptions,
-  resolveDeviceLocale,
   type AppLocale,
   type LocalePreference,
 } from "./locale";
+import { createI18nRuntime } from "./runtime";
 
 export { languageOptions } from "./locale";
 export type { AppLocale, LocalePreference } from "./locale";
@@ -1391,66 +1379,5 @@ const translations: Record<AppLocale, Record<TranslationKey, string>> = {
   hak,
 };
 
-const preferenceKey = "khie.locale.preference.v1";
-
-interface I18nContextValue {
-  locale: AppLocale;
-  preference: LocalePreference;
-  setPreference: (preference: LocalePreference) => void;
-  t: Translate;
-}
-
-const I18nContext = createContext<I18nContextValue | undefined>(undefined);
-
-function isPreference(value: string | null): value is LocalePreference {
-  return value === "system" || languageOptions.some((option) => option.value === value);
-}
-
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const locales = useLocales();
-  const [preference, setPreferenceState] = useState<LocalePreference>("system");
-  const detectedLocale = resolveDeviceLocale(locales[0]?.languageTag, locales[0]?.languageCode);
-  const locale = preference === "system" ? detectedLocale : preference;
-
-  useEffect(() => {
-    void SecureStore.getItemAsync(preferenceKey)
-      .then((saved) => {
-        if (isPreference(saved)) setPreferenceState(saved);
-      })
-      .catch(() => undefined);
-  }, []);
-
-  const setPreference = useCallback((next: LocalePreference) => {
-    setPreferenceState(next);
-    void SecureStore.setItemAsync(preferenceKey, next).catch(() => undefined);
-  }, []);
-
-  const t = useCallback<Translate>(
-    (key, values) => {
-      let value = translations[locale][key] ?? en[key];
-      for (const [name, replacement] of Object.entries(values ?? {})) {
-        value = value.replaceAll(`{${name}}`, String(replacement));
-      }
-      return value;
-    },
-    [locale],
-  );
-
-  const value = useMemo(
-    () => ({ locale, preference, setPreference, t }),
-    [locale, preference, setPreference, t],
-  );
-
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
-
-export function useI18n(): I18nContextValue {
-  const value = useContext(I18nContext);
-  if (!value) throw new Error("useI18n must be used inside I18nProvider");
-  return value;
-}
-
-export function languageLabel(preference: LocalePreference, t: Translate): string {
-  if (preference === "system") return t("followSystem");
-  return languageOptions.find((option) => option.value === preference)?.label ?? preference;
-}
+const runtime = createI18nRuntime<TranslationKey>(translations, en);
+export const { I18nProvider, useI18n, languageLabel } = runtime;
