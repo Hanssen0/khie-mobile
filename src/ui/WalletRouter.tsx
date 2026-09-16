@@ -104,13 +104,16 @@ export function WalletRouter({
   };
   const navigate = (next: Screen) => {
     if (!navigationRef.isReady()) return;
+    if (navigationRef.getCurrentRoute()?.name === next) return;
     if (next === "receive" || next === "scanner" || next === "send") navigationRef.navigate(next);
     else navigationRef.navigate("tabs", { screen: next });
   };
-  useEffect(() => { navigate(screen); }, [screen, profile, addingWallet]);
+  useEffect(() => { navigate(screen); }, [screen]);
   const updateScreen = () => {
     const route = navigationRef.getCurrentRoute()?.name;
-    if (route && screenRoutes.has(route as Screen)) onScreenChange(route as Screen);
+    if (route && screenRoutes.has(route as Screen) && route !== screen) {
+      onScreenChange(route as Screen);
+    }
   };
 
   if (loading) return <LoadingScreen />;
@@ -122,6 +125,7 @@ export function WalletRouter({
   </SafeAreaView>;
 
   const trust = profile.kind === "cryptape-trust" ? { id: profile.deviceId, name: profile.name, publicKey: profile.publicKey } : undefined;
+  const initialTabRoute: TabRoute = screen === "khie" || screen === "trust" || screen === "settings" ? screen : "home";
   const tabBar = ({ state, navigation }: { state: { index: number; routes: { name: string }[] }; navigation: { navigate: (name: TabRoute) => void } }) =>
     <BottomBar current={state.routes[state.index]?.name as Screen} showTrust={Boolean(trust)} onNavigate={(next) => navigation.navigate(next as TabRoute)} />;
   return <SafeAreaView style={[styles.safe, background]} edges={["top", "right", "left"]}>
@@ -129,10 +133,10 @@ export function WalletRouter({
     {notice ? <Notice text={notice} onDismiss={onDismissNotice} /> : null}
     <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={updateScreen} onStateChange={updateScreen}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="tabs">{() => <Tabs.Navigator tabBar={tabBar} screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="tabs">{() => <Tabs.Navigator initialRouteName={initialTabRoute} tabBar={tabBar} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
           <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
-          {trust ? <Tabs.Screen name="trust">{() => <TrustDeviceScreen device={trust} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} />}</Tabs.Screen> : null}
+          <Tabs.Screen name="trust">{() => trust ? <TrustDeviceScreen device={trust} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} /> : null}</Tabs.Screen>
           <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} focusAppInformation={focusAppInformation} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} onAppInformationFocused={onAppInformationFocused} />}</Tabs.Screen>
         </Tabs.Navigator>}</Stack.Screen>
         <Stack.Screen name="receive">{({ navigation }) => <ReceiveScreen signer={signer} onBack={() => navigation.goBack()} />}</Stack.Screen>
