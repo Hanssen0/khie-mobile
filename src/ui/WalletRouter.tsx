@@ -1,5 +1,11 @@
 import { type Signer } from "@ckb-ccc/core";
-import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationLightTheme,
+  NavigationContainer,
+  createNavigationContainerRef,
+  type Theme as NavigationTheme,
+} from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { type ReactNode, useEffect } from "react";
@@ -81,6 +87,19 @@ export function WalletRouter({
 }) {
   const theme = useTheme();
   const background = { backgroundColor: theme.colors.background };
+  const baseNavigationTheme = theme.dark ? NavigationDarkTheme : NavigationLightTheme;
+  const navigationTheme: NavigationTheme = {
+    ...baseNavigationTheme,
+    colors: {
+      ...baseNavigationTheme.colors,
+      primary: theme.colors.primary,
+      background: theme.colors.background,
+      card: theme.colors.surface,
+      text: theme.colors.onSurface,
+      border: theme.colors.outlineVariant,
+      notification: theme.colors.error,
+    },
+  };
   const navigate = (next: Screen) => {
     if (!navigationRef.isReady()) return;
     if (next === "receive" || next === "scanner") navigationRef.navigate(next);
@@ -106,7 +125,7 @@ export function WalletRouter({
   return <SafeAreaView style={[styles.safe, background]} edges={["top", "right", "left"]}>
     <StatusBar style={theme.dark ? "light" : "dark"} />
     {notice ? <Notice text={notice} onDismiss={onDismissNotice} /> : null}
-    <NavigationContainer ref={navigationRef} onReady={updateScreen} onStateChange={updateScreen}>
+    <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={updateScreen} onStateChange={updateScreen}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="tabs">{() => <Tabs.Navigator tabBar={tabBar} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" ? navigation.navigate("receive") : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
