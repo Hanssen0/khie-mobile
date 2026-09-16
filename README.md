@@ -1,4 +1,22 @@
-# Khie Wallet
+<p align="center">
+  <img alt="Khie Logo" src="assets/khie.svg" width="160" />
+</p>
+
+<h1 align="center">Khie Wallet</h1>
+
+<p align="center">
+  <a href="https://github.com/Hanssen0/khie-mobile/actions/workflows/test.yml"><img
+    alt="Tests" src="https://github.com/Hanssen0/khie-mobile/actions/workflows/test.yml/badge.svg?branch=master"
+  /></a>
+  <a href="https://github.com/Hanssen0/khie-mobile/actions/workflows/release-android.yml"><img
+    alt="Android APK" src="https://github.com/Hanssen0/khie-mobile/actions/workflows/release-android.yml/badge.svg?branch=master"
+  /></a>
+  <a href="https://github.com/Hanssen0/khie-mobile/releases/latest"><img
+    alt="Latest Release" src="https://img.shields.io/github/v/release/Hanssen0/khie-mobile?display_name=tag"
+  /></a>
+  <img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/Hanssen0/khie-mobile" />
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/Hanssen0/khie-mobile/master" />
+</p>
 
 > [!WARNING]
 > This application and its source code were generated entirely by AI. It has not been independently reviewed or proven secure. Before using it, especially with real assets, you must understand the security, private-key management, transaction-signing and operational risks. Use it at your own risk.
