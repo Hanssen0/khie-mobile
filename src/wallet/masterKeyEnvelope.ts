@@ -14,10 +14,16 @@ import * as Crypto from "expo-crypto";
 const MASTER_KEY_LENGTH = 32;
 const NONCE_LENGTH = 12;
 const SALT_LENGTH = 32;
-const ARGON2_MEMORY_KIB = 65_536;
+const ARGON2_MEMORY_KIB = 131_072;
 const ARGON2_ITERATIONS = 3;
-const ARGON2_PARALLELISM = 1;
+const ARGON2_PARALLELISM = 4;
 const DERIVED_KEY_LENGTH = 32;
+const MIN_ARGON2_MEMORY_KIB = 8_192;
+const MAX_ARGON2_MEMORY_KIB = 524_288;
+const MIN_ARGON2_ITERATIONS = 1;
+const MAX_ARGON2_ITERATIONS = 10;
+const MIN_ARGON2_PARALLELISM = 1;
+const MAX_ARGON2_PARALLELISM = 4;
 const MASTER_KEY_AAD = bytesFrom("khie.wallet.master-key.v1", "utf8");
 
 type SerializedMasterKeyEnvelope = {
@@ -144,9 +150,15 @@ function parseMasterKeyEnvelope(value: unknown): SerializedMasterKeyEnvelope {
     typeof envelope.nonce !== "string" ||
     !/^[0-9a-f]{24}$/i.test(envelope.nonce) ||
     !parameters ||
-    parameters.memory !== ARGON2_MEMORY_KIB ||
-    parameters.iterations !== ARGON2_ITERATIONS ||
-    parameters.parallelism !== ARGON2_PARALLELISM ||
+    !Number.isSafeInteger(parameters.memory) ||
+    parameters.memory < MIN_ARGON2_MEMORY_KIB ||
+    parameters.memory > MAX_ARGON2_MEMORY_KIB ||
+    !Number.isSafeInteger(parameters.iterations) ||
+    parameters.iterations < MIN_ARGON2_ITERATIONS ||
+    parameters.iterations > MAX_ARGON2_ITERATIONS ||
+    !Number.isSafeInteger(parameters.parallelism) ||
+    parameters.parallelism < MIN_ARGON2_PARALLELISM ||
+    parameters.parallelism > MAX_ARGON2_PARALLELISM ||
     parameters.hashLength !== DERIVED_KEY_LENGTH ||
     parameters.version !== ARGON2_VERSION_13 ||
     typeof parameters.salt !== "string" ||

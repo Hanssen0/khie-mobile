@@ -32,7 +32,7 @@ import { decryptMasterKey, encryptMasterKey } from "./masterKeyEnvelope";
 describe("master-key envelope", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("wraps a 256-bit master key with the fixed Argon2id parameters", async () => {
+  it("records the Argon2id parameters used to wrap a 256-bit master key", async () => {
     const masterKey = Uint8Array.from({ length: 32 }, (_, index) => index);
     const serialized = await encryptMasterKey(masterKey, "test password");
     const envelope = JSON.parse(serialized) as Record<string, unknown>;
@@ -43,8 +43,8 @@ describe("master-key envelope", () => {
       kdfparams: {
         hashLength: 32,
         iterations: 3,
-        memory: 65_536,
-        parallelism: 1,
+        memory: 131_072,
+        parallelism: 4,
         version: 0x13,
       },
       version: 1,
@@ -53,8 +53,8 @@ describe("master-key envelope", () => {
       expect.objectContaining({
         hashLength: 32,
         iterations: 3,
-        memory: 65_536,
-        parallelism: 1,
+        memory: 131_072,
+        parallelism: 4,
         version: 0x13,
       }),
     );
@@ -70,13 +70,17 @@ describe("master-key envelope", () => {
     );
   });
 
-  it("rejects an envelope with changed KDF parameters", async () => {
+  it("uses the KDF parameters recorded in the envelope", async () => {
     const envelope = JSON.parse(
       await encryptMasterKey(new Uint8Array(32).fill(7), "right"),
-    ) as { kdfparams: { memory: number } };
-    envelope.kdfparams.memory = 19_456;
-    await expect(decryptMasterKey(JSON.stringify(envelope), "right")).rejects.toThrow(
-      "Invalid wallet master key",
+    ) as { kdfparams: { memory: number; parallelism: number } };
+    envelope.kdfparams.memory = 196_608;
+    envelope.kdfparams.parallelism = 2;
+    await expect(decryptMasterKey(JSON.stringify(envelope), "right")).resolves.toEqual(
+      new Uint8Array(32).fill(7),
+    );
+    expect(argon2.argon2id).toHaveBeenLastCalledWith(
+      expect.objectContaining({ memory: 196_608, parallelism: 2 }),
     );
   });
 });
