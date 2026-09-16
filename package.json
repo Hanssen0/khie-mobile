@@ -1,6 +1,6 @@
 {
   "name": "khie-wallet",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "private": true,
   "main": "index.ts",
   "packageManager": "pnpm@12.3.4",

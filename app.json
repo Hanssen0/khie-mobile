@@ -3,13 +3,13 @@
     "name": "Khie Wallet",
     "slug": "khie-wallet",
     "scheme": "khie-wallet",
-    "version": "0.4.3",
+    "version": "0.5.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.hanssen0.khiemobile",
-      "versionCode": 8,
+      "versionCode": 9,
       "icon": "./assets/icon.png",
       "permissions": [
         "CAMERA",
