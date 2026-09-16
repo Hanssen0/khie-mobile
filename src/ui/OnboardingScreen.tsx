@@ -74,7 +74,7 @@ export function OnboardingScreen({ mode, vault, hasMasterPassword, onUnlockMaste
       setPasswordSource(source);
       setNewWalletPassword("");
       setConfirmWalletPassword("");
-      setEnableBiometricUnlock(false);
+      setEnableBiometricUnlock(vault.canUseBiometrics());
       onMode("password");
     } catch (cause) { onError(cause); }
     finally { setBusy(false); }
