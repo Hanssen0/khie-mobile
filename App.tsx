@@ -1,21 +1,13 @@
 import {
   buildSignerJsonRpcHandler,
-  fixedPointToString,
-  SignerCkbPublicKey,
   type Signer,
-  type SignerJsonRpcConfirmation,
 } from "@ckb-ccc/core";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Clipboard from "expo-clipboard";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { NavigationBar } from "expo-navigation-bar";
-import { StatusBar } from "expo-status-bar";
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -23,63 +15,28 @@ import {
 } from "react";
 import {
   AppState,
-  BackHandler,
-  ImageBackground,
   Linking,
-  LayoutChangeEvent,
-  Pressable,
-  ScrollView,
-  StyleSheet,
   useColorScheme,
-  useWindowDimensions,
-  View,
 } from "react-native";
 import {
-  ActivityIndicator,
-  BottomNavigation,
   Button as PaperButton,
-  Card as PaperCard,
-  Chip,
   Dialog,
-  Divider,
   HelperText,
-  Icon,
-  IconButton,
-  List,
-  Menu,
   PaperProvider,
   Portal,
-  SegmentedButtons,
-  Snackbar,
-  Switch,
   Text,
-  TextInput as PaperTextInput,
-  useTheme,
 } from "react-native-paper";
-import QRCode from "react-native-qrcode-svg";
 import {
   KeyboardAvoidingView,
-  KeyboardAwareScrollView,
   KeyboardController,
   KeyboardProvider,
-  type KeyboardAwareScrollViewRef,
 } from "react-native-keyboard-controller";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { RecommendedAppIcon } from "./src/components/RecommendedAppIcon";
 import { LocalizedError } from "./src/errors";
 import {
-  CryptapeIcon,
-  cryptapeIconSource,
-} from "./src/components/CryptapeIcon";
-import { InfoCard } from "./src/components/InfoCard";
-import { KhieIcon, khieIconSource } from "./src/components/KhieIcon";
-import {
   I18nProvider,
-  languageLabel,
-  languageOptions,
   useI18n,
-  type Translate,
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import { resumeKhieSessionWhenActive } from "./src/khie/appLifecycle";
@@ -94,10 +51,8 @@ import {
   showKhieRequestNotification,
   type KhieNotificationPermission,
 } from "./src/khie/notifications";
-import { TransactionApprovalDetails } from "./src/khie/TransactionApprovalDetails";
 import {
   KhieProviderSession,
-  type KhieProviderSessionError,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
@@ -107,11 +62,8 @@ import {
   ensureTrustBluetoothReady,
   generateTrustWalletKey,
   importTrustWalletKey,
-  isTrustSupported,
   resetTrustWalletKey,
   resetTrustWalletPin,
-  scanForTrustDevices,
-  TrustBluetoothSetupError,
   type ConnectedTrustDevice,
   type TrustDevice,
 } from "./src/trust/native";
@@ -135,19 +87,10 @@ import {
 } from "./src/storage/walletVault";
 import { LocalMnemonicSigningBackend } from "./src/wallet/localMnemonicBackend";
 import { KhieSignerAdapter } from "./src/wallet/khieSignerAdapter";
-import {
-  TrustHardwareSigningBackend,
-  type RequestTrustPin,
-} from "./src/wallet/trustHardwareBackend";
-import {
-  createMnemonicChallenges,
-  type MnemonicChallenge,
-} from "./src/wallet/mnemonicChallenge";
-import { assertValidMnemonic } from "./src/wallet/derivation";
+import { TrustHardwareSigningBackend, type RequestTrustPin } from "./src/wallet/trustHardwareBackend";
 import {
   DEFAULT_NETWORK_RPC_URLS,
   clientForNetwork,
-  isRpcUrl,
   networkFromId,
   type NetworkRpcUrls,
 } from "./src/wallet/network";
@@ -155,31 +98,20 @@ import {
   normalizeTrustPublicKey,
   prepareTrustKeyImport,
 } from "./src/wallet/trustSignature";
-import {
-  assertWalletPassword,
-  MIN_WALLET_PASSWORD_LENGTH,
-} from "./src/wallet/password";
-import type { Network, WalletProfile, WalletState } from "./src/wallet/types";
-import {
-  generateMnemonic,
-  persistFirstMnemonicWallet,
-  persistWallet,
-} from "./src/wallet/walletService";
+import { assertWalletPassword } from "./src/wallet/password";
+import type { Network, WalletState } from "./src/wallet/types";
 import { walletDarkTheme, walletLightTheme } from "./src/theme";
 import {
   fetchLatestRelease,
   GITHUB_RELEASES_URL,
-  GITHUB_REPOSITORY_URL,
   isRetryableUpdateError,
   isVersionNewer,
   selectAndroidApk,
-  type ReleaseAsset,
 } from "./src/update/githubRelease";
 import {
   AppDialogProvider,
   errorMessage,
   KeyboardDialogContent,
-  LoadingScreen,
   Notice,
   TrustBluetoothSetupProvider,
   useAppDialog,
@@ -187,12 +119,9 @@ import {
   walletAuthenticationPrompt,
   WalletTextInput,
 } from "./src/ui/components";
-import { HomeScreen, ReceiveScreen } from "./src/ui/AccountScreens";
-import { approvalNetwork, approvalTitle, KhieScreen, ScannerScreen } from "./src/ui/KhieScreen";
-import { BottomBar, hasTrustPublicKeyChanged } from "./src/ui/navigation";
-import { OnboardingScreen } from "./src/ui/OnboardingScreen";
-import { SettingsScreen } from "./src/ui/SettingsScreen";
-import { TrustDeviceScreen } from "./src/ui/TrustDeviceScreen";
+import { approvalNetwork, approvalTitle } from "./src/ui/KhieScreen";
+import { hasTrustPublicKeyChanged } from "./src/ui/navigation";
+import { WalletRouter } from "./src/ui/WalletRouter";
 import { styles } from "./src/ui/styles";
 
 type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
@@ -213,29 +142,6 @@ type TrustPinRequest = {
   reject: (cause: Error) => void;
   resolve: (pin: string) => void;
 };
-type TrustBluetoothSetupContextValue = {
-  show: (cause: unknown) => boolean;
-};
-type AppDialogState = {
-  title: string;
-  message: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  destructive?: boolean;
-  onConfirm?: () => void;
-};
-type AppDialogContextValue = {
-  show: (title: string, message: string) => void;
-  confirm: (dialog: AppDialogState) => void;
-};
-
-const TrustBluetoothSetupContext = createContext<
-  TrustBluetoothSetupContextValue | undefined
->(undefined);
-const AppDialogContext = createContext<AppDialogContextValue | undefined>(
-  undefined,
-);
-
 const endpointUrl = "https://app.ckbccc.com/khie";
 const currentAppVersion =
   Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "unknown";
@@ -313,7 +219,6 @@ function WalletApp({
   const { t } = useI18n();
   const appDialog = useAppDialog();
   const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup();
-  const theme = useTheme();
   const tRef = useRef(t);
   tRef.current = t;
   const vault = useMemo(
@@ -1042,17 +947,6 @@ function WalletApp({
     return () => subscription.remove();
   }, []);
 
-  useEffect(() => {
-    if (screen !== "receive") {
-      return;
-    }
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setScreen("home");
-      return true;
-    });
-    return () => subscription.remove();
-  }, [screen]);
-
   const changeNetwork = useCallback(
     (next: Network) => {
       if (next === networkRef.current) {
@@ -1582,10 +1476,6 @@ function WalletApp({
     </Portal>
   );
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
   const finishOnboarding = async (next: WalletState) => {
     if (trustDevice) {
       await clearTrustConnection();
@@ -1595,185 +1485,97 @@ function WalletApp({
     setAddingWallet(false);
   };
 
-  if (!profile) {
-    return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-        {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-        <OnboardingScreen
-          mode={onboarding}
-          vault={vault}
-          hasMasterPassword={walletState.masterPasswordSet}
-          onUnlockMasterPassword={() => requestMasterCredential("useWallet")}
-          onMode={setOnboarding}
-          onComplete={finishOnboarding}
-          onConnectTrust={addTrustWallet}
-          onError={(cause) => setNotice(errorMessage(cause, t))}
-        />
-        {trustDialogs}
-      </SafeAreaView>
-    );
-  }
-
-  if (addingWallet) {
-    return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-        {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-        <OnboardingScreen
-          mode={onboarding}
-          vault={vault}
-          hasMasterPassword={walletState.masterPasswordSet}
-          onUnlockMasterPassword={() => requestMasterCredential("useWallet")}
-          onMode={setOnboarding}
-          onComplete={finishOnboarding}
-          onConnectTrust={addTrustWallet}
-          onCancel={() => {
-            setAddingWallet(false);
-            setOnboarding("start");
-          }}
-          onError={(cause) => setNotice(errorMessage(cause, t))}
-        />
-        {trustDialogs}
-      </SafeAreaView>
-    );
-  }
-
-  const displayedTrustDevice =
-    profile.kind === "cryptape-trust"
-      ? {
-          id: profile.deviceId,
-          name: profile.name,
-          publicKey: profile.publicKey,
-        }
-      : undefined;
-
   return (
-    <SafeAreaView
-      edges={screen === "scanner" ? undefined : ["top", "right", "left"]}
-      style={[styles.safe, { backgroundColor: theme.colors.background }]}
-    >
-      <StatusBar style={theme.dark ? "light" : "dark"} />
-      {notice ? <Notice text={notice} onDismiss={() => setNotice(undefined)} /> : null}
-      <View style={styles.body}>
-        {screen === "home" ? (
-          <HomeScreen
-            signer={signerRef.current}
-            network={network}
-            profile={profile}
-            wallets={walletState.wallets}
-            onSelectWallet={(walletId) => {
-              void selectWallet(walletId)
-                .catch((cause: unknown) => setNotice(errorMessage(cause, t)));
-            }}
-            onNavigate={setScreen}
-          />
-        ) : null}
-        {screen === "receive" ? (
-          <ReceiveScreen signer={signerRef.current} onBack={() => setScreen("home")} />
-        ) : null}
-        {screen === "khie" ? (
-          <KhieScreen
-            state={sessionState}
-            pairing={pairing}
-            approval={approval}
-            network={network}
-            signer={signerRef.current}
-            onScan={() => setScreen("scanner")}
-            onPair={pairKhieEndpoint}
-            onCancelPairing={cancelKhiePairing}
-            onConnectRelay={(address) =>
-              sessionRef.current?.connectRelay(address) ?? Promise.resolve(false)
-            }
-            onUnpair={() => sessionRef.current?.unpair() ?? Promise.resolve()}
-            onRespond={(approved) =>
-              approval && approvalQueue.respond(approval.id, approved)
-            }
-          />
-        ) : null}
-        {screen === "trust" && displayedTrustDevice ? (
-          <TrustDeviceScreen
-            device={displayedTrustDevice}
-            onRefresh={refreshSelectedTrust}
-            onGenerate={generateTrustKey}
-            onImport={importTrustKey}
-            onReset={resetTrustKey}
-          />
-        ) : null}
-        {screen === "settings" ? (
-          <SettingsScreen
-            key={profile.id}
-            backend={localBackend}
-            network={network}
-            profile={profile}
-            wallets={walletState.wallets}
-            rpcUrls={rpcUrls}
-            themePreference={themePreference}
-            updateSettings={updateSettings}
-            checkingForUpdates={checkingForUpdates}
-            currentVersion={currentAppVersion}
-            buildCommit={currentBuildCommit}
-            appArchitecture={currentAppArchitecture}
-            updateAvailable={updateAvailable}
-            updateAsset={updateAsset}
-            focusAppInformation={focusAppInformation}
-            biometricAvailable={vault.canUseBiometrics()}
-            biometricUnlock={walletState.biometricUnlock}
-            masterPasswordSet={walletState.masterPasswordSet}
-            onChangeNetwork={changeNetwork}
-            onChangeBiometricUnlock={changeBiometricUnlock}
-            onChangeMasterPassword={changeMasterPassword}
-            onSelectWallet={selectWallet}
-            onAddWallet={() => {
-              setOnboarding("start");
-              setAddingWallet(true);
-            }}
-            onRemoveWallet={async (walletId) => {
-              const removed = walletState.wallets.find((wallet) => wallet.id === walletId);
-              if (
-                removed?.kind === "cryptape-trust" &&
-                trustDevice?.id.toLowerCase() === removed.deviceId.toLowerCase()
-              ) {
-                await clearTrustConnection();
-              }
-              if (walletId === profile.id && sessionState.paired) {
-                void sessionRef.current?.unpair().catch(() => undefined);
-              }
-              approvalQueue.cancelAll("Wallet removed");
-              const next = await vault.remove(walletId);
-              setWalletState(next);
-              setScreen(next.wallets.length ? "settings" : "home");
-            }}
-            onSaveRpcUrls={async (next) => {
-              await saveRpcUrls(next);
-              setNotice(t("rpcUrlsSaved"));
-            }}
-            onChangeThemePreference={onChangeThemePreference}
-            onChangeAutomaticUpdateChecks={changeAutomaticUpdateChecks}
-            onCheckForUpdates={() => checkForUpdates(false)}
-            onDownloadUpdate={downloadUpdate}
-            onAppInformationFocused={() => setFocusAppInformation(false)}
-          />
-        ) : null}
-        {screen === "scanner" ? (
-          <ScannerScreen
-            onCancel={() => setScreen("khie")}
-            onScanned={(value) => {
-              setScreen("khie");
-              void pairKhieEndpoint(value);
-            }}
-          />
-        ) : null}
-      </View>
-      {screen !== "scanner" ? (
-        <BottomBar
-          current={screen}
-          showTrust={profile.kind === "cryptape-trust"}
-          onNavigate={setScreen}
-        />
-      ) : null}
-      {trustDialogs}
-      {khieNotificationPermissionDialog}
-    </SafeAreaView>
+    <WalletRouter
+      loading={loading}
+      screen={screen}
+      profile={profile}
+      wallets={walletState.wallets}
+      signer={signerRef.current}
+      network={network}
+      onboarding={{
+        mode: onboarding,
+        vault,
+        hasMasterPassword: walletState.masterPasswordSet,
+        onUnlockMasterPassword: () => requestMasterCredential("useWallet"),
+        onMode: setOnboarding,
+        onComplete: finishOnboarding,
+        onConnectTrust: addTrustWallet,
+        onError: (cause) => setNotice(errorMessage(cause, t)),
+      }}
+      addingWallet={addingWallet}
+      sessionState={sessionState}
+      pairing={pairing}
+      approval={approval}
+      localBackend={localBackend}
+      rpcUrls={rpcUrls}
+      themePreference={themePreference}
+      updateSettings={updateSettings}
+      checkingForUpdates={checkingForUpdates}
+      currentVersion={currentAppVersion}
+      buildCommit={currentBuildCommit}
+      appArchitecture={currentAppArchitecture}
+      updateAvailable={updateAvailable}
+      updateAsset={updateAsset}
+      focusAppInformation={focusAppInformation}
+      biometricAvailable={vault.canUseBiometrics()}
+      biometricUnlock={walletState.biometricUnlock}
+      masterPasswordSet={walletState.masterPasswordSet}
+      notice={notice}
+      dialogs={<>{trustDialogs}{khieNotificationPermissionDialog}</>}
+      onDismissNotice={() => setNotice(undefined)}
+      onScreenChange={setScreen}
+      onFinishOnboarding={finishOnboarding}
+      onCancelAddingWallet={() => {
+        setAddingWallet(false);
+        setOnboarding("start");
+      }}
+      onPairKhie={pairKhieEndpoint}
+      onCancelKhiePairing={cancelKhiePairing}
+      onConnectRelay={(address) =>
+        sessionRef.current?.connectRelay(address) ?? Promise.resolve(false)
+      }
+      onUnpairKhie={() => sessionRef.current?.unpair() ?? Promise.resolve()}
+      onRespondToApproval={(approved) =>
+        approval && approvalQueue.respond(approval.id, approved)
+      }
+      onRefreshTrust={refreshSelectedTrust}
+      onGenerateTrustKey={generateTrustKey}
+      onImportTrustKey={importTrustKey}
+      onResetTrustKey={resetTrustKey}
+      onChangeNetwork={changeNetwork}
+      onChangeBiometricUnlock={changeBiometricUnlock}
+      onChangeMasterPassword={changeMasterPassword}
+      onAddWallet={() => {
+        setOnboarding("start");
+        setAddingWallet(true);
+      }}
+      onSelectWallet={selectWallet}
+      onRemoveWallet={async (walletId) => {
+        const removed = walletState.wallets.find((wallet) => wallet.id === walletId);
+        if (
+          removed?.kind === "cryptape-trust" &&
+          trustDevice?.id.toLowerCase() === removed.deviceId.toLowerCase()
+        ) {
+          await clearTrustConnection();
+        }
+        if (walletId === profile?.id && sessionState.paired) {
+          void sessionRef.current?.unpair().catch(() => undefined);
+        }
+        approvalQueue.cancelAll("Wallet removed");
+        const next = await vault.remove(walletId);
+        setWalletState(next);
+        setScreen(next.wallets.length ? "settings" : "home");
+      }}
+      onSaveRpcUrls={async (next) => {
+        await saveRpcUrls(next);
+        setNotice(t("rpcUrlsSaved"));
+      }}
+      onChangeThemePreference={onChangeThemePreference}
+      onChangeAutomaticUpdateChecks={changeAutomaticUpdateChecks}
+      onCheckForUpdates={() => checkForUpdates(false)}
+      onDownloadUpdate={downloadUpdate}
+      onAppInformationFocused={() => setFocusAppInformation(false)}
+    />
   );
 }

@@ -1,4 +1,3 @@
-import { type SignerJsonRpcConfirmation } from "@ckb-ccc/core";
 import QRCode from "react-native-qrcode-svg";
 import { useCallback, useContext, useMemo, useState, createContext } from "react";
 import { Linking, ScrollView, View } from "react-native";
@@ -7,7 +6,6 @@ import {
   ActivityIndicator,
   Button as PaperButton,
   Dialog,
-  PaperProvider,
   Portal,
   Snackbar,
   Text,
