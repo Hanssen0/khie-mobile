@@ -3,6 +3,11 @@ import {
   type JsonRpcPayload,
   type Signer,
 } from "@ckb-ccc/core";
+import {
+  addKhieBackgroundStopPairingListener,
+  startKhieBackgroundService,
+  stopKhieBackgroundService,
+} from "@khie/background-service";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -17,6 +22,7 @@ import {
 import {
   AppState,
   Linking,
+  Platform,
   useColorScheme,
 } from "react-native";
 import {
@@ -41,6 +47,10 @@ import {
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import { resumeKhieSessionWhenActive } from "./src/khie/appLifecycle";
+import {
+  finishKhieHeadlessTask,
+  setKhieKeepAliveHandler,
+} from "./src/khie/backgroundKeepAlive";
 import {
   addKhieNotificationResponseListener,
   configureKhieNotifications,
@@ -558,7 +568,11 @@ function WalletApp({
   }, [t]);
 
   useEffect(() => {
-    if (!sessionState.paired) {
+    const shouldExplainBackgroundConnection =
+      Platform.OS === "android"
+        ? screen === "khie"
+        : sessionState.paired;
+    if (!shouldExplainBackgroundConnection) {
       khieNotificationPromptDismissed.current = false;
       setKhieNotificationPromptOpen(false);
       return;
@@ -573,10 +587,12 @@ function WalletApp({
   }, [
     khieNotificationPermission,
     khieNotificationsConfigured,
+    screen,
     sessionState.paired,
   ]);
 
   useEffect(() => {
+    if (Platform.OS === "android") return;
     const khieIsVisible = appState === "active" && screen === "khie";
     if (
       !sessionState.paired ||
@@ -610,6 +626,71 @@ function WalletApp({
     sessionState.remotePeer?.name,
     t,
   ]);
+
+  useEffect(() => {
+    let resuming = false;
+    setKhieKeepAliveHandler(async () => {
+      if (resuming) return;
+      resuming = true;
+      try {
+        await sessionRef.current?.resume();
+      } finally {
+        resuming = false;
+      }
+    });
+    return () => setKhieKeepAliveHandler();
+  }, []);
+
+  useEffect(() => {
+    const waitingForPairing =
+      !sessionState.paired && (screen === "khie" || screen === "scanner");
+    sessionRef.current?.setPairingEnabled(waitingForPairing);
+    if (Platform.OS !== "android") return;
+    if (!sessionState.paired && !waitingForPairing) {
+      finishKhieHeadlessTask();
+      void stopKhieBackgroundService().catch(() => undefined);
+      return;
+    }
+    if (waitingForPairing) {
+      void startKhieBackgroundService(
+        t("khiePairingNotificationTitle"),
+        t("khiePairingNotificationBody"),
+        t("khieConnectionNotificationChannel"),
+        t("stopPairing"),
+      ).catch(() => undefined);
+      return;
+    }
+    const connection = !sessionState.remotePeer?.active
+      ? t("inactive")
+      : sessionState.remotePeer.direct
+        ? t("direct")
+        : t("relayed");
+    void startKhieBackgroundService(
+      t("khieConnectedNotificationTitle"),
+      t("khieConnectedNotificationBody", {
+        connection,
+        peer: sessionState.remotePeer?.name ?? t("unknown"),
+      }),
+      t("khieConnectionNotificationChannel"),
+    ).catch(() => undefined);
+  }, [
+    sessionState.paired,
+    sessionState.ready,
+    sessionState.remotePeer?.active,
+    sessionState.remotePeer?.direct,
+    sessionState.remotePeer?.name,
+    screen,
+    t,
+  ]);
+
+  useEffect(() => {
+    const subscription = addKhieBackgroundStopPairingListener(() => {
+      sessionRef.current?.setPairingEnabled(false);
+      setPairing(false);
+      setScreen("home");
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const khieIsVisible = appState === "active" && screen === "khie";
@@ -1090,6 +1171,8 @@ function WalletApp({
     return () => {
       approvalQueue.cancelAll("Khie session closed");
       sessionRef.current = undefined;
+      finishKhieHeadlessTask();
+      void stopKhieBackgroundService().catch(() => undefined);
       void dismissKhieConnectionNotification().catch(() => undefined);
       void dismissKhieRequestNotification().catch(() => undefined);
       void session.close();
@@ -1698,7 +1781,17 @@ function WalletApp({
       notice={notice}
       dialogs={<>{trustDialogs}{khieNotificationPermissionDialog}</>}
       onDismissNotice={() => setNotice(undefined)}
-      onScreenChange={setScreen}
+      onScreenChange={(next) => {
+        const leavingKhiePairing =
+          next !== "khie" &&
+          next !== "scanner" &&
+          sessionRef.current?.snapshot.paired !== true;
+        if (leavingKhiePairing) {
+          sessionRef.current?.setPairingEnabled(false);
+          setPairing(false);
+        }
+        setScreen(next);
+      }}
       onFinishOnboarding={finishOnboarding}
       onCancelAddingWallet={() => {
         setAddingWallet(false);

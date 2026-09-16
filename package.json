@@ -1,6 +1,6 @@
 {
   "name": "khie-wallet",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "main": "index.ts",
   "packageManager": "pnpm@12.4.2",
@@ -20,6 +20,7 @@
     "@ckb-ccc/libp2p": "0.2.1",
     "@craftzdog/react-native-buffer": "6.1.2",
     "@khie/trust-wallet": "file:modules/trust-wallet",
+    "@khie/background-service": "file:modules/khie-background",
     "@libp2p/circuit-relay-v2": "4.2.13",
     "@libp2p/identify": "4.1.14",
     "@libp2p/interface": "3.3.0",

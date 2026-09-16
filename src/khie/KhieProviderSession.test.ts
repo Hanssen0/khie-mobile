@@ -61,6 +61,17 @@ describe("KhieProviderSession relay address", () => {
 });
 
 describe("KhieProviderSession pairing lifetime", () => {
+  it("cancels an active pairing attempt when pairing is disabled", () => {
+    const session = createSession();
+    const controller = new AbortController();
+    Object.assign(session, { pairingController: controller });
+
+    session.setPairingEnabled(false);
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ name: "AbortError" });
+  });
+
   it("classifies malformed endpoints as incompatible pairing codes", async () => {
     const session = createSession();
     Object.assign(session, { node: {} });

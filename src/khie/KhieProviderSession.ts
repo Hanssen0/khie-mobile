@@ -90,6 +90,7 @@ export class KhieProviderSession {
   private pairedPeer?: PeerId;
   private pairedPeerName?: string;
   private pairingController?: AbortController;
+  private pairingEnabled = false;
   private endpointUpdateId = 0;
   private remotePeerUpdateId = 0;
   private disconnectedAt?: number;
@@ -121,7 +122,10 @@ export class KhieProviderSession {
     khieTrace("session.start.begin");
     try {
       const node = await createProviderNode(
-        () => !this.abortController.signal.aborted && !this.pairedPeer,
+        () =>
+          !this.abortController.signal.aborted &&
+          this.pairingEnabled &&
+          !this.pairedPeer,
         (peerId) => this.pairedPeer?.equals(peerId) === true,
         this.config.handler,
         this.config.pairedPeerTimeoutMs ?? DEFAULT_PAIRED_PEER_TIMEOUT_MS,
@@ -192,6 +196,7 @@ export class KhieProviderSession {
     if (!node || this.pairedPeer || this.pairingController) {
       return false;
     }
+    this.pairingEnabled = true;
     const controller = new AbortController();
     this.pairingController = controller;
     const signal = ccc.abortSignalAny([
@@ -229,6 +234,13 @@ export class KhieProviderSession {
     const error = new Error("Pairing canceled");
     error.name = "AbortError";
     this.pairingController?.abort(error);
+  }
+
+  setPairingEnabled(enabled: boolean): void {
+    this.pairingEnabled = enabled;
+    if (!enabled) {
+      this.cancelPairing();
+    }
   }
 
   async unpair(): Promise<void> {
