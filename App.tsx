@@ -1908,7 +1908,7 @@ function OnboardingScreen({
       return (
         <View style={styles.onboardingStart}>
           <View style={styles.onboardingContent}>
-            <Icon source="wallet" size={64} color={theme.colors.primary} />
+            <KhieIcon size={64} color={theme.colors.primary} />
             <Text variant="displaySmall">Khie Wallet</Text>
             <Text variant="bodyLarge" style={styles.centerText}>{t("tagline")}</Text>
             <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
@@ -1925,7 +1925,7 @@ function OnboardingScreen({
     return (
       <View style={[styles.page, styles.center]}>
         <BackButton onPress={onCancel} />
-        <Icon source="wallet" size={64} color={theme.colors.primary} />
+        <KhieIcon size={64} color={theme.colors.primary} />
         <Text variant="displaySmall">{t("addWallet")}</Text>
         <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
         <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
