@@ -8,13 +8,13 @@ import {
 } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "react-native-paper";
 
 import { LoadingScreen, Notice } from "./components";
-import { HomeScreen, ReceiveScreen } from "./AccountScreens";
+import { HomeScreen, ReceiveScreen, SendScreen } from "./AccountScreens";
 import { KhieScreen, ScannerScreen } from "./KhieScreen";
 import { BottomBar } from "./navigation";
 import { OnboardingScreen } from "./OnboardingScreen";
@@ -34,10 +34,11 @@ import type { Network, WalletProfile, WalletState } from "../wallet/types";
 import type { ReleaseAsset } from "../update/githubRelease";
 
 type TabRoute = "home" | "khie" | "trust" | "settings";
-type RootRoutes = { tabs: { screen?: TabRoute } | undefined; receive: undefined; scanner: undefined };
+type RootRoutes = { tabs: { screen?: TabRoute } | undefined; receive: undefined; scanner: undefined; send: undefined; sendScanner: undefined };
 const navigationRef = createNavigationContainerRef<RootRoutes>();
 const Stack = createNativeStackNavigator<RootRoutes>();
 const Tabs = createBottomTabNavigator<Record<TabRoute, undefined>>();
+const screenRoutes = new Set<Screen>(["home", "receive", "send", "khie", "trust", "settings", "scanner"]);
 
 type OnboardingRouteProps = {
   mode: Onboarding; vault: SecureStoreWalletVault; hasMasterPassword: boolean;
@@ -86,6 +87,7 @@ export function WalletRouter({
   onAppInformationFocused: () => void;
 }) {
   const theme = useTheme();
+  const [scannedRecipient, setScannedRecipient] = useState<string>();
   const background = { backgroundColor: theme.colors.background };
   const baseNavigationTheme = theme.dark ? NavigationDarkTheme : NavigationLightTheme;
   const navigationTheme: NavigationTheme = {
@@ -102,13 +104,13 @@ export function WalletRouter({
   };
   const navigate = (next: Screen) => {
     if (!navigationRef.isReady()) return;
-    if (next === "receive" || next === "scanner") navigationRef.navigate(next);
+    if (next === "receive" || next === "scanner" || next === "send") navigationRef.navigate(next);
     else navigationRef.navigate("tabs", { screen: next });
   };
   useEffect(() => { navigate(screen); }, [screen, profile, addingWallet]);
   const updateScreen = () => {
     const route = navigationRef.getCurrentRoute()?.name;
-    if (route && route !== "tabs") onScreenChange(route);
+    if (route && screenRoutes.has(route as Screen)) onScreenChange(route as Screen);
   };
 
   if (loading) return <LoadingScreen />;
@@ -128,13 +130,15 @@ export function WalletRouter({
     <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={updateScreen} onStateChange={updateScreen}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="tabs">{() => <Tabs.Navigator tabBar={tabBar} screenOptions={{ headerShown: false }}>
-          <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" ? navigation.navigate("receive") : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
+          <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
           <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
           {trust ? <Tabs.Screen name="trust">{() => <TrustDeviceScreen device={trust} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} />}</Tabs.Screen> : null}
           <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} focusAppInformation={focusAppInformation} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} onAppInformationFocused={onAppInformationFocused} />}</Tabs.Screen>
         </Tabs.Navigator>}</Stack.Screen>
         <Stack.Screen name="receive">{({ navigation }) => <ReceiveScreen signer={signer} onBack={() => navigation.goBack()} />}</Stack.Screen>
+        <Stack.Screen name="send">{({ navigation }) => <SendScreen signer={signer} onBack={() => navigation.goBack()} onScanAddress={() => navigation.navigate("sendScanner")} scannedAddress={scannedRecipient} onScannedAddressConsumed={() => setScannedRecipient(undefined)} />}</Stack.Screen>
         <Stack.Screen name="scanner">{({ navigation }) => <ScannerScreen onCancel={() => navigation.goBack()} onScanned={(value) => { navigation.goBack(); void onPairKhie(value); }} />}</Stack.Screen>
+        <Stack.Screen name="sendScanner">{({ navigation }) => <ScannerScreen titleKey="scanWalletAddress" onCancel={() => navigation.goBack()} onScanned={(value) => { setScannedRecipient(value); navigation.goBack(); }} />}</Stack.Screen>
       </Stack.Navigator>
     </NavigationContainer>
     {dialogs}

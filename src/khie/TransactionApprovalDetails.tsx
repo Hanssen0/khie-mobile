@@ -49,9 +49,11 @@ type FeeResolution = {
 export function TransactionApprovalDetails({
   client,
   transaction,
+  requestedFeeRate,
 }: {
   client: Client;
   transaction: Transaction;
+  requestedFeeRate?: Num;
 }) {
   const { t } = useI18n();
   const [inputResolution, setInputResolution] = useState<InputResolution>();
@@ -160,7 +162,7 @@ export function TransactionApprovalDetails({
             <Text variant="labelMedium">{t("feeRate")}</Text>
             <Text variant="bodyMedium">
               {t("shannonsPerKb", {
-                rate: transactionFeeRate(transaction, fee).toString(),
+                rate: (requestedFeeRate ?? transactionFeeRate(transaction, fee)).toString(),
               })}
             </Text>
           </View>

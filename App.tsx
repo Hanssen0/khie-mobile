@@ -124,7 +124,7 @@ import { hasTrustPublicKeyChanged } from "./src/ui/navigation";
 import { WalletRouter } from "./src/ui/WalletRouter";
 import { styles } from "./src/ui/styles";
 
-type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
+type Screen = "home" | "receive" | "send" | "khie" | "trust" | "settings" | "scanner";
 type Onboarding = "start" | "create" | "confirm" | "password" | "restore" | "trust";
 type WalletUnlockResult = {
   mnemonic?: string;

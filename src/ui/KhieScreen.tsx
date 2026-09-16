@@ -8,7 +8,7 @@ import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from "react-
 
 import { InfoCard } from "../components/InfoCard";
 import { KhieIcon } from "../components/KhieIcon";
-import { useI18n, type Translate } from "../i18n";
+import { useI18n, type Translate, type TranslationKey } from "../i18n";
 import { type ApprovalItem } from "../khie/approvalQueue";
 import { type KhieProviderSessionState } from "../khie/KhieProviderSession";
 import { TransactionApprovalDetails } from "../khie/TransactionApprovalDetails";
@@ -41,12 +41,12 @@ export function KhieScreen({ state, pairing, approval, network, signer, onScan, 
   </KeyboardAwareScrollView>;
 }
 
-export function ScannerScreen({ onCancel, onScanned }: { onCancel: () => void; onScanned: (value: string) => void }) {
+export function ScannerScreen({ onCancel, onScanned, titleKey = "scanConnectorCode" }: { onCancel: () => void; onScanned: (value: string) => void; titleKey?: TranslationKey }) {
   const { t } = useI18n(); const [permission, requestPermission] = useCameraPermissions(); const scanned = useRef(false);
   useEffect(() => { const subscription = BackHandler.addEventListener("hardwareBackPress", () => { onCancel(); return true; }); return () => subscription.remove(); }, [onCancel]);
   if (!permission) return <View style={[styles.page, styles.center]}><ActivityIndicator /></View>;
   if (!permission.granted) return <View style={styles.page}><Portal><Dialog visible onDismiss={onCancel}><Dialog.Icon icon="camera" /><Dialog.Title style={styles.centerText}>{t("cameraPermissionRequired")}</Dialog.Title><Dialog.Content><Text variant="bodyMedium">{t("cameraPermissionReason")}</Text></Dialog.Content><Dialog.Actions style={styles.dialogActions}><PaperButton contentStyle={styles.extraHorizontalButtonPadding} onPress={onCancel}>{t("back")}</PaperButton><PaperButton mode="contained" contentStyle={styles.extraHorizontalButtonPadding} onPress={() => { if (permission.canAskAgain) void requestPermission(); else void Linking.openSettings(); }}>{permission.canAskAgain ? t("allowCamera") : t("openSettings")}</PaperButton></Dialog.Actions></Dialog></Portal></View>;
-  return <View style={styles.scanner}><CameraView style={StyleSheet.absoluteFill} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={({ data }) => { if (!scanned.current) { scanned.current = true; onScanned(data); } }} /><View style={styles.scanFooter}><Text variant="titleMedium" style={styles.scanText}>{t("scanConnectorCode")}</Text><PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancelScan")}</PaperButton></View></View>;
+  return <View style={styles.scanner}><CameraView style={StyleSheet.absoluteFill} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={({ data }) => { if (!scanned.current) { scanned.current = true; onScanned(data); } }} /><View style={styles.scanFooter}><Text variant="titleMedium" style={styles.scanText}>{t(titleKey)}</Text><PaperButton mode="contained-tonal" icon="close" onPress={onCancel}>{t("cancelScan")}</PaperButton></View></View>;
 }
 
 function ApprovalPanel({ item, network, signer, onRespond, onLayout }: { item?: ApprovalItem; network: Network; signer?: Signer; onRespond: (approved: boolean) => void; onLayout?: (event: LayoutChangeEvent) => void }) {

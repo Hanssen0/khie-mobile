@@ -1,4 +1,4 @@
-export type Screen = "home" | "receive" | "khie" | "trust" | "settings" | "scanner";
+export type Screen = "home" | "receive" | "send" | "khie" | "trust" | "settings" | "scanner";
 
 export type Onboarding =
   | "start"
