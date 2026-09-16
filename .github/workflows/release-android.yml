@@ -114,7 +114,12 @@ jobs:
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$apksigner"
           "$apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-universal-release.apk
-          "$apksigner" verify --print-certs android/app/build/outputs/apk/release/app-universal-release.apk | grep -F "Signer #1 certificate SHA-256 digest: $KHIE_SIGNING_CERT_SHA256"
+          apk_fingerprint="$("$apksigner" verify --print-certs android/app/build/outputs/apk/release/app-universal-release.apk | awk -F': ' '/certificate SHA-256 digest:/{print toupper($NF); exit}')"
+          [[ "$apk_fingerprint" =~ ^[A-F0-9]{64}$ ]]
+          if [[ "$apk_fingerprint" != "$KHIE_SIGNING_CERT_SHA256" ]]; then
+            printf 'APK signing certificate mismatch: expected %s, got %s\n' "$KHIE_SIGNING_CERT_SHA256" "$apk_fingerprint" >&2
+            exit 1
+          fi
 
       - name: Remove release signing key
         if: always()
