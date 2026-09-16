@@ -115,13 +115,15 @@ export function OnboardingScreen({ mode, vault, hasMasterPassword, onUnlockMaste
         </PaperCard.Content>
       </PaperCard>
     </View><LanguageMenu /></View>;
-    return <View style={[styles.page, styles.center]}>
+    return <View style={styles.onboardingStart}>
       <BackButton onPress={onCancel} />
-      <KhieIcon size={64} color={theme.colors.primary} />
-      <Text variant="displaySmall">{t("addWallet")}</Text>
-      <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
-      <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
-      <LinkButton label={t("connectTrustWallet")} onPress={() => onMode("trust")} />
+      <View style={styles.onboardingContent}>
+        <KhieIcon size={64} color={theme.colors.primary} />
+        <Text variant="displaySmall">{t("addWallet")}</Text>
+        <PrimaryButton label={t("createWallet")} onPress={() => void beginCreate()} disabled={busy} />
+        <SecondaryButton label={t("restoreWallet")} onPress={() => onMode("restore")} />
+        <LinkButton label={t("connectTrustWallet")} onPress={() => onMode("trust")} />
+      </View>
     </View>;
   }
   if (mode === "trust") return <ScrollView contentContainerStyle={styles.page}>
