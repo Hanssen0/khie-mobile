@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "android": {
-      "package": "com.example.khiewallet",
+      "package": "com.hanssen0.khiemobile",
       "versionCode": 8,
       "icon": "./assets/icon.png",
       "permissions": [
@@ -36,6 +36,7 @@
     },
     "plugins": [
       "./plugins/withAndroidAbiSplits",
+      "./plugins/withReleaseSigning",
       "./plugins/withTrustBluetoothPermissions",
       [
         "expo-notifications",

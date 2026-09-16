@@ -5,6 +5,7 @@ node_modules/
 dist/
 coverage/
 *.jks
+*.p12
 *.keystore
 *.mobileprovision
 .DS_Store

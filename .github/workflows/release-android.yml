@@ -6,17 +6,49 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: android-release-master
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: true
+      EXPO_NO_TELEMETRY: 1
+      KHIE_BUILD_COMMIT: ${{ github.sha }}
+      NODE_ENV: production
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+
+      - name: Check TypeScript
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
   release:
     name: Build and publish APK
+    needs: verify
     runs-on: ubuntu-latest
+    environment: production-android-release
     timeout-minutes: 45
+    permissions:
+      contents: write
     env:
       CI: true
       EXPO_NO_TELEMETRY: 1
@@ -44,22 +76,49 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Check TypeScript
-        run: pnpm typecheck
-
-      - name: Run tests
-        run: pnpm test
-
       - name: Generate Android project
         run: pnpm prebuild --platform android --no-install
 
+      - name: Restore release signing key
+        env:
+          KHIE_ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.KHIE_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          : "${KHIE_ANDROID_RELEASE_KEYSTORE_BASE64:?Missing Android release keystore}"
+          key_file="$RUNNER_TEMP/khie-release.p12"
+          umask 077
+          printf '%s' "$KHIE_ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          test -s "$key_file"
+          printf 'KHIE_RELEASE_STORE_FILE=%s\n' "$key_file" >> "$GITHUB_ENV"
+
+      - name: Read signing certificate fingerprint
+        env:
+          KHIE_RELEASE_PASSWORD: ${{ secrets.KHIE_ANDROID_RELEASE_PASSWORD }}
+        run: |
+          : "${KHIE_RELEASE_PASSWORD:?Missing Android release keystore password}"
+          fingerprint="$(keytool -list -v -storetype PKCS12 -keystore "$KHIE_RELEASE_STORE_FILE" -storepass "$KHIE_RELEASE_PASSWORD" -alias khie-mobile-release 2>/dev/null | awk -F': ' '/SHA256:/{gsub(/:/, "", $2); print $2; exit}')"
+          [[ "$fingerprint" =~ ^[A-F0-9]{64}$ ]]
+          printf 'KHIE_SIGNING_CERT_SHA256=%s\n' "$fingerprint" >> "$GITHUB_ENV"
+
       - name: Build standalone release APK
         working-directory: android
+        env:
+          KHIE_RELEASE_PASSWORD: ${{ secrets.KHIE_ANDROID_RELEASE_PASSWORD }}
         run: >-
           ./gradlew :app:assembleRelease
           -Pkhie.enableAbiSplits=true
           -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86,x86_64
           --no-daemon
+
+      - name: Verify APK signature
+        run: |
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$apksigner"
+          "$apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-universal-release.apk
+          "$apksigner" verify --print-certs android/app/build/outputs/apk/release/app-universal-release.apk | grep -F "Signer #1 certificate SHA-256 digest: $KHIE_SIGNING_CERT_SHA256"
+
+      - name: Remove release signing key
+        if: always()
+        run: rm -f "$KHIE_RELEASE_STORE_FILE"
 
       - name: Prepare release assets
         shell: bash
@@ -74,6 +133,7 @@ jobs:
           cp android/app/build/outputs/apk/release/app-universal-release.apk "release/khie-mobile-${RELEASE_VERSION}-universal.apk"
           cd release
           sha256sum -- *.apk > "khie-mobile-${RELEASE_VERSION}.sha256"
+          printf '%s  Khie Wallet Android signing certificate SHA-256\n' "$KHIE_SIGNING_CERT_SHA256" > "khie-mobile-${RELEASE_VERSION}.certificate.sha256"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
@@ -90,7 +150,9 @@ jobs:
             - `x86_64`: Android emulators and Intel devices
             - `universal`: all four Android architectures, including 32-bit `x86`
 
-            This application and its source code were generated entirely by AI. This APK uses development signing, has not been independently security audited and is not a production wallet. Understand the private-key, transaction-signing and asset risks before installing or using it.
+            Android signing certificate SHA-256: `${{ env.KHIE_SIGNING_CERT_SHA256 }}`
+
+            This application and its source code were generated entirely by AI, has not been independently security audited, and is not a production wallet. Understand the private-key, transaction-signing and asset risks before installing or using it.
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
@@ -100,3 +162,4 @@ jobs:
             release/khie-mobile-${{ env.RELEASE_VERSION }}-x86_64.apk
             release/khie-mobile-${{ env.RELEASE_VERSION }}-universal.apk
             release/khie-mobile-${{ env.RELEASE_VERSION }}.sha256
+            release/khie-mobile-${{ env.RELEASE_VERSION }}.certificate.sha256
