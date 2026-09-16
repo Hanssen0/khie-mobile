@@ -19,6 +19,15 @@ const platformFiles = new Map([
 ]);
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // The native package already embeds this font. Use its static entry point so
+  // Metro does not package a second, byte-identical copy as a JS asset.
+  if (moduleName === "@react-native-vector-icons/material-design-icons") {
+    return context.resolveRequest(
+      context,
+      "@react-native-vector-icons/material-design-icons/static",
+      platform,
+    );
+  }
   if (moduleName === "progress-events") {
     return context.resolveRequest(
       context,

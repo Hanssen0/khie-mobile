@@ -35,6 +35,7 @@
       }
     },
     "plugins": [
+      "./plugins/withAndroidReleaseOptimizations",
       "./plugins/withAndroidAbiSplits",
       "./plugins/withReleaseSigning",
       "./plugins/withTrustBluetoothPermissions",
