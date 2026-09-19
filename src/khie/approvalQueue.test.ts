@@ -75,6 +75,18 @@ describe("ApprovalQueue", () => {
     expect(queue.current).toBeUndefined();
   });
 
+  it("does not expire approvals unless a timeout is configured", async () => {
+    vi.useFakeTimers();
+    const queue = new ApprovalQueue();
+    const pending = queue.enqueue(request("ckb-testnet"));
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+
+    expect(queue.current?.request).toEqual(request("ckb-testnet"));
+    queue.respond(queue.current!.id, false);
+    await expect(pending).resolves.toBe(false);
+  });
+
   it("times out a request and advances the queue", async () => {
     vi.useFakeTimers();
     const queue = new ApprovalQueue(120_000);

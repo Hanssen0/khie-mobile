@@ -8,9 +8,7 @@ import {
   type Peer,
   type PeerId,
 } from "@libp2p/interface";
-import { multiaddr } from "@multiformats/multiaddr";
 
-import { KhieConnectionAuthorizer } from "./connectionAuthorizer";
 import {
   decodePairingEndpointMobile,
   encodePairingEndpointMobile,
@@ -20,7 +18,6 @@ import {
   DEFAULT_KHIE_RELAY_ADDRESS,
   DEFAULT_PAIRED_PEER_TIMEOUT_MS,
   JSON_RPC_MAX_MESSAGE_LENGTH,
-  JSON_RPC_TIMEOUT_MS,
   KHIE_JSON_RPC_PROTOCOL,
   KHIE_PAIRING_PROTOCOL,
 } from "./protocol";
@@ -39,15 +36,7 @@ type ProviderServices = {
 
 type ProviderNode = Awaited<ReturnType<typeof createProviderNode>>;
 
-export type KhieRequestContext = {
-  readonly signal: AbortSignal;
-  cancel: (cause: Error) => void;
-};
-
-type Handler = (
-  payload: ccc.JsonRpcPayload,
-  context: KhieRequestContext,
-) => unknown;
+type Handler = (payload: ccc.JsonRpcPayload) => unknown;
 
 export type KhieRemotePeer = {
   active: boolean;
@@ -86,7 +75,7 @@ export class KhieProviderSession {
   private readonly abortController = new AbortController();
   private readonly subscriptions: Array<() => void> = [];
   private node?: ProviderNode;
-  private relayConnection?: Connection;
+  private relayController?: Libp2p.RelayConnectionController;
   private pairedPeer?: PeerId;
   private pairedPeerName?: string;
   private pairingController?: AbortController;
@@ -148,46 +137,72 @@ export class KhieProviderSession {
   async connectRelay(relayAddress = this.relayAddress): Promise<boolean> {
     const node = this.node;
     const address = relayAddress.trim();
-    if (
-      !node ||
-      !address ||
-      this.abortController.signal.aborted ||
-      this.state.relayConnecting
-    ) {
+    if (!node || !address || this.abortController.signal.aborted) {
       return false;
     }
-    this.relayAddress = address;
+
+    const previous = this.relayController;
     const startedAt = Date.now();
     khieTrace("relay.connect.begin", { address });
-    this.patchState({ relayAddress: address, relayConnecting: true });
-    const previous = this.relayConnection;
-    this.relayConnection = undefined;
-    let connection: Connection | undefined;
+    let controller: Libp2p.RelayConnectionController | undefined;
     try {
-      await previous?.close();
-      connection = await node.dial(multiaddr(address), {
-        signal: this.abortController.signal,
+      controller = new Libp2p.RelayConnectionController(node, [address], {
+        onConnectionChange: (connection) => {
+          if (
+            this.relayController !== controller ||
+            this.abortController.signal.aborted
+          ) {
+            return;
+          }
+          if (connection) {
+            khieTrace("relay.connect.success", {
+              durationMs: Date.now() - startedAt,
+              ...connectionDetails(connection),
+            });
+            this.patchState({
+              error: undefined,
+              relayConnected: true,
+              relayConnecting: false,
+            });
+            void this.syncEndpoint(node).catch((cause) =>
+              this.reportError(cause),
+            );
+            return;
+          }
+
+          khieTrace("relay.connection.closed", { address });
+          this.patchState({
+            relayConnected: false,
+            relayConnecting: true,
+          });
+        },
       });
-      this.abortController.signal.throwIfAborted();
-      this.relayConnection = connection;
-      khieTrace("relay.connect.success", {
-        durationMs: Date.now() - startedAt,
-        ...connectionDetails(connection),
+      this.relayAddress = address;
+      this.relayController = controller;
+      this.patchState({
+        relayAddress: address,
+        relayConnected: false,
+        relayConnecting: true,
       });
-      this.patchState({ error: undefined, relayConnected: true });
-      await this.syncEndpoint(node);
+      await previous?.stop();
+      await controller.connect();
       return true;
     } catch (cause) {
+      if (
+        (controller && this.relayController !== controller) ||
+        this.abortController.signal.aborted
+      ) {
+        return false;
+      }
       khieTrace("relay.connect.failure", {
         durationMs: Date.now() - startedAt,
         error: errorDetails(cause),
       });
-      await connection?.close();
-      this.patchState({ relayConnected: false });
+      if (controller) {
+        this.patchState({ relayConnected: false, relayConnecting: false });
+      }
       this.reportError(cause);
       return false;
-    } finally {
-      this.patchState({ relayConnecting: false });
     }
   }
 
@@ -254,9 +269,8 @@ export class KhieProviderSession {
     if (!node || this.abortController.signal.aborted) {
       return;
     }
-    const hasRelay = this.relayConnection?.status === "open";
-    if (!hasRelay) {
-      await this.connectRelay();
+    if (!this.relayController) {
+      void this.connectRelay();
     }
     if (!this.pairedPeer) {
       return;
@@ -276,13 +290,15 @@ export class KhieProviderSession {
     this.abortController.abort();
     this.cancelPairing();
     this.subscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
+    const relayController = this.relayController;
+    this.relayController = undefined;
     try {
       if (this.node && this.pairedPeer) {
         await this.node.services.pairing.unpair(this.pairedPeer);
       }
     } finally {
       try {
-        await this.relayConnection?.close();
+        await relayController?.stop();
       } finally {
         await this.node?.stop();
       }
@@ -307,10 +323,6 @@ export class KhieProviderSession {
     };
     const syncConnection = (event: CustomEvent<Connection>) => {
       khieTrace(event.type, connectionDetails(event.detail));
-      if (event.type === "connection:close" && event.detail === this.relayConnection) {
-        this.relayConnection = undefined;
-        this.patchState({ relayConnected: false });
-      }
       if (this.pairedPeer?.equals(event.detail.remotePeer)) {
         void this.syncRemotePeer(node, event.detail.remotePeer);
       }
@@ -443,7 +455,6 @@ async function createProviderNode(
   signal: AbortSignal,
 ) {
   signal.throwIfAborted();
-  const authorizer = new KhieConnectionAuthorizer();
   const [
     { noise },
     { yamux },
@@ -467,7 +478,6 @@ async function createProviderNode(
   try {
     node = await createLibp2p<ProviderServices>({
       addresses: { listen: ["/p2p-circuit", "/webrtc"] },
-      peerStore: { maxAddressAge: Infinity },
       transports: [webSockets(), webRTC(), circuitRelayTransport()],
       connectionEncrypters: [noise()],
       streamMuxers: [yamux()],
@@ -495,25 +505,12 @@ async function createProviderNode(
                 ...rpc,
               });
               throw new ccc.JsonRpcError({
-                code: -32000,
+                code: ccc.SignerJsonRpcErrorCode.ServerError,
                 message: "Peer is not paired for Khie access",
               });
             }
             pairing.refresh(request.peerId);
-            const controller = new AbortController();
-            const context: KhieRequestContext = {
-              signal: ccc.abortSignalAny([signal, controller.signal]),
-              cancel: (cause) => controller.abort(cause),
-            };
-            return withTimeout(
-              Promise.resolve(
-                authorizer.handle(request.peerId, request.payload, (payload) =>
-                  handler(payload, context),
-                ),
-              ),
-              JSON_RPC_TIMEOUT_MS,
-              context.cancel,
-            ).then(
+            return Promise.resolve(handler(request.payload)).then(
               (result) => {
                 khieTrace("rpc.request.completed", {
                   durationMs: Date.now() - startedAt,
@@ -538,7 +535,6 @@ async function createProviderNode(
         ),
       },
     });
-    node.services.pairing.onUnpaired((peerId) => authorizer.unpair(peerId));
     signal.throwIfAborted();
     return node;
   } catch (cause) {
@@ -573,29 +569,4 @@ function rpcDetails(payload: ccc.JsonRpcPayload): Record<string, unknown> {
 function errorDetails(cause: unknown): Record<string, unknown> {
   if (!(cause instanceof Error)) return { value: String(cause) };
   return { name: cause.name, message: cause.message };
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  milliseconds: number,
-  cancel: (cause: Error) => void,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      const error = new Error("Khie request timed out");
-      error.name = "TimeoutError";
-      cancel(error);
-      reject(error);
-    }, milliseconds);
-    promise.then(
-      (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      },
-      (cause) => {
-        clearTimeout(timeout);
-        reject(cause);
-      },
-    );
-  });
 }

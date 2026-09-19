@@ -1,7 +1,5 @@
 import type { SignerJsonRpcConfirmation } from "@ckb-ccc/core";
 
-import { JSON_RPC_TIMEOUT_MS } from "./protocol";
-
 export type ApprovalItem = {
   id: number;
   request: SignerJsonRpcConfirmation;
@@ -18,7 +16,7 @@ type PendingItem = ApprovalItem & {
   resolve: (approved: boolean) => void;
   reject: (cause: unknown) => void;
   removeAbortListener?: () => void;
-  timeout: ReturnType<typeof setTimeout>;
+  timeout?: ReturnType<typeof setTimeout>;
 };
 
 export class ApprovalQueue {
@@ -28,7 +26,7 @@ export class ApprovalQueue {
   private readonly approved = new Set<PendingItem>();
   private readonly listeners = new Set<(item?: ApprovalItem) => void>();
 
-  constructor(private readonly timeoutMs = JSON_RPC_TIMEOUT_MS) {}
+  constructor(private readonly timeoutMs?: number) {}
 
   get current(): ApprovalItem | undefined {
     return this.active && { id: this.active.id, request: this.active.request };
@@ -56,12 +54,15 @@ export class ApprovalQueue {
         resolve,
         reject,
         settled: false,
-        timeout: setTimeout(() => {
-          const error = new Error("Khie request timed out");
-          error.name = "TimeoutError";
-          context?.cancel(error);
-          this.cancel(item, error);
-        }, this.timeoutMs),
+        timeout:
+          this.timeoutMs === undefined
+            ? undefined
+            : setTimeout(() => {
+                const error = new Error("Khie request timed out");
+                error.name = "TimeoutError";
+                context?.cancel(error);
+                this.cancel(item, error);
+              }, this.timeoutMs),
       };
       if (context) {
         const onAbort = () => this.cancel(item, abortReason(context.signal));
@@ -151,7 +152,7 @@ export class ApprovalQueue {
   }
 
   private cleanup(item: PendingItem): void {
-    clearTimeout(item.timeout);
+    if (item.timeout !== undefined) clearTimeout(item.timeout);
     item.removeAbortListener?.();
   }
 

@@ -1,7 +1,8 @@
 import {
-  buildSignerJsonRpcHandler,
   type JsonRpcPayload,
   type Signer,
+  SignerJsonRpcProviderSession,
+  type SignerJsonRpcProviderSessionConfig,
 } from "@ckb-ccc/core";
 import {
   addKhieBackgroundStopPairingListener,
@@ -64,7 +65,6 @@ import {
 } from "./src/khie/notifications";
 import {
   KhieProviderSession,
-  type KhieRequestContext,
   type KhieProviderSessionState,
 } from "./src/khie/KhieProviderSession";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./src/khie/protocol";
@@ -260,6 +260,15 @@ function WalletApp({
   });
   const signerRef = useRef<Signer | undefined>(undefined);
   const sessionRef = useRef<KhieProviderSession | undefined>(undefined);
+  const providerSessionOwnerRef =
+    useRef<ReturnType<typeof SignerJsonRpcProviderSession.open> | undefined>(
+      undefined,
+    );
+  const invalidateProviderSession = useCallback(() => {
+    const previous = providerSessionOwnerRef.current;
+    providerSessionOwnerRef.current = undefined;
+    void previous?.dispose();
+  }, []);
   const networkRef = useRef<Network>("testnet");
   const previousPaired = useRef(false);
   const updateSettingsRef = useRef<UpdateSettings>(defaultUpdateSettings());
@@ -1055,61 +1064,77 @@ function WalletApp({
 
   const selectNetwork = useCallback(
     (next: Network) => {
+      invalidateProviderSession();
       networkRef.current = next;
       setNetwork(next);
       if (backend) {
         signerRef.current = new KhieSignerAdapter(clients.current[next], backend);
       }
     },
-    [backend],
+    [backend, invalidateProviderSession],
   );
 
   useEffect(() => {
+    invalidateProviderSession();
     if (!backend) {
       signerRef.current = undefined;
       return;
     }
     signerRef.current = new KhieSignerAdapter(clients.current[networkRef.current], backend);
-  }, [backend]);
+  }, [backend, invalidateProviderSession]);
 
   useEffect(() => {
     if (!backendRef.current) {
       return;
     }
-    const handler = async (
-      payload: JsonRpcPayload,
-      context: KhieRequestContext,
-    ) => {
+    const openProviderSession = () => {
+      const currentBackend = backendRef.current;
+      if (!currentBackend) {
+        return undefined;
+      }
       let approved:
         | {
             backend: NonNullable<typeof backendRef.current>;
             client: Signer["client"];
             network: Network;
+            signal: AbortSignal;
           }
         | undefined;
-      const validateApprovedContext = () => {
+      const validateApprovedContext = (
+        context: NonNullable<typeof approved>,
+      ) => {
         context.signal.throwIfAborted();
         if (
-          !approved ||
-          backendRef.current !== approved.backend ||
-          networkRef.current !== approved.network ||
-          clients.current[approved.network] !== approved.client
+          backendRef.current !== context.backend ||
+          networkRef.current !== context.network ||
+          clients.current[context.network] !== context.client
         ) {
           const error = new Error("Khie request context changed");
           error.name = "AbortError";
-          context.cancel(error);
           throw error;
         }
       };
-      const requestHandler = buildSignerJsonRpcHandler({
+      const takeApprovedContext = () => {
+        const context = approved;
+        approved = undefined;
+        if (!context) {
+          const error = new Error("Khie request was not approved");
+          error.name = "AbortError";
+          throw error;
+        }
+        validateApprovedContext(context);
+        return context;
+      };
+      const providerSessionOwner = SignerJsonRpcProviderSession.open({
         getSigner: () => {
-          if (!approved) return signerRef.current;
-          validateApprovedContext();
+          if (!approved) {
+            return signerRef.current;
+          }
+          const context = takeApprovedContext();
           return new KhieSignerAdapter(
-            approved.client,
-            approved.backend.forRequest(
-              context.signal,
-              validateApprovedContext,
+            context.client,
+            context.backend.forRequest(context.signal, () =>
+              validateApprovedContext(context),
             ),
           );
         },
@@ -1119,7 +1144,7 @@ function WalletApp({
               ? "Cryptape Trust"
               : "Khie Wallet",
         }),
-        confirmRequest: (request) => {
+        confirmRequest: async (request, options) => {
           const currentBackend = backendRef.current;
           if (!currentBackend) {
             throw new LocalizedError(
@@ -1127,33 +1152,57 @@ function WalletApp({
               "Wallet is unavailable",
             );
           }
+          const signal = options?.signal ?? new AbortController().signal;
           const currentNetwork = networkRef.current;
-          approved = {
+          const context = {
+            signal,
+            cancel: () => undefined,
+          };
+          const nextApproved = {
             backend: currentBackend,
             client: clients.current[currentNetwork],
             network: currentNetwork,
+            signal,
           };
-          return approvalQueue.enqueue(request, context);
+          try {
+            const confirmed = await approvalQueue.enqueue(request, context);
+            if (confirmed) {
+              validateApprovedContext(nextApproved);
+              approved = nextApproved;
+            }
+            return confirmed;
+          } finally {
+            approvalQueue.complete(context);
+          }
         },
-        connect: async (networkId) => {
-          validateApprovedContext();
+        connect: async (networkId, options) => {
+          const signal = options?.signal ?? new AbortController().signal;
+          signal.throwIfAborted();
+          const context = takeApprovedContext();
           const next = networkFromId(networkId);
           const signer = new KhieSignerAdapter(
             clients.current[next],
-            approved!.backend,
+            context.backend,
           );
-          context.signal.throwIfAborted();
+          signal.throwIfAborted();
           networkRef.current = next;
           signerRef.current = signer;
           setNetwork(next);
           return signer;
         },
-      });
-      try {
-        return await requestHandler(payload);
-      } finally {
-        approvalQueue.complete(context);
+      } satisfies SignerJsonRpcProviderSessionConfig);
+      providerSessionOwnerRef.current = providerSessionOwner;
+      return providerSessionOwner;
+    };
+    const handler = async (payload: JsonRpcPayload) => {
+      // This owner outlives each libp2p request so a timed-out transport does
+      // not cancel the operation cached for a later get_result recovery.
+      const providerSessionOwner =
+        providerSessionOwnerRef.current ?? openProviderSession();
+      if (!providerSessionOwner) {
+        throw new LocalizedError("walletUnavailable", "Wallet is unavailable");
       }
+      return providerSessionOwner.value.handle(payload);
     };
     const session = new KhieProviderSession({
       endpointUrl,
@@ -1162,6 +1211,7 @@ function WalletApp({
         setSessionState(next);
         if (previousPaired.current && !next.paired) {
           approvalQueue.cancelAll("Khie peer was unpaired");
+          invalidateProviderSession();
         }
         previousPaired.current = next.paired;
       },
@@ -1170,20 +1220,22 @@ function WalletApp({
     void session.start().catch((cause: unknown) => setNotice(errorMessage(cause, tRef.current)));
     return () => {
       approvalQueue.cancelAll("Khie session closed");
+      const providerSessionOwner = providerSessionOwnerRef.current;
+      providerSessionOwnerRef.current = undefined;
       sessionRef.current = undefined;
       finishKhieHeadlessTask();
       void stopKhieBackgroundService().catch(() => undefined);
       void dismissKhieConnectionNotification().catch(() => undefined);
       void dismissKhieRequestNotification().catch(() => undefined);
-      void session.close();
+      void Promise.all([session.close(), providerSessionOwner?.dispose()]);
     };
-  }, [approvalQueue, backend?.account.publicKey, profile?.kind]);
+  }, [approvalQueue, backend?.account.publicKey, invalidateProviderSession, profile?.kind]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       setAppState(state);
       // Android may suspend a transport in the background, but the logical
-      // pairing and any pending confirmation stay valid until their own timeout.
+      // pairing and pending confirmations stay valid until explicitly canceled.
       void resumeKhieSessionWhenActive(state, sessionRef.current);
     });
     return () => subscription.remove();
@@ -1212,6 +1264,7 @@ function WalletApp({
       };
       setRpcUrls(saved);
       approvalQueue.cancelAll("Network RPC URL changed");
+      invalidateProviderSession();
       if (backend) {
         signerRef.current = new KhieSignerAdapter(
           clients.current[networkRef.current],
@@ -1219,7 +1272,7 @@ function WalletApp({
         );
       }
     },
-    [approvalQueue, backend, networkSettings],
+    [approvalQueue, backend, invalidateProviderSession, networkSettings],
   );
 
   const pairKhieEndpoint = useCallback(async (endpoint: string) => {

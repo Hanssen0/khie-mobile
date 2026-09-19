@@ -179,11 +179,11 @@ importers:
         specifier: 8.0.1
         version: 8.0.1
       '@ckb-ccc/core':
-        specifier: 1.21.0
-        version: 1.21.0(typescript@6.0.3)(zod@3.25.76)
+        specifier: 1.22.0
+        version: 1.22.0(typescript@6.0.3)(zod@3.25.76)
       '@ckb-ccc/libp2p':
-        specifier: 0.2.1
-        version: 0.2.1(typescript@6.0.3)(zod@3.25.76)
+        specifier: 0.3.0
+        version: 0.3.0(typescript@6.0.3)(zod@3.25.76)
       '@craftzdog/react-native-buffer':
         specifier: 6.1.2
         version: 6.1.2(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
@@ -758,11 +758,11 @@ packages:
   '@chainsafe/netmask@2.0.0':
     resolution: {integrity: sha512-I3Z+6SWUoaljh3TBzCnCxjlUyN8tA+NAk5L6m9IxvCf1BENQTePzPMis97CoN/iMW1St3WN+AWCCRp+TTBRiDg==}
 
-  '@ckb-ccc/core@1.21.0':
-    resolution: {integrity: sha512-Rary1VryrpbS4kYGwi/JEOD9ER+9mak+m2uJutsCzRRjNYx+rdzQfjnsDDQ+2Pno37prfAarByNEQhhHK9VEnw==}
+  '@ckb-ccc/core@1.22.0':
+    resolution: {integrity: sha512-h/V1JyHsAiI674PHhDRyxewo8MSj7BdeVH87KlOoppvyhzIICN3kI1hJMzLbK5cZEnQp7Rgx7EOPe7671F5ibg==}
 
-  '@ckb-ccc/libp2p@0.2.1':
-    resolution: {integrity: sha512-iwZUmyR3DigiiDG+6z2PmaGXLB3RpiW6b/lQGq8Pewp8rmSk9hwXQXnnVcrR5oMTdusyY/73B3XHqeQSsAShiw==}
+  '@ckb-ccc/libp2p@0.3.0':
+    resolution: {integrity: sha512-Yjiol9x34dxJYq3WwoOVI0DbbFD7cdMx+ECwOLwFmXMspqZc8PcrhwYVeVrKPHcpoIExrBoqKgPQIsHqqP3EsA==}
 
   '@craftzdog/react-native-buffer@6.1.2':
     resolution: {integrity: sha512-KV1HitN05FHLLDG7Zb/yftDsa+mKBYBzFMQ0PMldvUicq6vWOtAvz9mDavt7Fzozh+WNqORE+yFDkkdWysZ/SA==}
@@ -4448,7 +4448,7 @@ snapshots:
     dependencies:
       '@chainsafe/is-ip': 2.1.0
 
-  '@ckb-ccc/core@1.21.0(typescript@6.0.3)(zod@3.25.76)':
+  '@ckb-ccc/core@1.22.0(typescript@6.0.3)(zod@3.25.76)':
     dependencies:
       '@joyid/ckb': 1.1.4(typescript@6.0.3)(zod@3.25.76)
       '@noble/ciphers': 2.4.0
@@ -4467,9 +4467,9 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@ckb-ccc/libp2p@0.2.1(typescript@6.0.3)(zod@3.25.76)':
+  '@ckb-ccc/libp2p@0.3.0(typescript@6.0.3)(zod@3.25.76)':
     dependencies:
-      '@ckb-ccc/core': 1.21.0(typescript@6.0.3)(zod@3.25.76)
+      '@ckb-ccc/core': 1.22.0(typescript@6.0.3)(zod@3.25.76)
       '@libp2p/interface': 3.3.0
       '@libp2p/interface-internal': 3.1.13
       '@libp2p/utils': 7.4.1
