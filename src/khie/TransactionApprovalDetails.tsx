@@ -10,6 +10,7 @@ import {
   type Client,
   type Num,
   type Script,
+  type Signer,
   type Transaction,
 } from "@ckb-ccc/core";
 import { useEffect, useState } from "react";
@@ -24,6 +25,8 @@ import {
 } from "react-native-paper";
 
 import { useI18n, type Translate } from "../i18n";
+import { useDeveloperMode } from "../ui/developerMode";
+import { summarizeTransfer } from "./transactionSummary";
 
 type TransactionCellView = {
   cellOutput?: CellOutput;
@@ -50,12 +53,18 @@ export function TransactionApprovalDetails({
   client,
   transaction,
   requestedFeeRate,
+  signer,
 }: {
   client: Client;
   transaction: Transaction;
   requestedFeeRate?: Num;
+  signer?: Signer;
 }) {
   const { t } = useI18n();
+  const theme = useTheme();
+  const { developerMode } = useDeveloperMode();
+  const [technicalDetailsOpen, setTechnicalDetailsOpen] = useState(developerMode);
+  const [ownLocks, setOwnLocks] = useState<Script[]>();
   const [inputResolution, setInputResolution] = useState<InputResolution>();
   const [feeResolution, setFeeResolution] = useState<FeeResolution>();
   const inputs =
@@ -102,7 +111,7 @@ export function TransactionApprovalDetails({
         } catch {
           return {
             key: reference,
-            label: t("inputNumber", { number: index + 1 }),
+            label: t("inputNumber", { number: index }),
             reference,
           };
         }
@@ -131,6 +140,15 @@ export function TransactionApprovalDetails({
     };
   }, [client, t, transaction]);
 
+  useEffect(() => {
+    let active = true;
+    setOwnLocks(undefined);
+    void signer?.getAddressObjs().then((addresses) => {
+      if (active) setOwnLocks(addresses.map(({ script }) => script));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [signer]);
+
   const outputs = transaction.outputs.map((cellOutput, index) => ({
     cellOutput,
     key: `output-${index}`,
@@ -138,52 +156,118 @@ export function TransactionApprovalDetails({
     outputData: transaction.outputsData[index] ?? "0x",
   }));
 
+  const summary = ownLocks
+    ? summarizeTransfer(inputs ?? transaction.inputs.map(() => ({})), transaction.outputs, ownLocks)
+    : undefined;
+
   return (
     <View style={styles.details}>
+      {summary ? (
+        <View style={styles.summary}>
+          {summary.outgoing.length === 0 ? (
+            <Text variant="bodyLarge">{t("noCkbLeavesWallet")}</Text>
+          ) : (
+            summary.outgoing.map(({ lock, capacity }) => (
+              <SummaryRow
+                key={lock.hash()}
+                label={t("sendTo")}
+                detail={Address.fromScript(lock, client).toString()}
+                value={`${fixedPointToString(capacity)} CKB`}
+              />
+            ))
+          )}
+          {summary.netChange !== undefined ? (
+            <SummaryRow
+              label={t("balanceChange")}
+              value={`${summary.netChange > Zero ? "+" : ""}${fixedPointToString(summary.netChange)} CKB`}
+            />
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.metadataBlock}>
-        <Text variant="labelMedium">{t("transactionHash")}</Text>
-        <Text variant="bodySmall" selectable style={styles.mono}>
-          {transaction.hash()}
+        <Text variant="labelMedium">{t("fee")}</Text>
+        <Text variant="bodyLarge">
+          {fee === undefined
+            ? t("parsing")
+            : fee === null
+              ? t("unableToParse")
+              : `${fixedPointToString(fee)} CKB`}
         </Text>
       </View>
-      <View style={styles.feeRow}>
-        <View style={styles.metadataBlock}>
-          <Text variant="labelMedium">{t("fee")}</Text>
-          <Text variant="bodyLarge">
-            {fee === undefined
-              ? t("parsing")
-              : fee === null
-                ? t("unableToParse")
-                : `${fixedPointToString(fee)} CKB`}
+      {summary?.involvesTypeScripts ? (
+        <View style={[styles.notice, { backgroundColor: theme.colors.secondaryContainer }]}>
+          <Icon source="information-outline" size={20} color={theme.colors.onSecondaryContainer} />
+          <Text variant="bodyMedium" style={[styles.noticeText, { color: theme.colors.onSecondaryContainer }]}>
+            {t("transactionInvolvesContracts")}
           </Text>
         </View>
-        {fee !== undefined && fee !== null ? (
-          <View style={[styles.metadataBlock, styles.feeRate]}>
-            <Text variant="labelMedium">{t("feeRate")}</Text>
-            <Text variant="bodyMedium">
-              {t("shannonsPerKb", {
-                rate: (requestedFeeRate ?? transactionFeeRate(transaction, fee)).toString(),
-              })}
+      ) : null}
+      <TouchableRipple
+        accessibilityRole="button"
+        accessibilityState={{ expanded: technicalDetailsOpen }}
+        onPress={() => setTechnicalDetailsOpen((open) => !open)}
+      >
+        <View style={styles.technicalToggle}>
+          <Text variant="titleSmall" style={styles.noticeText}>{t("technicalDetails")}</Text>
+          <Icon
+            source={technicalDetailsOpen ? "chevron-up" : "chevron-down"}
+            size={24}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </View>
+      </TouchableRipple>
+      {technicalDetailsOpen ? (
+        <>
+          <View style={styles.metadataBlock}>
+            <Text variant="labelMedium">{t("transactionHash")}</Text>
+            <Text variant="bodySmall" selectable style={styles.mono}>
+              {transaction.hash()}
             </Text>
           </View>
+          {fee !== undefined && fee !== null ? (
+            <View style={styles.metadataBlock}>
+              <Text variant="labelMedium">{t("feeRate")}</Text>
+              <Text variant="bodyMedium">
+                {t("shannonsPerKb", {
+                  rate: (requestedFeeRate ?? transactionFeeRate(transaction, fee)).toString(),
+                })}
+              </Text>
+            </View>
+          ) : null}
+          <TransactionCellGroup
+            cells={inputs}
+            client={client}
+            empty={t("noInputs")}
+            loadingCount={transaction.inputs.length}
+            title={t("inputs")}
+            t={t}
+          />
+          <TransactionCellGroup
+            cells={outputs}
+            client={client}
+            empty={t("noOutputs")}
+            loadingCount={transaction.outputs.length}
+            title={t("outputs")}
+            t={t}
+          />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function SummaryRow({ label, detail, value }: { label: string; detail?: string; value: string }) {
+  return (
+    <View style={styles.summaryRow}>
+      <View style={styles.summaryLabel}>
+        <Text variant="labelMedium">{label}</Text>
+        {detail ? (
+          <Text variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle" selectable style={styles.mono}>
+            {detail}
+          </Text>
         ) : null}
       </View>
-      <TransactionCellGroup
-        cells={inputs}
-        client={client}
-        empty={t("noInputs")}
-        loadingCount={transaction.inputs.length}
-        title={t("inputs")}
-        t={t}
-      />
-      <TransactionCellGroup
-        cells={outputs}
-        client={client}
-        empty={t("noOutputs")}
-        loadingCount={transaction.outputs.length}
-        title={t("outputs")}
-        t={t}
-      />
+      <Text variant="titleMedium" style={styles.summaryValue}>{value}</Text>
     </View>
   );
 }
@@ -419,13 +503,13 @@ const styles = StyleSheet.create({
   details: { gap: 20 },
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
-  feeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-  feeRate: { alignItems: "flex-end" },
+  summary: { gap: 12 },
+  summaryRow: { flexDirection: "row", alignItems: "flex-end", gap: 16 },
+  summaryLabel: { flex: 1, minWidth: 0, gap: 4 },
+  summaryValue: { fontVariant: ["tabular-nums"] },
+  notice: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 16, borderRadius: 12 },
+  noticeText: { flex: 1, minWidth: 0 },
+  technicalToggle: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 },
   cellGroup: { gap: 0 },
   cellGroupHeading: {
     minHeight: 48,

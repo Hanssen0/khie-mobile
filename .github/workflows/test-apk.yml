@@ -1,0 +1,66 @@
+name: Test APK
+
+# Standalone arm64 APK for device testing, signed with a throwaway key.
+# It cannot update an installed release build: uninstall that first.
+on:
+  push:
+    branches: ["ui/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+      EXPO_NO_TELEMETRY: 1
+      KHIE_BUILD_COMMIT: ${{ github.sha }}
+      NODE_ENV: production
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Generate Android project
+        run: pnpm prebuild --platform android --no-install
+
+      - name: Create throwaway signing key
+        run: |
+          key_file="$RUNNER_TEMP/khie-test.p12"
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -storetype PKCS12 -keystore "$key_file" -storepass "$password" -keypass "$password" \
+            -alias khie-mobile-release -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Khie test build"
+          printf 'KHIE_RELEASE_STORE_FILE=%s\nKHIE_RELEASE_PASSWORD=%s\n' "$key_file" "$password" >> "$GITHUB_ENV"
+
+      - name: Build arm64 APK
+        working-directory: android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: khie-test-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 7

@@ -33,8 +33,8 @@ import type { NetworkRpcUrls } from "../wallet/network";
 import type { Network, WalletProfile, WalletState } from "../wallet/types";
 import type { ReleaseAsset } from "../update/githubRelease";
 
-type TabRoute = "home" | "khie" | "trust" | "settings";
-type RootRoutes = { tabs: { screen?: TabRoute } | undefined; receive: undefined; scanner: undefined; send: undefined; sendScanner: undefined };
+type TabRoute = "home" | "khie" | "settings";
+type RootRoutes = { tabs: { screen?: TabRoute } | undefined; receive: undefined; trust: undefined; scanner: undefined; send: undefined; sendScanner: undefined };
 const navigationRef = createNavigationContainerRef<RootRoutes>();
 const Stack = createNativeStackNavigator<RootRoutes>();
 const Tabs = createBottomTabNavigator<Record<TabRoute, undefined>>();
@@ -105,7 +105,7 @@ export function WalletRouter({
   const navigate = (next: Screen) => {
     if (!navigationRef.isReady()) return;
     if (navigationRef.getCurrentRoute()?.name === next) return;
-    if (next === "receive" || next === "scanner" || next === "send") navigationRef.navigate(next);
+    if (next === "receive" || next === "scanner" || next === "send" || next === "trust") navigationRef.navigate(next);
     else navigationRef.navigate("tabs", { screen: next });
   };
   useEffect(() => { navigate(screen); }, [screen]);
@@ -125,20 +125,20 @@ export function WalletRouter({
   </SafeAreaView>;
 
   const trust = profile.kind === "cryptape-trust" ? { id: profile.deviceId, name: profile.name, publicKey: profile.publicKey } : undefined;
-  const initialTabRoute: TabRoute = screen === "khie" || screen === "trust" || screen === "settings" ? screen : "home";
+  const initialTabRoute: TabRoute = screen === "khie" || screen === "settings" ? screen : "home";
   const tabBar = ({ state, navigation, insets }: BottomTabBarProps) =>
-    <BottomBar current={state.routes[state.index]?.name as Screen} showTrust={Boolean(trust)} insets={insets} onNavigate={(next) => navigation.navigate(next as TabRoute)} />;
+    <BottomBar current={state.routes[state.index]?.name as Screen} insets={insets} onNavigate={(next) => navigation.navigate(next as TabRoute)} />;
   return <SafeAreaView style={[styles.safe, background]} edges={["top", "right", "left"]}>
     <StatusBar style={theme.dark ? "light" : "dark"} />
     {notice ? <Notice text={notice} onDismiss={onDismissNotice} /> : null}
     <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={updateScreen} onStateChange={updateScreen}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="tabs">{() => <Tabs.Navigator initialRouteName={initialTabRoute} tabBar={tabBar} screenOptions={{ headerShown: false }}>
-          <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
+          <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" || next === "trust" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
           <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
-          <Tabs.Screen name="trust">{() => trust ? <TrustDeviceScreen device={trust} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} /> : null}</Tabs.Screen>
           <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} focusAppInformation={focusAppInformation} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} onAppInformationFocused={onAppInformationFocused} />}</Tabs.Screen>
         </Tabs.Navigator>}</Stack.Screen>
+        <Stack.Screen name="trust">{({ navigation }) => trust ? <TrustDeviceScreen device={trust} onBack={() => navigation.goBack()} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} /> : null}</Stack.Screen>
         <Stack.Screen name="receive">{({ navigation }) => <ReceiveScreen signer={signer} onBack={() => navigation.goBack()} />}</Stack.Screen>
         <Stack.Screen name="send">{({ navigation }) => <SendScreen signer={signer} onBack={() => navigation.goBack()} onScanAddress={() => navigation.navigate("sendScanner")} scannedAddress={scannedRecipient} onScannedAddressConsumed={() => setScannedRecipient(undefined)} />}</Stack.Screen>
         <Stack.Screen name="scanner">{({ navigation }) => <ScannerScreen onCancel={() => navigation.goBack()} onScanned={(value) => { navigation.goBack(); void onPairKhie(value); }} />}</Stack.Screen>

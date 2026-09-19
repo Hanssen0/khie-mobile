@@ -55,6 +55,7 @@ export function HomeScreen({ signer, network, profile, wallets, onSelectWallet, 
   ] as const;
   return <ScrollView contentContainerStyle={styles.page}>
     <WalletMenu wallets={wallets} selected={profile.id} onSelect={onSelectWallet} />
+    {profile.kind === "cryptape-trust" && signer ? <PaperButton mode="text" icon="tune-variant" style={styles.walletMenu} onPress={() => onNavigate("trust")}>{t("manageTrustDevice")}</PaperButton> : null}
     {profile.kind === "cryptape-trust" && !signer ? <PaperCard mode="elevated">
       <PaperCard.Title title="Cryptape Trust" subtitle={walletLabel(wallets, profile.id, t)} left={({ size }) => <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />} />
       <PaperCard.Content><Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text></PaperCard.Content>
@@ -109,7 +110,7 @@ function CopyableAddress({ address, centered = false }: { address: string; cente
     await Clipboard.setStringAsync(address);
     setCopied(true);
   };
-  return <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("walletAddressCopied") : t("copyWalletAddress")} accessibilityLiveRegion="polite" onPress={() => void copy()} style={({ pressed }) => [styles.addressCopyRow, centered && styles.addressCopyRowCentered, pressed && styles.endpointCopyRowPressed]}><Text variant="bodyMedium" selectable numberOfLines={centered ? 3 : undefined} style={[styles.mono, styles.addressCopyText, centered && styles.centerText]}>{address}</Text><Icon source={copied ? "check" : "content-copy"} size={18} color={theme.colors.onSurfaceVariant} /></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("walletAddressCopied") : t("copyWalletAddress")} accessibilityLiveRegion="polite" onPress={() => void copy()} style={({ pressed }) => [styles.addressCopyRow, centered && styles.addressCopyRowCentered, pressed && styles.endpointCopyRowPressed]}><Text variant="bodyMedium" selectable numberOfLines={centered ? 3 : 1} ellipsizeMode="middle" style={[styles.mono, styles.addressCopyText, centered && styles.centerText]}>{address}</Text><Icon source={copied ? "check" : "content-copy"} size={18} color={theme.colors.onSurfaceVariant} /></Pressable>;
 }
 
 export function SendScreen({ signer, onBack, onScanAddress, scannedAddress, onScannedAddressConsumed }: { signer?: Signer; onBack: () => void; onScanAddress: () => void; scannedAddress?: string; onScannedAddressConsumed: () => void }) {
@@ -243,7 +244,7 @@ export function SendScreen({ signer, onBack, onScanAddress, scannedAddress, onSc
   if (prepared && signer === prepared.signer && draftRevision.current === prepared.revision) return <ScrollView contentContainerStyle={styles.page}>
     <BackButton onPress={() => setPrepared(undefined)} />
     <Text variant="headlineMedium">{t("reviewTransaction")}</Text>
-    <TransactionApprovalDetails client={prepared.signer.client} transaction={prepared.transaction} requestedFeeRate={feeOption === "auto" ? undefined : prepared.feeRate} />
+    <TransactionApprovalDetails client={prepared.signer.client} transaction={prepared.transaction} signer={prepared.signer} requestedFeeRate={feeOption === "auto" ? undefined : prepared.feeRate} />
     <View style={styles.approvalActions}><PaperButton mode="outlined" style={styles.flexAction} onPress={() => setPrepared(undefined)}>{t("back")}</PaperButton><PaperButton mode="contained" style={styles.flexAction} icon="send" loading={sending} disabled={sending} onPress={() => void send()}>{t("send")}</PaperButton></View>
   </ScrollView>;
 
