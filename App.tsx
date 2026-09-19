@@ -48,6 +48,7 @@ import {
 } from "./src/i18n";
 import { ApprovalQueue, type ApprovalItem } from "./src/khie/approvalQueue";
 import { resumeKhieSessionWhenActive } from "./src/khie/appLifecycle";
+import { connectorEndpointFromDeepLink } from "./src/khie/connectDeepLink";
 import {
   finishKhieHeadlessTask,
   setKhieKeepAliveHandler,
@@ -292,6 +293,8 @@ function WalletApp({
   const [addingWallet, setAddingWallet] = useState(false);
   const [approval, setApproval] = useState<ApprovalItem>();
   const [pairing, setPairing] = useState(false);
+  const pairingInProgressRef = useRef(false);
+  const [pendingKhieEndpoint, setPendingKhieEndpoint] = useState<string>();
   const [sessionState, setSessionState] = useState<KhieProviderSessionState>({
     endpoint: "",
     paired: false,
@@ -337,6 +340,37 @@ function WalletApp({
   const khieNotificationPromptDismissed = useRef(false);
   const walletStateRef = useRef(walletState);
   walletStateRef.current = walletState;
+
+  useEffect(() => {
+    let active = true;
+    let receivedUrlEvent = false;
+    let deliveryId = 0;
+    const receive = (value: string) => {
+      const currentDeliveryId = ++deliveryId;
+      void connectorEndpointFromDeepLink(value).then(
+        (endpoint) => {
+          if (!active || currentDeliveryId !== deliveryId || !endpoint) return;
+          setPendingKhieEndpoint(endpoint);
+        },
+        () => {
+          if (active && currentDeliveryId === deliveryId) {
+            setNotice(tRef.current("incompatiblePairingCode"));
+          }
+        },
+      );
+    };
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      receivedUrlEvent = true;
+      receive(url);
+    });
+    void Linking.getInitialURL().then((url) => {
+      if (url && !receivedUrlEvent) receive(url);
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
   const requestTrustPin = useCallback<RequestTrustPin>(
     (purpose, signal) =>
@@ -712,6 +746,7 @@ function WalletApp({
     const subscription = addKhieBackgroundStopPairingListener(() => {
       sessionRef.current?.setPairingEnabled(false);
       setPairing(false);
+      setPendingKhieEndpoint(undefined);
       setScreen("home");
     });
     return () => subscription.remove();
@@ -1293,20 +1328,40 @@ function WalletApp({
 
   const pairKhieEndpoint = useCallback(async (endpoint: string) => {
     const session = sessionRef.current;
-    if (!session || !endpoint.trim()) {
+    if (!session || !endpoint.trim() || pairingInProgressRef.current) {
       return false;
     }
+    pairingInProgressRef.current = true;
     setPairing(true);
     try {
       return await session.pair(endpoint);
     } finally {
+      pairingInProgressRef.current = false;
       setPairing(false);
     }
   }, []);
 
+  useEffect(() => {
+    if (!pendingKhieEndpoint || loading) return;
+    if (!backend || addingWallet) {
+      setPendingKhieEndpoint(undefined);
+      return;
+    }
+    if (screen !== "khie") {
+      setScreen("khie");
+      return;
+    }
+    if (!sessionState.ready || sessionRef.current?.snapshot.ready !== true) return;
+    setPendingKhieEndpoint(undefined);
+    if (!sessionState.paired && !pairingInProgressRef.current) {
+      void pairKhieEndpoint(pendingKhieEndpoint);
+    }
+  }, [addingWallet, backend, loading, pairKhieEndpoint, pendingKhieEndpoint, screen, sessionState]);
+
   const cancelKhiePairing = useCallback(() => {
     sessionRef.current?.cancelPairing();
     setPairing(false);
+    setPendingKhieEndpoint(undefined);
   }, []);
 
   const activateWalletState = useCallback(
@@ -1858,6 +1913,7 @@ function WalletApp({
         if (leavingKhiePairing) {
           sessionRef.current?.setPairingEnabled(false);
           setPairing(false);
+          setPendingKhieEndpoint(undefined);
         }
         setScreen(next);
       }}

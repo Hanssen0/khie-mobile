@@ -2,7 +2,6 @@
   "expo": {
     "name": "Khie Wallet",
     "slug": "khie-wallet",
-    "scheme": "khie-wallet",
     "version": "0.6.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -11,6 +10,19 @@
       "package": "com.hanssen0.khiemobile",
       "versionCode": 13,
       "icon": "./assets/icon.png",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            {
+              "scheme": "khie-wallet",
+              "host": "app",
+              "path": "/connect"
+            }
+          ]
+        }
+      ],
       "permissions": [
         "CAMERA",
         "USE_BIOMETRIC",
@@ -81,6 +93,7 @@
       "relayMultiaddr": "/dns4/relay.ckbccc.com/tcp/443/wss"
     },
     "ios": {
+      "scheme": "khie-wallet",
       "bundleIdentifier": "com.example.khiewallet"
     }
   }
