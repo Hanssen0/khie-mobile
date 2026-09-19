@@ -209,7 +209,8 @@ const en = {
   hoursAgo: "{count} hours ago",
   dayAgo: "{count} day ago",
   daysAgo: "{count} days ago",
-  readyForRequests: "Ready for requests…",
+  readyForRequests: "Connected to an app. Waiting for requests…\nReturn to it to continue.",
+  queuedRequests: "+{count} queued",
   unpair: "Unpair",
   khieNotificationsPermissionTitle: "Keep Khie connected in the background",
   khieNotificationsPermissionDescription:
@@ -561,7 +562,8 @@ const zhHans: Record<TranslationKey, string> = {
   hoursAgo: "{count} 小时前",
   dayAgo: "{count} 天前",
   daysAgo: "{count} 天前",
-  readyForRequests: "等待请求…",
+  readyForRequests: "已连接应用，等待请求中…\n请回到应用以继续操作。",
+  queuedRequests: "+{count} 等待中",
   unpair: "解除配对",
   khieNotificationsPermissionTitle: "让 Khie 在后台保持连接",
   khieNotificationsPermissionDescription:
@@ -904,7 +906,8 @@ const zhHant: Record<TranslationKey, string> = {
   hoursAgo: "{count} 小時前",
   dayAgo: "{count} 天前",
   daysAgo: "{count} 天前",
-  readyForRequests: "等待請求…",
+  readyForRequests: "已連線應用，等待請求中…\n請回到應用以繼續操作。",
+  queuedRequests: "+{count} 等待中",
   unpair: "解除配對",
   khieNotificationsPermissionTitle: "讓 Khie 在背景保持連線",
   khieNotificationsPermissionDescription:
@@ -1247,7 +1250,8 @@ const hak: Record<TranslationKey, string> = {
   hoursAgo: "{count} 點鐘以前",
   dayAgo: "{count} 日以前",
   daysAgo: "{count} 日以前",
-  readyForRequests: "等待請求…",
+  readyForRequests: "已連線應用程式，等請求中…\n請轉去應用程式繼續操作。",
+  queuedRequests: "+{count} 等候中",
   unpair: "解除配對",
   khieNotificationsPermissionTitle: "分 Khie 在背景保持連線",
   khieNotificationsPermissionDescription:

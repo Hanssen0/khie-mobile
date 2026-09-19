@@ -51,7 +51,7 @@ type OnboardingRouteProps = {
 
 export function WalletRouter({
   loading, screen, profile, wallets, signer, network, onboarding, addingWallet, sessionState,
-  pairing, approval, localBackend, rpcUrls, themePreference, updateSettings, checkingForUpdates,
+  pairing, approval, queuedApprovalCount, localBackend, rpcUrls, themePreference, updateSettings, checkingForUpdates,
   currentVersion, buildCommit, appArchitecture, updateAvailable, updateAsset, focusAppInformation,
   biometricAvailable, biometricUnlock, masterPasswordSet, notice, dialogs, onDismissNotice,
   onScreenChange, onFinishOnboarding, onCancelAddingWallet, onPairKhie, onCancelKhiePairing,
@@ -63,7 +63,7 @@ export function WalletRouter({
 }: {
   loading: boolean; screen: Screen; profile?: WalletProfile; wallets: WalletProfile[]; signer?: Signer;
   network: Network; onboarding: OnboardingRouteProps; addingWallet: boolean;
-  sessionState: KhieProviderSessionState; pairing: boolean; approval?: ApprovalItem;
+  sessionState: KhieProviderSessionState; pairing: boolean; approval?: ApprovalItem; queuedApprovalCount: number;
   localBackend?: LocalMnemonicSigningBackend; rpcUrls: NetworkRpcUrls; themePreference: ThemePreference;
   updateSettings: UpdateSettings; checkingForUpdates: boolean; currentVersion: string;
   buildCommit: string; appArchitecture: string; updateAvailable: boolean; updateAsset?: ReleaseAsset;
@@ -135,7 +135,7 @@ export function WalletRouter({
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="tabs">{() => <Tabs.Navigator initialRouteName={initialTabRoute} tabBar={tabBar} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
-          <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
+          <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} queuedApprovalCount={queuedApprovalCount} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
           <Tabs.Screen name="trust">{() => trust ? <TrustDeviceScreen device={trust} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} /> : null}</Tabs.Screen>
           <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} focusAppInformation={focusAppInformation} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} onAppInformationFocused={onAppInformationFocused} />}</Tabs.Screen>
         </Tabs.Navigator>}</Stack.Screen>

@@ -30,6 +30,19 @@ describe("ApprovalQueue", () => {
     await expect(second).resolves.toBe(false);
   });
 
+  it("reports requests waiting behind the active request", async () => {
+    const queue = new ApprovalQueue();
+    const first = queue.enqueue(request("ckb-testnet"));
+    const second = queue.enqueue(request("ckb-mainnet"));
+
+    expect(queue.queuedCount).toBe(1);
+    queue.respond(queue.current!.id, false);
+    await expect(first).resolves.toBe(false);
+    expect(queue.queuedCount).toBe(0);
+    queue.respond(queue.current!.id, false);
+    await expect(second).resolves.toBe(false);
+  });
+
   it("cancels an approved request that is still executing", async () => {
     const queue = new ApprovalQueue(10_000);
     const controller = new AbortController();

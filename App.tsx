@@ -292,6 +292,7 @@ function WalletApp({
   const [onboarding, setOnboarding] = useState<Onboarding>("start");
   const [addingWallet, setAddingWallet] = useState(false);
   const [approval, setApproval] = useState<ApprovalItem>();
+  const [queuedApprovalCount, setQueuedApprovalCount] = useState(0);
   const [pairing, setPairing] = useState(false);
   const pairingInProgressRef = useRef(false);
   const [pendingKhieEndpoint, setPendingKhieEndpoint] = useState<string>();
@@ -588,6 +589,7 @@ function WalletApp({
     () =>
       approvalQueue.subscribe((item) => {
         setApproval(item);
+        setQueuedApprovalCount(approvalQueue.queuedCount);
       }),
     [approvalQueue],
   );
@@ -1888,6 +1890,7 @@ function WalletApp({
       sessionState={sessionState}
       pairing={pairing}
       approval={approval}
+      queuedApprovalCount={queuedApprovalCount}
       localBackend={localBackend}
       rpcUrls={rpcUrls}
       themePreference={themePreference}

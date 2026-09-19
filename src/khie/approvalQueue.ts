@@ -32,6 +32,10 @@ export class ApprovalQueue {
     return this.active && { id: this.active.id, request: this.active.request };
   }
 
+  get queuedCount(): number {
+    return this.waiting.length;
+  }
+
   subscribe(listener: (item?: ApprovalItem) => void): () => void {
     this.listeners.add(listener);
     listener(this.current);
