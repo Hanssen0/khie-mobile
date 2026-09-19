@@ -303,6 +303,12 @@ function WalletApp({
   });
   const [notice, setNotice] = useState<string>();
   const [trustDevice, setTrustDevice] = useState<ConnectedTrustDevice>();
+  // Bluetooth status changes must not recreate the backend and expire the provider session.
+  const trustDeviceRef = useRef(trustDevice);
+  const updateTrustDevice = useCallback((device?: ConnectedTrustDevice) => {
+    trustDeviceRef.current = device;
+    setTrustDevice(device);
+  }, []);
   const [trustPinRequest, setTrustPinRequest] = useState<TrustPinRequest>();
   const [trustPin, setTrustPin] = useState("");
   const [walletPasswordRequest, setWalletPasswordRequest] =
@@ -964,9 +970,9 @@ function WalletApp({
     try {
       await disconnectTrustWallet();
     } finally {
-      setTrustDevice(undefined);
+      updateTrustDevice(undefined);
     }
-  }, []);
+  }, [updateTrustDevice]);
 
   const requestTrustSigningPin = useCallback<RequestTrustPin>(
     async (purpose, signal) => {
@@ -975,7 +981,7 @@ function WalletApp({
         (purpose === "message" || purpose === "transaction") &&
         profile?.kind === "cryptape-trust" &&
         profile.publicKey &&
-        trustDevice?.id.toLowerCase() !== profile.deviceId.toLowerCase()
+        trustDeviceRef.current?.id.toLowerCase() !== profile.deviceId.toLowerCase()
           ? profile
           : undefined;
       if (disconnectedProfile) {
@@ -1008,10 +1014,10 @@ function WalletApp({
           "Cryptape Trust public key has changed",
         );
       }
-      setTrustDevice(device);
+      updateTrustDevice(device);
       return pin;
     },
-    [profile, releaseTrustConnection, requestTrustPin, trustDevice],
+    [profile, releaseTrustConnection, requestTrustPin, updateTrustDevice],
   );
 
   const reportTrustSigningError = useCallback(
@@ -1344,10 +1350,10 @@ function WalletApp({
         });
       });
       const device = await connectTrustWallet(deviceId, pin, cachedName);
-      setTrustDevice(device);
+      updateTrustDevice(device);
       return device;
     },
-    [],
+    [updateTrustDevice],
   );
 
   const clearTrustConnection = useCallback(async () => {
@@ -1374,10 +1380,10 @@ function WalletApp({
     async (device: ConnectedTrustDevice, publicKey: string) => {
       const next = { ...device, publicKey };
       approvalQueue.cancelAll("Wallet changed");
-      setTrustDevice(next);
+      updateTrustDevice(next);
       setWalletState(await vault.saveCryptapeTrust(next));
     },
-    [approvalQueue, vault],
+    [approvalQueue, updateTrustDevice, vault],
   );
 
   const prepareTrustKeyOperation = useCallback(async () => {
@@ -1394,7 +1400,7 @@ function WalletApp({
     }
 
     const device = await connectTrustWallet(profile.deviceId, pin, profile.name);
-    setTrustDevice(device);
+    updateTrustDevice(device);
     setWalletState(await vault.saveCryptapeTrust(device));
     if (hasTrustPublicKeyChanged(profile.publicKey, device.publicKey)) {
       approvalQueue.cancelAll("Wallet changed");
@@ -1407,7 +1413,7 @@ function WalletApp({
       );
     }
     return { device, pin };
-  }, [approvalQueue, profile, requestTrustPin, sessionState.paired, trustDevice, vault]);
+  }, [approvalQueue, profile, requestTrustPin, sessionState.paired, trustDevice, updateTrustDevice, vault]);
 
   const performTrustKeyOperation = useCallback(
     async <T,>(
