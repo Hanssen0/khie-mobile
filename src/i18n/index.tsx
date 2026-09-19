@@ -209,7 +209,8 @@ const en = {
   hoursAgo: "{count} hours ago",
   dayAgo: "{count} day ago",
   daysAgo: "{count} days ago",
-  readyForRequests: "Ready for requests…",
+  readyForRequests: "Connected to an app. Waiting for requests…\nReturn to it to continue.",
+  queuedRequests: "+{count} queued",
   unpair: "Unpair",
   khieNotificationsPermissionTitle: "Keep Khie connected in the background",
   khieNotificationsPermissionDescription:
@@ -259,9 +260,7 @@ const en = {
   downloadUpdate: "Download update",
   updateAvailable: "Update available",
   updateAvailableDescription:
-    "Khie Wallet {version} is available. Open App information in Settings to download it.",
-  viewUpdate: "View update",
-  later: "Later",
+    "Khie Wallet {version} is available. Download it to install.",
   updateAvailableStatus: "Khie Wallet {version} is available",
   appIsUpToDate: "Khie Wallet is up to date",
   unableToCheckUpdates: "Unable to check for updates",
@@ -569,7 +568,8 @@ const zhHans: Record<TranslationKey, string> = {
   hoursAgo: "{count} 小时前",
   dayAgo: "{count} 天前",
   daysAgo: "{count} 天前",
-  readyForRequests: "等待请求…",
+  readyForRequests: "已连接应用，等待请求中…\n请回到应用以继续操作。",
+  queuedRequests: "+{count} 等待中",
   unpair: "解除配对",
   khieNotificationsPermissionTitle: "让 Khie 在后台保持连接",
   khieNotificationsPermissionDescription:
@@ -619,9 +619,7 @@ const zhHans: Record<TranslationKey, string> = {
   downloadUpdate: "下载更新",
   updateAvailable: "有可用更新",
   updateAvailableDescription:
-    "Khie Wallet {version} 已发布。前往设置中的 App 信息手动下载。",
-  viewUpdate: "查看更新",
-  later: "稍后",
+    "Khie Wallet {version} 已发布。下载即可安装。",
   updateAvailableStatus: "Khie Wallet {version} 可供下载",
   appIsUpToDate: "Khie Wallet 已是最新版本",
   unableToCheckUpdates: "无法检查更新",
@@ -919,7 +917,8 @@ const zhHant: Record<TranslationKey, string> = {
   hoursAgo: "{count} 小時前",
   dayAgo: "{count} 天前",
   daysAgo: "{count} 天前",
-  readyForRequests: "等待請求…",
+  readyForRequests: "已連線應用，等待請求中…\n請回到應用以繼續操作。",
+  queuedRequests: "+{count} 等待中",
   unpair: "解除配對",
   khieNotificationsPermissionTitle: "讓 Khie 在背景保持連線",
   khieNotificationsPermissionDescription:
@@ -969,9 +968,7 @@ const zhHant: Record<TranslationKey, string> = {
   downloadUpdate: "下載更新",
   updateAvailable: "有可用更新",
   updateAvailableDescription:
-    "Khie Wallet {version} 已發佈。前往設定中的 App 資訊手動下載。",
-  viewUpdate: "查看更新",
-  later: "稍後",
+    "Khie Wallet {version} 已發佈。下載即可安裝。",
   updateAvailableStatus: "Khie Wallet {version} 可供下載",
   appIsUpToDate: "Khie Wallet 已是最新版本",
   unableToCheckUpdates: "無法檢查更新",
@@ -1269,7 +1266,8 @@ const hak: Record<TranslationKey, string> = {
   hoursAgo: "{count} 點鐘以前",
   dayAgo: "{count} 日以前",
   daysAgo: "{count} 日以前",
-  readyForRequests: "等待請求…",
+  readyForRequests: "已連線應用程式，等請求中…\n請轉去應用程式繼續操作。",
+  queuedRequests: "+{count} 等候中",
   unpair: "解除配對",
   khieNotificationsPermissionTitle: "分 Khie 在背景保持連線",
   khieNotificationsPermissionDescription:
@@ -1319,9 +1317,7 @@ const hak: Record<TranslationKey, string> = {
   downloadUpdate: "下載更新",
   updateAvailable: "有新版本",
   updateAvailableDescription:
-    "Khie Wallet {version} 發布吔。去設定个 App 資訊手動下載。",
-  viewUpdate: "看更新",
-  later: "等下先",
+    "Khie Wallet {version} 發布吔。下載就做得安裝。",
   updateAvailableStatus: "Khie Wallet {version} 做得下載",
   appIsUpToDate: "Khie Wallet 係最新版本",
   unableToCheckUpdates: "無法度檢查更新",

@@ -24,16 +24,18 @@ export function WalletMenu({ wallets, selected, onSelect }: { wallets: WalletPro
   const { t } = useI18n();
   const [visible, setVisible] = useState(false);
   return (
-    <Menu visible={visible} onDismiss={() => setVisible(false)} anchor={
-      <PaperButton mode="contained-tonal" icon="wallet" onPress={() => setVisible(true)} style={styles.walletMenu}>
-        {walletLabel(wallets, selected ?? "", t)}
-      </PaperButton>
-    }>
-      {wallets.map((wallet) => <Menu.Item key={wallet.id} leadingIcon={wallet.id === selected ? "check" : "wallet-outline"} title={walletLabel(wallets, wallet.id, t)} onPress={() => {
-        setVisible(false);
-        if (wallet.id !== selected) onSelect(wallet.id);
-      }} />)}
-    </Menu>
+    <View style={styles.walletMenu}>
+      <Menu visible={visible} onDismiss={() => setVisible(false)} anchor={
+        <PaperButton mode="contained-tonal" icon="wallet" onPress={() => setVisible(true)}>
+          {walletLabel(wallets, selected ?? "", t)}
+        </PaperButton>
+      }>
+        {wallets.map((wallet) => <Menu.Item key={wallet.id} leadingIcon={wallet.id === selected ? "check" : "wallet-outline"} title={walletLabel(wallets, wallet.id, t)} onPress={() => {
+          setVisible(false);
+          if (wallet.id !== selected) onSelect(wallet.id);
+        }} />)}
+      </Menu>
+    </View>
   );
 }
 

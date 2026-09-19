@@ -51,23 +51,23 @@ type OnboardingRouteProps = {
 
 export function WalletRouter({
   loading, screen, profile, wallets, signer, network, onboarding, addingWallet, sessionState,
-  pairing, approval, localBackend, rpcUrls, themePreference, updateSettings, checkingForUpdates,
-  currentVersion, buildCommit, appArchitecture, updateAvailable, updateAsset, focusAppInformation,
+  pairing, approval, queuedApprovalCount, localBackend, rpcUrls, themePreference, updateSettings, checkingForUpdates,
+  currentVersion, buildCommit, appArchitecture, updateAvailable, updateAsset,
   biometricAvailable, biometricUnlock, masterPasswordSet, notice, dialogs, onDismissNotice,
   onScreenChange, onFinishOnboarding, onCancelAddingWallet, onPairKhie, onCancelKhiePairing,
   onConnectRelay, onUnpairKhie, onRespondToApproval, onRefreshTrust, onGenerateTrustKey,
   onImportTrustKey, onResetTrustKey, onChangeNetwork, onChangeBiometricUnlock,
   onChangeMasterPassword, onAddWallet, onRemoveWallet, onSaveRpcUrls, onChangeThemePreference,
-  onChangeAutomaticUpdateChecks, onCheckForUpdates, onDownloadUpdate, onAppInformationFocused,
+  onChangeAutomaticUpdateChecks, onCheckForUpdates, onDownloadUpdate,
   onSelectWallet,
 }: {
   loading: boolean; screen: Screen; profile?: WalletProfile; wallets: WalletProfile[]; signer?: Signer;
   network: Network; onboarding: OnboardingRouteProps; addingWallet: boolean;
-  sessionState: KhieProviderSessionState; pairing: boolean; approval?: ApprovalItem;
+  sessionState: KhieProviderSessionState; pairing: boolean; approval?: ApprovalItem; queuedApprovalCount: number;
   localBackend?: LocalMnemonicSigningBackend; rpcUrls: NetworkRpcUrls; themePreference: ThemePreference;
   updateSettings: UpdateSettings; checkingForUpdates: boolean; currentVersion: string;
   buildCommit: string; appArchitecture: string; updateAvailable: boolean; updateAsset?: ReleaseAsset;
-  focusAppInformation: boolean; biometricAvailable: boolean; biometricUnlock: boolean;
+  biometricAvailable: boolean; biometricUnlock: boolean;
   masterPasswordSet: boolean; notice?: string; dialogs: ReactNode; onDismissNotice: () => void;
   onScreenChange: (screen: Screen) => void;
   onFinishOnboarding: (state: WalletState) => Promise<void> | void; onCancelAddingWallet: () => void;
@@ -84,7 +84,6 @@ export function WalletRouter({
   onChangeThemePreference: (preference: ThemePreference) => Promise<void>;
   onChangeAutomaticUpdateChecks: (enabled: boolean) => Promise<void>;
   onCheckForUpdates: () => Promise<void> | void; onDownloadUpdate: () => Promise<void>;
-  onAppInformationFocused: () => void;
 }) {
   const theme = useTheme();
   const [scannedRecipient, setScannedRecipient] = useState<string>();
@@ -135,8 +134,8 @@ export function WalletRouter({
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="tabs">{() => <Tabs.Navigator initialRouteName={initialTabRoute} tabBar={tabBar} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="home">{({ navigation }) => <HomeScreen signer={signer} network={network} profile={profile} wallets={wallets} onSelectWallet={(id) => void onSelectWallet(id).catch(onboarding.onError)} onNavigate={(next) => next === "receive" || next === "send" || next === "trust" ? navigation.getParent()?.navigate(next) : navigation.navigate(next as TabRoute)} />}</Tabs.Screen>
-          <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
-          <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} focusAppInformation={focusAppInformation} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} onAppInformationFocused={onAppInformationFocused} />}</Tabs.Screen>
+          <Tabs.Screen name="khie">{({ navigation }) => <KhieScreen state={sessionState} pairing={pairing} approval={approval} queuedApprovalCount={queuedApprovalCount} network={network} signer={signer} onScan={() => navigation.getParent()?.navigate("scanner")} onPair={onPairKhie} onCancelPairing={onCancelKhiePairing} onConnectRelay={onConnectRelay} onUnpair={onUnpairKhie} onRespond={onRespondToApproval} />}</Tabs.Screen>
+          <Tabs.Screen name="settings">{() => <SettingsScreen key={profile.id} backend={localBackend} network={network} profile={profile} wallets={wallets} rpcUrls={rpcUrls} themePreference={themePreference} updateSettings={updateSettings} checkingForUpdates={checkingForUpdates} currentVersion={currentVersion} buildCommit={buildCommit} appArchitecture={appArchitecture} updateAvailable={updateAvailable} updateAsset={updateAsset} biometricAvailable={biometricAvailable} biometricUnlock={biometricUnlock} masterPasswordSet={masterPasswordSet} onChangeNetwork={onChangeNetwork} onChangeBiometricUnlock={onChangeBiometricUnlock} onChangeMasterPassword={onChangeMasterPassword} onSelectWallet={onSelectWallet} onAddWallet={onAddWallet} onRemoveWallet={onRemoveWallet} onSaveRpcUrls={onSaveRpcUrls} onChangeThemePreference={onChangeThemePreference} onChangeAutomaticUpdateChecks={onChangeAutomaticUpdateChecks} onCheckForUpdates={onCheckForUpdates} onDownloadUpdate={onDownloadUpdate} />}</Tabs.Screen>
         </Tabs.Navigator>}</Stack.Screen>
         <Stack.Screen name="trust">{({ navigation }) => trust ? <TrustDeviceScreen device={trust} onBack={() => navigation.goBack()} onRefresh={onRefreshTrust} onGenerate={onGenerateTrustKey} onImport={onImportTrustKey} onReset={onResetTrustKey} /> : null}</Stack.Screen>
         <Stack.Screen name="receive">{({ navigation }) => <ReceiveScreen signer={signer} onBack={() => navigation.goBack()} />}</Stack.Screen>

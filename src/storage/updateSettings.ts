@@ -14,7 +14,7 @@ export type UpdateSettings = {
 };
 
 export function defaultUpdateSettings(): UpdateSettings {
-  return { automaticChecks: false };
+  return { automaticChecks: true };
 }
 
 function isRelease(value: unknown): value is AppRelease {
@@ -40,7 +40,7 @@ function parseUpdateSettings(value: string | null): UpdateSettings {
   try {
     const parsed = JSON.parse(value) as Partial<UpdateSettings>;
     return {
-      automaticChecks: parsed.automaticChecks === true,
+      automaticChecks: parsed.automaticChecks !== false,
       lastAutomaticCheckAt:
         typeof parsed.lastAutomaticCheckAt === "number"
           ? parsed.lastAutomaticCheckAt
