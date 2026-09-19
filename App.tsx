@@ -121,6 +121,7 @@ import {
   isVersionNewer,
   selectAndroidApk,
 } from "./src/update/githubRelease";
+import { DeveloperModeProvider } from "./src/ui/developerMode";
 import {
   AppDialogProvider,
   errorMessage,
@@ -210,6 +211,7 @@ export default function App() {
       <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
         <NavigationBar style={dark ? "dark" : "light"} />
         <I18nProvider>
+          <DeveloperModeProvider>
           <PaperProvider theme={theme}>
             <AppDialogProvider>
               <TrustBluetoothSetupProvider>
@@ -220,6 +222,7 @@ export default function App() {
               </TrustBluetoothSetupProvider>
             </AppDialogProvider>
           </PaperProvider>
+          </DeveloperModeProvider>
         </I18nProvider>
       </KeyboardProvider>
     </SafeAreaProvider>
@@ -1426,7 +1429,7 @@ function WalletApp({
         setWalletState(await vault.saveCryptapeTrust(device));
         setOnboarding("start");
         setAddingWallet(false);
-        setScreen("trust");
+        setScreen("home");
       } finally {
         await releaseTrustConnection().catch(() => undefined);
       }

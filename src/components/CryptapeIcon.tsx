@@ -26,23 +26,3 @@ export function CryptapeIcon({
     </Svg>
   );
 }
-
-export function cryptapeIconSource({
-  color,
-  size,
-}: {
-  color: string;
-  size: number;
-}) {
-  return <CryptapeIcon color={color} size={size} />;
-}
-
-export function cryptapeOutlinedIconSource({
-  color,
-  size,
-}: {
-  color: string;
-  size: number;
-}) {
-  return <CryptapeIcon color={color} size={size} variant="outlined" />;
-}

@@ -6,7 +6,7 @@ import { KeyboardAvoidingView, KeyboardController } from "react-native-keyboard-
 import { CryptapeIcon } from "../components/CryptapeIcon";
 import { useI18n } from "../i18n";
 import { type ConnectedTrustDevice, isTrustSupported, scanForTrustDevices, type TrustDevice } from "../trust/native";
-import { errorMessage, KeyboardDialogContent, useAppDialog, useTrustBluetoothSetup, WalletTextInput } from "./components";
+import { BackButton, errorMessage, KeyboardDialogContent, useAppDialog, useTrustBluetoothSetup, WalletTextInput } from "./components";
 import { styles } from "./styles";
 
 export function TrustWalletPicker({ onConnect }: { onConnect: (device: TrustDevice) => Promise<void> }) {
@@ -29,7 +29,7 @@ export function TrustWalletBanner() {
 
 type TrustKeyAction = "generate" | "import" | "reset";
 
-export function TrustDeviceScreen({ device, onRefresh, onGenerate, onImport, onReset }: { device: ConnectedTrustDevice; onRefresh: () => Promise<void>; onGenerate: () => Promise<void>; onImport: (privateKey: string) => Promise<void>; onReset: () => Promise<void> }) {
+export function TrustDeviceScreen({ device, onBack, onRefresh, onGenerate, onImport, onReset }: { device: ConnectedTrustDevice; onBack: () => void; onRefresh: () => Promise<void>; onGenerate: () => Promise<void>; onImport: (privateKey: string) => Promise<void>; onReset: () => Promise<void> }) {
   const { t } = useI18n(); const appDialog = useAppDialog(); const { show: showTrustBluetoothSetupError } = useTrustBluetoothSetup(); const theme = useTheme();
   const [action, setAction] = useState<TrustKeyAction>(); const [privateKey, setPrivateKey] = useState(""); const [busy, setBusy] = useState(false); const [refreshingDevice, setRefreshingDevice] = useState(false);
   const privateKeyValid = /^[0-9a-fA-F]{64}$/.test(privateKey);
@@ -51,6 +51,7 @@ export function TrustDeviceScreen({ device, onRefresh, onGenerate, onImport, onR
   };
   return <>
     <ScrollView contentContainerStyle={[styles.page, styles.settingsPage]}>
+      <BackButton onPress={onBack} />
       <Text variant="headlineMedium">{t("trustDevice")}</Text>
       <PaperCard mode="elevated"><PaperCard.Title title={device.name} leftStyle={styles.cardTitleLeft} left={({ size }) => <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />} /><PaperCard.Content style={styles.cardContent}><View style={styles.metadataBlock}><Text variant="labelMedium">{t("deviceAddress")}</Text><Text variant="bodyMedium" selectable style={styles.mono}>{device.id}</Text></View><Divider /><View style={styles.metadataBlock}><Text variant="labelMedium">{t("publicKey")}</Text>{device.publicKey ? <Text variant="bodySmall" selectable style={styles.mono}>{device.publicKey}</Text> : <Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text>}</View></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="contained-tonal" icon="refresh" loading={refreshingDevice} disabled={refreshingDevice} onPress={() => { setRefreshingDevice(true); void onRefresh().catch((cause: unknown) => { if (!showTrustBluetoothSetupError(cause)) appDialog.show(t("trustWalletConnectionFailed"), errorMessage(cause, t)); }).finally(() => setRefreshingDevice(false)); }}>{t("refresh")}</PaperButton></PaperCard.Actions></PaperCard>
       <PaperCard mode="elevated"><PaperCard.Title title={t("trustKeyManagement")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="key-chain-variant" />} /><PaperCard.Content style={styles.cardContent}><Text variant="bodyMedium">{device.publicKey ? t("trustKeyPresentDescription") : t("trustKeyMissingDescription")}</Text></PaperCard.Content><PaperCard.Actions style={styles.cardActions}>{device.publicKey ? <PaperButton mode="text" icon="key-remove" textColor={theme.colors.error} onPress={() => setAction("reset")}>{t("resetTrustKey")}</PaperButton> : null}{!device.publicKey ? <PaperButton mode="text" icon="key-plus" onPress={() => setAction("import")}>{t("importTrustKey")}</PaperButton> : null}{!device.publicKey ? <PaperButton mode="contained" icon="key-plus" onPress={() => setAction("generate")}>{t("generateTrustKey")}</PaperButton> : null}</PaperCard.Actions></PaperCard>

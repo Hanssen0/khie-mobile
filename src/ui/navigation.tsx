@@ -3,7 +3,6 @@ import { View } from "react-native";
 import { BottomNavigation, Button as PaperButton, Divider, Menu, SegmentedButtons } from "react-native-paper";
 import type { EdgeInsets } from "react-native-safe-area-context";
 
-import { cryptapeIconSource, cryptapeOutlinedIconSource } from "../components/CryptapeIcon";
 import { khieFilledIconSource, khieIconSource } from "../components/KhieIcon";
 import { languageLabel, languageOptions, useI18n, type Translate } from "../i18n";
 import { normalizeTrustPublicKey } from "../wallet/trustSignature";
@@ -40,12 +39,11 @@ export function WalletMenu({ wallets, selected, onSelect }: { wallets: WalletPro
   );
 }
 
-export function BottomBar({ current, showTrust, insets, onNavigate }: { current: Screen; showTrust: boolean; insets: EdgeInsets; onNavigate: (screen: Screen) => void }) {
+export function BottomBar({ current, insets, onNavigate }: { current: Screen; insets: EdgeInsets; onNavigate: (screen: Screen) => void }) {
   const { t } = useI18n();
   const routes = [
     { key: "home", title: t("account"), focusedIcon: "wallet", unfocusedIcon: "wallet-outline" },
     { key: "khie", title: "Khie", focusedIcon: khieFilledIconSource, unfocusedIcon: khieIconSource },
-    ...(showTrust ? [{ key: "trust", title: "Cryptape Trust", focusedIcon: cryptapeIconSource, unfocusedIcon: cryptapeOutlinedIconSource }] : []),
     { key: "settings", title: t("settings"), focusedIcon: "cog", unfocusedIcon: "cog-outline" },
   ];
   const selected = current === "receive" ? "home" : current;
