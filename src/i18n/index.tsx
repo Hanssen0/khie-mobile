@@ -260,9 +260,7 @@ const en = {
   downloadUpdate: "Download update",
   updateAvailable: "Update available",
   updateAvailableDescription:
-    "Khie Wallet {version} is available. Open App information in Settings to download it.",
-  viewUpdate: "View update",
-  later: "Later",
+    "Khie Wallet {version} is available. Download it to install.",
   updateAvailableStatus: "Khie Wallet {version} is available",
   appIsUpToDate: "Khie Wallet is up to date",
   unableToCheckUpdates: "Unable to check for updates",
@@ -613,9 +611,7 @@ const zhHans: Record<TranslationKey, string> = {
   downloadUpdate: "下载更新",
   updateAvailable: "有可用更新",
   updateAvailableDescription:
-    "Khie Wallet {version} 已发布。前往设置中的 App 信息手动下载。",
-  viewUpdate: "查看更新",
-  later: "稍后",
+    "Khie Wallet {version} 已发布。下载即可安装。",
   updateAvailableStatus: "Khie Wallet {version} 可供下载",
   appIsUpToDate: "Khie Wallet 已是最新版本",
   unableToCheckUpdates: "无法检查更新",
@@ -957,9 +953,7 @@ const zhHant: Record<TranslationKey, string> = {
   downloadUpdate: "下載更新",
   updateAvailable: "有可用更新",
   updateAvailableDescription:
-    "Khie Wallet {version} 已發佈。前往設定中的 App 資訊手動下載。",
-  viewUpdate: "查看更新",
-  later: "稍後",
+    "Khie Wallet {version} 已發佈。下載即可安裝。",
   updateAvailableStatus: "Khie Wallet {version} 可供下載",
   appIsUpToDate: "Khie Wallet 已是最新版本",
   unableToCheckUpdates: "無法檢查更新",
@@ -1301,9 +1295,7 @@ const hak: Record<TranslationKey, string> = {
   downloadUpdate: "下載更新",
   updateAvailable: "有新版本",
   updateAvailableDescription:
-    "Khie Wallet {version} 發布吔。去設定个 App 資訊手動下載。",
-  viewUpdate: "看更新",
-  later: "等下先",
+    "Khie Wallet {version} 發布吔。下載就做得安裝。",
   updateAvailableStatus: "Khie Wallet {version} 做得下載",
   appIsUpToDate: "Khie Wallet 係最新版本",
   unableToCheckUpdates: "無法度檢查更新",

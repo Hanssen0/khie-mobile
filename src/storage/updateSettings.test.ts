@@ -16,8 +16,17 @@ import {
 describe("SecureStoreUpdateSettings", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("defaults automatic checks to off", async () => {
+  it("defaults automatic checks to on", async () => {
     secureStore.getItemAsync.mockResolvedValueOnce(null);
+    await expect(new SecureStoreUpdateSettings().load()).resolves.toEqual({
+      automaticChecks: true,
+    });
+  });
+
+  it("preserves an explicit opt-out", async () => {
+    secureStore.getItemAsync.mockResolvedValueOnce(
+      JSON.stringify({ automaticChecks: false }),
+    );
     await expect(new SecureStoreUpdateSettings().load()).resolves.toEqual({
       automaticChecks: false,
     });
