@@ -3,6 +3,7 @@ import type { PeerId } from "@libp2p/interface";
 import { multiaddr } from "@multiformats/multiaddr";
 
 import { KhieProviderSession } from "./KhieProviderSession";
+import { encodePairingEndpointMobile } from "./pairingEndpointCodec";
 import { DEFAULT_KHIE_RELAY_ADDRESS } from "./protocol";
 
 const createRelayConnection = (id: string) => ({
@@ -184,6 +185,77 @@ describe("KhieProviderSession relay address", () => {
 });
 
 describe("KhieProviderSession pairing lifetime", () => {
+  const connectorEndpoint = () =>
+    encodePairingEndpointMobile(
+      "https://example.com/khie",
+      [multiaddr("/dns4/peer.example/tcp/443/wss/p2p/12D3KooWEUcGkHCFDcU5HucKpknW8iLt36UdGoxD2sGNkXQ8U8db")],
+      "pairing-secret",
+      "connector",
+    );
+
+  afterEach(() => vi.useRealTimers());
+
+  it("retries dialing after the first failure and shows the waiting state", async () => {
+    vi.useFakeTimers();
+    const dial = vi.fn()
+      .mockRejectedValueOnce(new Error("peer unavailable"))
+      .mockResolvedValueOnce({ status: "open" });
+    const pair = vi.fn(async () => undefined);
+    const session = createSession();
+    Object.assign(session, { node: { dial, services: { pairing: { pair } } } });
+
+    const attempt = session.pair(await connectorEndpoint());
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(dial).toHaveBeenCalledOnce();
+    expect(pair).not.toHaveBeenCalled();
+    expect(session.snapshot.pairingWaitingForPeer).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(attempt).resolves.toBe(true);
+    expect(dial).toHaveBeenCalledTimes(2);
+    expect(pair).toHaveBeenCalledOnce();
+    expect(session.snapshot.pairingWaitingForPeer).toBe(false);
+  });
+
+  it("does not retry when the pairing handshake fails after dialing", async () => {
+    const dial = vi.fn(async () => ({ status: "open" }));
+    const pair = vi.fn(async () => {
+      throw new Error("pairing response lost");
+    });
+    const session = createSession();
+    Object.assign(session, { node: { dial, services: { pairing: { pair } } } });
+
+    await expect(session.pair(await connectorEndpoint())).resolves.toBe(false);
+
+    expect(dial).toHaveBeenCalledOnce();
+    expect(pair).toHaveBeenCalledOnce();
+    expect(session.snapshot.pairingWaitingForPeer).toBe(false);
+  });
+
+  it("stops dial retries when pairing is canceled", async () => {
+    vi.useFakeTimers();
+    const dial = vi.fn(async () => {
+      throw new Error("peer unavailable");
+    });
+    const pair = vi.fn(async () => undefined);
+    const session = createSession();
+    Object.assign(session, { node: { dial, services: { pairing: { pair } } } });
+
+    const attempt = session.pair(await connectorEndpoint());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshot.pairingWaitingForPeer).toBe(true);
+
+    session.setPairingEnabled(false);
+    await expect(attempt).resolves.toBe(false);
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(dial).toHaveBeenCalledOnce();
+    expect(pair).not.toHaveBeenCalled();
+    expect(session.snapshot.pairingWaitingForPeer).toBe(false);
+  });
+
   it("cancels an active pairing attempt when pairing is disabled", () => {
     const session = createSession();
     const controller = new AbortController();

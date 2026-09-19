@@ -27,7 +27,20 @@ export function KhieScreen({ state, pairing, approval, network, signer, onScan, 
   return <KeyboardAwareScrollView ref={scrollRef} bottomOffset={16} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <Text variant="headlineMedium">Khie</Text>
     <InfoCard title={t("khieIntroductionTitle")} description={t("khieIntroduction")} supportingText={t("khieNameMeaning")} icon={({ color, size }) => <KhieIcon size={size} color={color} />} />
-    {pairing ? <View style={styles.pairingProgress}><ActivityIndicator size="large" /><Text variant="titleLarge">{t("pairingWithKhie")}</Text><PaperButton mode="text" onPress={onCancelPairing}>{t("cancel")}</PaperButton></View> : state.paired ? <View style={styles.khieContent} onLayout={(event) => { khieContentOffsetY.current = event.nativeEvent.layout.y; }}>
+    {pairing ? (
+      <View style={styles.pairingProgress}>
+        <ActivityIndicator size="large" />
+        <Text variant="titleLarge">
+          {t(state.pairingWaitingForPeer ? "khiePairingRetryTitle" : "pairingWithKhie")}
+        </Text>
+        {state.pairingWaitingForPeer ? (
+          <Text variant="bodyMedium" style={styles.centerText}>
+            {t("khiePairingRetryBody")}
+          </Text>
+        ) : null}
+        <PaperButton mode="text" onPress={onCancelPairing}>{t("cancel")}</PaperButton>
+      </View>
+    ) : state.paired ? <View style={styles.khieContent} onLayout={(event) => { khieContentOffsetY.current = event.nativeEvent.layout.y; }}>
       <View style={styles.peerOverview}>{state.remotePeer ? <><Chip compact>{connectionPath}</Chip><View style={styles.flex}><Text variant="titleMedium" numberOfLines={1}>{state.remotePeer.name ?? t("unknown")}</Text><Text variant="bodySmall" numberOfLines={1}>{state.remotePeer.agentVersion ?? t("unknownAgent")}</Text></View></> : <Text variant="bodyMedium" style={styles.flex}>{t("loadingRemotePeerDetails")}</Text>}<PaperButton compact textColor={theme.colors.error} onPress={() => void onUnpair()}>{t("unpair")}</PaperButton></View>
       {state.remotePeer ? <View style={styles.peerMetadata}><View style={styles.metadataBlock}><Text variant="labelMedium">Peer ID</Text><Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>{state.remotePeer.id}</Text></View><View style={styles.metadataBlock}><Text variant="labelMedium">{t("lastSeen")}</Text><Text variant="bodySmall" style={styles.mono}>{state.remotePeer.active ? t("active") : state.remotePeer.lastSeenAt === undefined ? t("notAvailable") : <InactiveLastSeen timestamp={state.remotePeer.lastSeenAt} />}</Text></View></View> : null}
       <Divider /><ApprovalPanel item={approval} network={network} signer={signer} onRespond={onRespond} onLayout={scrollToApproval} />

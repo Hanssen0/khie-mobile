@@ -38,6 +38,14 @@ type ProviderNode = Awaited<ReturnType<typeof createProviderNode>>;
 
 type Handler = (payload: ccc.JsonRpcPayload) => unknown;
 
+const PAIR_DIAL_TIMEOUT_MS = 10_000;
+const PAIR_DIAL_RETRY_INTERVAL_MS = 2_000;
+const NON_RETRYABLE_DIAL_ERRORS = new Set([
+  "DialDeniedError",
+  "NoValidAddressesError",
+  "TransportUnavailableError",
+]);
+
 export type KhieRemotePeer = {
   active: boolean;
   agentVersion?: string;
@@ -51,6 +59,7 @@ export type KhieProviderSessionState = {
   endpoint: string;
   error?: KhieProviderSessionError;
   paired: boolean;
+  pairingWaitingForPeer: boolean;
   ready: boolean;
   relayAddress: string;
   relayConnected: boolean;
@@ -93,6 +102,7 @@ export class KhieProviderSession {
     this.state = {
       endpoint: "",
       paired: false,
+      pairingWaitingForPeer: false,
       ready: false,
       relayAddress: this.relayAddress,
       relayConnected: false,
@@ -218,13 +228,56 @@ export class KhieProviderSession {
       this.abortController.signal,
       controller.signal,
     ]);
-    this.patchState({ error: undefined });
+    this.patchState({ error: undefined, pairingWaitingForPeer: false });
     const startedAt = Date.now();
     try {
       const target = await decodePairingEndpointMobile(endpoint, "connector");
       khieTrace("pair.begin", {
         addresses: target.addresses.map(String),
       });
+      await ccc.retry<void>(
+        [],
+        async ({ index, resolve, reject }) => {
+          const dialStartedAt = Date.now();
+          try {
+            const connection = await node.dial(target.addresses, {
+              signal: ccc.abortSignalAny([
+                signal,
+                AbortSignal.timeout(PAIR_DIAL_TIMEOUT_MS),
+              ]),
+            });
+            signal.throwIfAborted();
+            if (connection.status !== "open") {
+              throw new Error("Peer connection closed while dialing");
+            }
+            khieTrace("pair.dial.success", {
+              attempt: index + 1,
+              durationMs: Date.now() - dialStartedAt,
+              ...connectionDetails(connection),
+            });
+            this.patchState({ pairingWaitingForPeer: false });
+            return resolve(undefined);
+          } catch (cause) {
+            if (signal.aborted) {
+              return reject(signal.reason ?? cause);
+            }
+            khieTrace("pair.dial.failure", {
+              attempt: index + 1,
+              durationMs: Date.now() - dialStartedAt,
+              error: errorDetails(cause),
+            });
+            if (
+              cause instanceof Error &&
+              NON_RETRYABLE_DIAL_ERRORS.has(cause.name)
+            ) {
+              return reject(cause);
+            }
+            this.patchState({ pairingWaitingForPeer: true });
+            throw cause;
+          }
+        },
+        { repeat: PAIR_DIAL_RETRY_INTERVAL_MS, signal },
+      );
       await node.services.pairing.pair(target, { signal });
       khieTrace("pair.success", { durationMs: Date.now() - startedAt });
       this.patchState({ error: undefined });
@@ -241,6 +294,7 @@ export class KhieProviderSession {
     } finally {
       if (this.pairingController === controller) {
         this.pairingController = undefined;
+        this.patchState({ pairingWaitingForPeer: false });
       }
     }
   }
@@ -249,6 +303,9 @@ export class KhieProviderSession {
     const error = new Error("Pairing canceled");
     error.name = "AbortError";
     this.pairingController?.abort(error);
+    if (this.state.pairingWaitingForPeer) {
+      this.patchState({ pairingWaitingForPeer: false });
+    }
   }
 
   setPairingEnabled(enabled: boolean): void {

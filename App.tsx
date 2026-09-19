@@ -295,6 +295,7 @@ function WalletApp({
   const [sessionState, setSessionState] = useState<KhieProviderSessionState>({
     endpoint: "",
     paired: false,
+    pairingWaitingForPeer: false,
     ready: false,
     relayAddress: DEFAULT_KHIE_RELAY_ADDRESS,
     relayConnected: false,
@@ -662,8 +663,16 @@ function WalletApp({
     }
     if (waitingForPairing) {
       void startKhieBackgroundService(
-        t("khiePairingNotificationTitle"),
-        t("khiePairingNotificationBody"),
+        t(
+          sessionState.pairingWaitingForPeer
+            ? "khiePairingRetryTitle"
+            : "khiePairingNotificationTitle",
+        ),
+        t(
+          sessionState.pairingWaitingForPeer
+            ? "khiePairingRetryBody"
+            : "khiePairingNotificationBody",
+        ),
         t("khieConnectionNotificationChannel"),
         t("stopPairing"),
       ).catch(() => undefined);
@@ -684,6 +693,7 @@ function WalletApp({
     ).catch(() => undefined);
   }, [
     sessionState.paired,
+    sessionState.pairingWaitingForPeer,
     sessionState.ready,
     sessionState.remotePeer?.active,
     sessionState.remotePeer?.direct,
