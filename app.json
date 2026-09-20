@@ -21,6 +21,16 @@
               "path": "/connect"
             }
           ]
+        },
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [
+            {
+              "scheme": "khie-wallet",
+              "host": "expo-development-client"
+            }
+          ]
         }
       ],
       "permissions": [
