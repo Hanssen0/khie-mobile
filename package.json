@@ -75,6 +75,15 @@
     "vitest": "5.0.1"
   },
   "expo": {
+    "install": {
+      "exclude": [
+        "typescript",
+        "react-native-keyboard-controller"
+      ]
+    },
+    "autolinking": {
+      "nativeModulesDir": "./node_modules"
+    },
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [

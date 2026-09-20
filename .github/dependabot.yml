@@ -11,17 +11,16 @@ updates:
     target-branch: dev
     commit-message:
       prefix: chore(deps)
-    # Expo SDK 57 owns the supported React/React Native pair. Upgrade either
-    # only together with an Expo SDK migration, not through a grouped update.
+    # Expo SDK owns this tested native dependency set. Upgrade it only as part
+    # of an Expo SDK migration, not through independent Dependabot updates.
     ignore:
       - dependency-name: react
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
       - dependency-name: react-native
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
+      - dependency-name: react-native-reanimated
+      - dependency-name: react-native-worklets
+      - dependency-name: react-native-safe-area-context
+      - dependency-name: react-native-screens
+      - dependency-name: react-native-svg
     groups:
       production-dependencies:
         dependency-type: production
