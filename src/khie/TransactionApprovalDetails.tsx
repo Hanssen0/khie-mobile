@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     left: 0,
     opacity: 0.45,
   },
-  cellContent: { flex: 1, minWidth: 0, gap: 4 },
+  cellContent: { flex: 1, minWidth: 0, gap: 4, paddingHorizontal: 16 },
   cellTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   cellTitle: { flexShrink: 1, fontWeight: "600" },
   capacity: { marginLeft: "auto", flexShrink: 1, textAlign: "right" },

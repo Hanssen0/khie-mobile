@@ -47,7 +47,7 @@ export const styles = StyleSheet.create({
   trustDeviceConnectCompact: { marginHorizontal: 16 },
   inlineProgress: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardActions: { flexWrap: "wrap", rowGap: 8, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16 },
-  walletListContent: { paddingHorizontal: 0 },
+  walletListContent: { paddingHorizontal: 8 },
   walletListItem: { paddingRight: 16 },
   walletDeleteButton: { marginRight: 0, marginVertical: 0 },
   walletMenu: { alignSelf: "center" },
