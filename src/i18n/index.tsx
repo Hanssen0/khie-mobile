@@ -334,7 +334,7 @@ const en = {
   none: "None",
   sendTo: "To",
   balanceChange: "Balance change",
-  noCkbLeavesWallet: "No CKB leaves this wallet",
+  noCkbLeavesWallet: "No CKB is sent to other addresses",
   transactionInvolvesContracts:
     "This transaction also involves tokens or contract data that the amounts above do not show. Check the transaction details before you approve it.",
   transactionUsesOtherParticipantsFunds:

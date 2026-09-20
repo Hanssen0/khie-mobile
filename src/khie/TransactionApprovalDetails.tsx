@@ -223,7 +223,7 @@ export function TransactionApprovalDetails({
           {summary.netChange !== undefined ? (
             <SummaryValueRow
               label={t("balanceChange")}
-              value={`${summary.netChange > Zero ? "+" : ""}${fixedPointToString(summary.netChange)} CKB`}
+              value={`${summary.netChange > Zero ? "+" : summary.netChange < Zero ? "-" : ""}${fixedPointToString(summary.netChange < Zero ? -summary.netChange : summary.netChange)} CKB`}
               emphasized
             />
           ) : null}
