@@ -140,6 +140,29 @@ jobs:
           sha256sum -- *.apk > "khie-mobile-${RELEASE_VERSION}.sha256"
           printf '%s  Khie Wallet Android signing certificate SHA-256\n' "$KHIE_SIGNING_CERT_SHA256" > "khie-mobile-${RELEASE_VERSION}.certificate.sha256"
 
+      - name: Build commit list since previous release
+        run: |
+          set -euo pipefail
+          # Previous release tag = most recent tag that is a strict ancestor of HEAD
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || true)
+          if [ -n "${PREV_TAG:-}" ]; then
+            echo "PREV_TAG=${PREV_TAG}" >> "$GITHUB_ENV"
+            LIST=$(git log --pretty=format:'  - %h %s' "${PREV_TAG}..${GITHUB_SHA}" | sed '/^$/d')
+            if [ -z "${LIST:-}" ]; then
+              LIST="  (no commits since ${PREV_TAG})"
+            fi
+            SECTION="## Commits since ${PREV_TAG}"
+          else
+            SECTION="## Commits"
+            LIST="  (no previous release tag found)"
+          fi
+          BODY_SECTION="$(printf '%s\n%s' "$SECTION" "$LIST")"
+          # Multi-line env var via heredoc marker
+          echo "COMMIT_SECTION<<EOMARK" >> "$GITHUB_ENV"
+          printf '%s\n' "${BODY_SECTION}" >> "$GITHUB_ENV"
+          echo "EOMARK" >> "$GITHUB_ENV"
+          echo "--- commit section ---"
+          printf '%s\n' "${BODY_SECTION}"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -148,6 +171,8 @@ jobs:
           name: Khie Wallet ${{ env.RELEASE_VERSION }}
           body: |
             Android standalone APK generated from `${{ github.sha }}`.
+
+            ${{ env.COMMIT_SECTION }}
 
             - `arm64-v8a`: current Android phones and tablets
             - `armeabi-v7a`: older 32-bit ARM devices
@@ -158,7 +183,7 @@ jobs:
             Android signing certificate SHA-256: `${{ env.KHIE_SIGNING_CERT_SHA256 }}`
 
             This application and its source code were generated entirely by AI, has not been independently security audited, and is not a production wallet. Understand the private-key, transaction-signing and asset risks before installing or using it.
-          generate_release_notes: true
+          generate_release_notes: false
           fail_on_unmatched_files: true
           files: |
             release/khie-mobile-${{ env.RELEASE_VERSION }}-arm64-v8a.apk

@@ -1,6 +1,6 @@
 {
   "name": "khie-wallet",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "main": "index.ts",
   "packageManager": "pnpm@12.4.2",
@@ -36,7 +36,7 @@
     "@react-navigation/native-stack": "^7.18.10",
     "@scure/bip32": "2.4.0",
     "@scure/bip39": "2.4.0",
-    "expo": "57.0.23",
+    "expo": "57.0.24",
     "expo-application": "~57.0.3",
     "expo-camera": "57.0.5",
     "expo-clipboard": "~57.0.2",
@@ -52,27 +52,27 @@
     "fflate": "0.8.3",
     "it-length-prefixed": "11.0.1",
     "libp2p": "3.3.11",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
+    "react": "19.3.0",
+    "react-native": "0.87.1",
     "react-native-keyboard-controller": "1.22.5",
     "react-native-nitro-modules": "0.37.1",
     "react-native-paper": "5.15.3",
     "react-native-qrcode-svg": "6.3.24",
     "react-native-quick-base64": "3.0.1",
     "react-native-quick-crypto": "1.1.7",
-    "react-native-reanimated": "4.5.1",
-    "react-native-safe-area-context": "5.7.0",
-    "react-native-screens": "~4.26.0",
-    "react-native-svg": "15.15.4",
+    "react-native-reanimated": "4.7.0",
+    "react-native-safe-area-context": "5.10.0",
+    "react-native-screens": "~4.28.0",
+    "react-native-svg": "15.15.5",
     "react-native-url-polyfill": "4.0.0",
     "react-native-webrtc": "124.0.8",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.12.2"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
-    "@types/react": "19.2.18",
-    "typescript": "6.0.3",
-    "vitest": "5.0.0"
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
   },
   "expo": {
     "doctor": {
