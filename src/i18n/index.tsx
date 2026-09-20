@@ -337,6 +337,8 @@ const en = {
   noCkbLeavesWallet: "No CKB leaves this wallet",
   transactionInvolvesContracts:
     "This transaction also involves tokens or contract data that the amounts above do not show. Check the transaction details before you approve it.",
+  transactionUsesOtherParticipantsFunds:
+    "This transaction includes {capacity} CKB contributed by other participants. Check the transaction details before you approve it.",
   technicalDetails: "Transaction details",
   developerMode: "Developer mode",
   developerModeDescription: "Show RPC, relay, peer, and key details",
@@ -693,6 +695,7 @@ const zhHans: Record<TranslationKey, string> = {
   balanceChange: "余额变化",
   noCkbLeavesWallet: "没有 CKB 转出本钱包",
   transactionInvolvesContracts: "这笔交易还涉及代币或合约数据，上面的金额没有体现。批准前请查看交易详情。",
+  transactionUsesOtherParticipantsFunds: "这笔交易还使用了其它参与者提供的 {capacity} CKB。批准前请查看交易详情。",
   technicalDetails: "交易详情",
   developerMode: "开发者模式",
   developerModeDescription: "显示 RPC、中继、节点和密钥等细节",
@@ -1042,6 +1045,7 @@ const zhHant: Record<TranslationKey, string> = {
   balanceChange: "餘額變化",
   noCkbLeavesWallet: "沒有 CKB 轉出本錢包",
   transactionInvolvesContracts: "這筆交易還涉及代幣或合約資料，上面的金額沒有呈現。核准前請查看技術詳情。",
+  transactionUsesOtherParticipantsFunds: "這筆交易還使用了其他參與者提供的 {capacity} CKB。核准前請查看交易詳情。",
   technicalDetails: "交易詳情",
   developerMode: "開發者模式",
   developerModeDescription: "顯示 RPC、中繼、節點和密鑰等細節",

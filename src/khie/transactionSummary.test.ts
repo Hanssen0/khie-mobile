@@ -18,7 +18,7 @@ describe("transfer summary", () => {
     expect(summary.outgoing).toHaveLength(1);
     expect(summary.outgoing[0]?.capacity).toBe(500n);
     expect(summary.netChange).toBe(-510n);
-    expect(summary.involvesTypeScripts).toBe(false);
+    expect(summary.involvesSpecialData).toBe(false);
   });
 
   it("counts DAO compensation as part of an own input", () => {
@@ -27,9 +27,30 @@ describe("transfer summary", () => {
     expect(summary.netChange).toBe(-1n);
   });
 
+  it("reports capacity contributed by other participants", () => {
+    const summary = summarizeTransfer(
+      [
+        { cellOutput: cell(1_000n, me) },
+        { cellOutput: cell(500n, alice), extraCapacity: 20n },
+      ],
+      [cell(1_500n, me)],
+      [me],
+    );
+    expect(summary.otherParticipantsInputCapacity).toBe(520n);
+  });
+
   it("gives up on the net change when an input is unresolved and flags type scripts", () => {
     const summary = summarizeTransfer([{}], [cell(100n, alice, lock("0x03"))], [me]);
     expect(summary.netChange).toBeUndefined();
-    expect(summary.involvesTypeScripts).toBe(true);
+    expect(summary.involvesSpecialData).toBe(true);
+  });
+
+  it("flags cells with output data as special transactions", () => {
+    const summary = summarizeTransfer(
+      [{ cellOutput: cell(1_000n, me), outputData: "0x01" }],
+      [cell(990n, me)],
+      [me],
+    );
+    expect(summary.involvesSpecialData).toBe(true);
   });
 });

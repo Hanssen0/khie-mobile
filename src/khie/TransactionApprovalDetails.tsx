@@ -25,7 +25,6 @@ import {
 } from "react-native-paper";
 
 import { useI18n, type Translate } from "../i18n";
-import { useDeveloperMode } from "../ui/developerMode";
 import { summarizeTransfer } from "./transactionSummary";
 
 type TransactionCellView = {
@@ -64,8 +63,7 @@ export function TransactionApprovalDetails({
 }) {
   const { t } = useI18n();
   const theme = useTheme();
-  const { developerMode } = useDeveloperMode();
-  const [technicalDetailsOpen, setTechnicalDetailsOpen] = useState(developerMode);
+  const [technicalDetailsOpenForTransaction, setTechnicalDetailsOpenForTransaction] = useState<Transaction>();
   const summaryReportedForTransaction = useRef<Transaction | undefined>(undefined);
   const technicalDetailsAutoExpandedForTransaction = useRef<Transaction | undefined>(undefined);
   const [ownLocks, setOwnLocks] = useState<Script[]>();
@@ -121,9 +119,7 @@ export function TransactionApprovalDetails({
         }
       }),
     ).then((cells) => {
-      if (active) {
-        setInputResolution({ cells, client, transaction });
-      }
+      if (active) setInputResolution({ cells, client, transaction });
     });
 
     void transaction
@@ -147,9 +143,15 @@ export function TransactionApprovalDetails({
   useEffect(() => {
     let active = true;
     setOwnLocks(undefined);
-    void signer?.getAddressObjs().then((addresses) => {
+    if (!signer) {
+      setOwnLocks([]);
+      return () => { active = false; };
+    }
+    void signer.getAddressObjs().then((addresses) => {
       if (active) setOwnLocks(addresses.map(({ script }) => script));
-    }).catch(() => undefined);
+    }).catch(() => {
+      if (active) setOwnLocks([]);
+    });
     return () => { active = false; };
   }, [signer]);
 
@@ -160,9 +162,11 @@ export function TransactionApprovalDetails({
     outputData: transaction.outputsData[index] ?? "0x",
   }));
 
-  const summary = ownLocks
-    ? summarizeTransfer(inputs ?? transaction.inputs.map(() => ({})), transaction.outputs, ownLocks)
+  const summary = inputs && ownLocks
+    ? summarizeTransfer(inputs, transaction.outputs, ownLocks, transaction.outputsData)
     : undefined;
+  const summaryLoading = inputs === undefined || ownLocks === undefined;
+  const technicalDetailsOpen = technicalDetailsOpenForTransaction === transaction;
 
   useEffect(() => {
     if (!summary || summaryReportedForTransaction.current === transaction) return;
@@ -172,18 +176,28 @@ export function TransactionApprovalDetails({
 
   useEffect(() => {
     if (
-      !summary?.involvesTypeScripts ||
+      !summary?.involvesSpecialData ||
       technicalDetailsAutoExpandedForTransaction.current === transaction
     ) return;
     technicalDetailsAutoExpandedForTransaction.current = transaction;
-    setTechnicalDetailsOpen(true);
+    setTechnicalDetailsOpenForTransaction(transaction);
     requestAnimationFrame(() => requestAnimationFrame(() => onSummaryReady?.()));
-  }, [onSummaryReady, summary?.involvesTypeScripts, transaction]);
+  }, [onSummaryReady, summary?.involvesSpecialData, transaction]);
 
   return (
     <View style={styles.details}>
       {summary ? (
         <View style={styles.summary}>
+          {summary.otherParticipantsInputCapacity > Zero ? (
+            <View style={[styles.notice, { backgroundColor: theme.colors.secondaryContainer }]}>
+              <Icon source="alert-outline" size={20} color={theme.colors.onSecondaryContainer} />
+              <Text variant="bodyMedium" style={[styles.noticeText, { color: theme.colors.onSecondaryContainer }]}>
+                {t("transactionUsesOtherParticipantsFunds", {
+                  capacity: fixedPointToString(summary.otherParticipantsInputCapacity),
+                })}
+              </Text>
+            </View>
+          ) : null}
           {summary.outgoing.length === 0 ? (
             <Text variant="bodyLarge">{t("noCkbLeavesWallet")}</Text>
           ) : (
@@ -214,6 +228,11 @@ export function TransactionApprovalDetails({
             />
           ) : null}
         </View>
+      ) : summaryLoading ? (
+        <View style={styles.statusRow}>
+          <ActivityIndicator size="small" />
+          <Text variant="bodyMedium">{t("loadingCells")}</Text>
+        </View>
       ) : <SummaryValueRow
         label={t("fee")}
         value={fee === undefined
@@ -222,7 +241,7 @@ export function TransactionApprovalDetails({
             ? t("unableToParse")
             : `${fixedPointToString(fee)} CKB`}
       />}
-      {summary?.involvesTypeScripts ? (
+      {summary?.involvesSpecialData ? (
         <View style={[styles.notice, { backgroundColor: theme.colors.secondaryContainer }]}>
           <Icon source="information-outline" size={20} color={theme.colors.onSecondaryContainer} />
           <Text variant="bodyMedium" style={[styles.noticeText, { color: theme.colors.onSecondaryContainer }]}>
@@ -233,7 +252,9 @@ export function TransactionApprovalDetails({
       <TouchableRipple
         accessibilityRole="button"
         accessibilityState={{ expanded: technicalDetailsOpen }}
-        onPress={() => setTechnicalDetailsOpen((open) => !open)}
+        onPress={() => setTechnicalDetailsOpenForTransaction((openForTransaction) =>
+          openForTransaction === transaction ? undefined : transaction
+        )}
       >
         <View style={styles.technicalToggle}>
           <Text variant="titleSmall" style={styles.noticeText}>{t("technicalDetails")}</Text>
@@ -294,7 +315,9 @@ function RecipientRow({ address, value }: { address: string; value: string }) {
 }
 
 function SummaryValueRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
-  return <View style={styles.summaryValueRow}><Text variant={emphasized ? "titleMedium" : "labelMedium"} style={styles.summaryValueLabel}>{label}</Text><Text variant={emphasized ? "titleLarge" : "bodyLarge"} style={[styles.summaryValue, styles.summaryValueRowValue]}>{value}</Text></View>;
+  const [valueNeedsOwnLine, setValueNeedsOwnLine] = useState(false);
+  useEffect(() => setValueNeedsOwnLine(false), [value]);
+  return <View style={[styles.summaryValueRow, emphasized && valueNeedsOwnLine && styles.emphasizedSummaryValueRow]}><Text variant={emphasized ? "titleMedium" : "labelMedium"} style={styles.summaryValueLabel}>{label}</Text><Text variant={emphasized ? "titleLarge" : "bodyLarge"} onTextLayout={emphasized && !valueNeedsOwnLine ? (event) => { if (event.nativeEvent.lines.length > 1) setValueNeedsOwnLine(true); } : undefined} style={[styles.summaryValue, styles.summaryValueRowValue, emphasized && valueNeedsOwnLine && styles.emphasizedSummaryValue]}>{value}</Text></View>;
 }
 
 function TransactionCellGroup({
@@ -532,9 +555,11 @@ const styles = StyleSheet.create({
   recipientRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   recipientAddress: { flex: 1, minWidth: 0 },
   summaryValueRow: { minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  emphasizedSummaryValueRow: { alignItems: "stretch", flexDirection: "column", gap: 4 },
   summaryValueLabel: { flexShrink: 0 },
   summaryValue: { fontVariant: ["tabular-nums"] },
   summaryValueRowValue: { flexShrink: 1, textAlign: "right" },
+  emphasizedSummaryValue: { width: "100%", textAlign: "left" },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 16, borderRadius: 12 },
   noticeText: { flex: 1, minWidth: 0 },
   technicalToggle: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 },

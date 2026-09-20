@@ -69,17 +69,25 @@ export function ScannerScreen({ onCancel, onScanned, titleKey = "scanConnectorCo
 function ApprovalPanel({ item, queuedCount, network, signer, onRespond, onLayout, onSummaryReady }: { item?: ApprovalItem; queuedCount: number; network: Network; signer?: Signer; onRespond: (approved: boolean) => void; onLayout?: (event: LayoutChangeEvent) => void; onSummaryReady: () => void }) {
   const { t } = useI18n(); const theme = useTheme();
   const [actionsEnabled, setActionsEnabled] = useState(false);
+  const [summaryReadyForApprovalId, setSummaryReadyForApprovalId] = useState<number>();
+  const waitsForSummary = item !== undefined && signer !== undefined && item.request.method !== "connect" && item.request.method !== "sign_message";
+  const summaryReady = summaryReadyForApprovalId === item?.id;
   useEffect(() => {
     if (!item) {
       setActionsEnabled(false);
       return;
     }
     setActionsEnabled(false);
+    if (waitsForSummary && !summaryReady) return;
     const timeout = setTimeout(() => setActionsEnabled(true), APPROVAL_ACTION_DELAY_MS);
     return () => clearTimeout(timeout);
-  }, [item?.id]);
+  }, [item?.id, summaryReady, waitsForSummary]);
+  const handleSummaryReady = useCallback(() => {
+    onSummaryReady();
+    if (item) setSummaryReadyForApprovalId(item.id);
+  }, [item, onSummaryReady]);
   if (!item) return <Text variant="bodySmall" style={styles.requestIdle}>{t("readyForRequests")}</Text>;
-  return <View onLayout={onLayout} style={styles.approvalPanel}><View style={styles.approvalHeading}><Icon source={approvalIcon(item.request)} size={24} color={theme.colors.primary} /><View style={[styles.flex, styles.metadataBlock]}><Text variant="titleLarge">{approvalTitle(item.request, t)}</Text>{queuedCount > 0 ? <Text variant="labelMedium">{t("queuedRequests", { count: queuedCount })}</Text> : null}</View></View><View style={styles.metadataBlock}><Text variant="labelMedium">{t("network")}</Text><Text variant="bodyLarge">{approvalNetwork(item.request, network, t)}</Text></View><ApprovalDetails request={item.request} signer={signer} onSummaryReady={onSummaryReady} /><View style={styles.approvalActions}><PaperButton mode="outlined" contentStyle={styles.extraHorizontalButtonPadding} disabled={!actionsEnabled} textColor={theme.colors.error} style={styles.flexAction} onPress={() => onRespond(false)}>{t("deny")}</PaperButton><PaperButton mode="contained" contentStyle={styles.extraHorizontalButtonPadding} disabled={!actionsEnabled} style={styles.flexAction} onPress={() => onRespond(true)}>{t("allow")}</PaperButton></View></View>;
+  return <View onLayout={onLayout} style={styles.approvalPanel}><View style={styles.approvalHeading}><Icon source={approvalIcon(item.request)} size={24} color={theme.colors.primary} /><View style={[styles.flex, styles.metadataBlock]}><Text variant="titleLarge">{approvalTitle(item.request, t)}</Text>{queuedCount > 0 ? <Text variant="labelMedium">{t("queuedRequests", { count: queuedCount })}</Text> : null}</View></View><View style={styles.metadataBlock}><Text variant="labelMedium">{t("network")}</Text><Text variant="bodyLarge">{approvalNetwork(item.request, network, t)}</Text></View><ApprovalDetails request={item.request} signer={signer} onSummaryReady={handleSummaryReady} /><View style={styles.approvalActions}><PaperButton mode="outlined" contentStyle={styles.extraHorizontalButtonPadding} disabled={!actionsEnabled} textColor={theme.colors.error} style={styles.flexAction} onPress={() => onRespond(false)}>{t("deny")}</PaperButton><PaperButton mode="contained" contentStyle={styles.extraHorizontalButtonPadding} disabled={!actionsEnabled} style={styles.flexAction} onPress={() => onRespond(true)}>{t("allow")}</PaperButton></View></View>;
 }
 
 function ApprovalDetails({ request, signer, onSummaryReady }: { request: SignerJsonRpcConfirmation; signer?: Signer; onSummaryReady: () => void }) { const { t } = useI18n(); if (request.method === "connect") return <Text variant="bodyMedium">{t("connectApprovalDescription")}</Text>; if (request.method === "sign_message") return <PaperCard mode="contained"><PaperCard.Title title={t("message")} /><PaperCard.Content><Text variant="bodyMedium" selectable style={styles.mono}>{request.message.value}</Text></PaperCard.Content></PaperCard>; return signer ? <TransactionApprovalDetails client={signer.client} transaction={request.transaction} signer={signer} onSummaryReady={onSummaryReady} /> : <Text variant="bodyMedium">{t("unableToParse")}</Text>; }
