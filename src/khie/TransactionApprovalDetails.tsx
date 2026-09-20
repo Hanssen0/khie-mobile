@@ -13,7 +13,7 @@ import {
   type Signer,
   type Transaction,
 } from "@ckb-ccc/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -54,16 +54,20 @@ export function TransactionApprovalDetails({
   transaction,
   requestedFeeRate,
   signer,
+  onSummaryReady,
 }: {
   client: Client;
   transaction: Transaction;
   requestedFeeRate?: Num;
   signer?: Signer;
+  onSummaryReady?: () => void;
 }) {
   const { t } = useI18n();
   const theme = useTheme();
   const { developerMode } = useDeveloperMode();
   const [technicalDetailsOpen, setTechnicalDetailsOpen] = useState(developerMode);
+  const summaryReportedForTransaction = useRef<Transaction | undefined>(undefined);
+  const technicalDetailsAutoExpandedForTransaction = useRef<Transaction | undefined>(undefined);
   const [ownLocks, setOwnLocks] = useState<Script[]>();
   const [inputResolution, setInputResolution] = useState<InputResolution>();
   const [feeResolution, setFeeResolution] = useState<FeeResolution>();
@@ -160,6 +164,22 @@ export function TransactionApprovalDetails({
     ? summarizeTransfer(inputs ?? transaction.inputs.map(() => ({})), transaction.outputs, ownLocks)
     : undefined;
 
+  useEffect(() => {
+    if (!summary || summaryReportedForTransaction.current === transaction) return;
+    summaryReportedForTransaction.current = transaction;
+    requestAnimationFrame(() => onSummaryReady?.());
+  }, [onSummaryReady, summary, transaction]);
+
+  useEffect(() => {
+    if (
+      !summary?.involvesTypeScripts ||
+      technicalDetailsAutoExpandedForTransaction.current === transaction
+    ) return;
+    technicalDetailsAutoExpandedForTransaction.current = transaction;
+    setTechnicalDetailsOpen(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => onSummaryReady?.()));
+  }, [onSummaryReady, summary?.involvesTypeScripts, transaction]);
+
   return (
     <View style={styles.details}>
       {summary ? (
@@ -167,33 +187,41 @@ export function TransactionApprovalDetails({
           {summary.outgoing.length === 0 ? (
             <Text variant="bodyLarge">{t("noCkbLeavesWallet")}</Text>
           ) : (
-            summary.outgoing.map(({ lock, capacity }) => (
-              <SummaryRow
-                key={lock.hash()}
-                label={t("sendTo")}
-                detail={Address.fromScript(lock, client).toString()}
-                value={`${fixedPointToString(capacity)} CKB`}
-              />
-            ))
+            <>
+              <Text variant="labelMedium">{t("sendTo")}</Text>
+              {summary.outgoing.map(({ lock, capacity }) => (
+                <RecipientRow
+                  key={lock.hash()}
+                  address={Address.fromScript(lock, client).toString()}
+                  value={`${fixedPointToString(capacity)} CKB`}
+                />
+              ))}
+            </>
           )}
+          <SummaryValueRow
+            label={t("fee")}
+            value={fee === undefined
+              ? t("parsing")
+              : fee === null
+                ? t("unableToParse")
+                : `${fixedPointToString(fee)} CKB`}
+          />
           {summary.netChange !== undefined ? (
-            <SummaryRow
+            <SummaryValueRow
               label={t("balanceChange")}
               value={`${summary.netChange > Zero ? "+" : ""}${fixedPointToString(summary.netChange)} CKB`}
+              emphasized
             />
           ) : null}
         </View>
-      ) : null}
-      <View style={styles.metadataBlock}>
-        <Text variant="labelMedium">{t("fee")}</Text>
-        <Text variant="bodyLarge">
-          {fee === undefined
-            ? t("parsing")
-            : fee === null
-              ? t("unableToParse")
-              : `${fixedPointToString(fee)} CKB`}
-        </Text>
-      </View>
+      ) : <SummaryValueRow
+        label={t("fee")}
+        value={fee === undefined
+          ? t("parsing")
+          : fee === null
+            ? t("unableToParse")
+            : `${fixedPointToString(fee)} CKB`}
+      />}
       {summary?.involvesTypeScripts ? (
         <View style={[styles.notice, { backgroundColor: theme.colors.secondaryContainer }]}>
           <Icon source="information-outline" size={20} color={theme.colors.onSecondaryContainer} />
@@ -256,20 +284,17 @@ export function TransactionApprovalDetails({
   );
 }
 
-function SummaryRow({ label, detail, value }: { label: string; detail?: string; value: string }) {
+function RecipientRow({ address, value }: { address: string; value: string }) {
   return (
-    <View style={styles.summaryRow}>
-      <View style={styles.summaryLabel}>
-        <Text variant="labelMedium">{label}</Text>
-        {detail ? (
-          <Text variant="bodyMedium" numberOfLines={1} ellipsizeMode="middle" selectable style={styles.mono}>
-            {detail}
-          </Text>
-        ) : null}
-      </View>
+    <View style={styles.recipientRow}>
+      <Text variant="bodyMedium" selectable style={[styles.mono, styles.recipientAddress]}>{address}</Text>
       <Text variant="titleMedium" style={styles.summaryValue}>{value}</Text>
     </View>
   );
+}
+
+function SummaryValueRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
+  return <View style={styles.summaryValueRow}><Text variant={emphasized ? "titleMedium" : "labelMedium"} style={styles.summaryValueLabel}>{label}</Text><Text variant={emphasized ? "titleLarge" : "bodyLarge"} style={[styles.summaryValue, styles.summaryValueRowValue]}>{value}</Text></View>;
 }
 
 function TransactionCellGroup({
@@ -504,9 +529,12 @@ const styles = StyleSheet.create({
   metadataBlock: { gap: 4 },
   mono: { fontFamily: "monospace" },
   summary: { gap: 12 },
-  summaryRow: { flexDirection: "row", alignItems: "flex-end", gap: 16 },
-  summaryLabel: { flex: 1, minWidth: 0, gap: 4 },
+  recipientRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  recipientAddress: { flex: 1, minWidth: 0 },
+  summaryValueRow: { minHeight: 32, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  summaryValueLabel: { flexShrink: 0 },
   summaryValue: { fontVariant: ["tabular-nums"] },
+  summaryValueRowValue: { flexShrink: 1, textAlign: "right" },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 16, borderRadius: 12 },
   noticeText: { flex: 1, minWidth: 0 },
   technicalToggle: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 },
