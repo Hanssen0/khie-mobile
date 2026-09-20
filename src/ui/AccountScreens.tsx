@@ -51,11 +51,9 @@ export function HomeScreen({ signer, network, profile, wallets, onSelectWallet, 
   ] as const;
   return <ScrollView contentContainerStyle={styles.page}>
     <WalletMenu wallets={wallets} selected={profile.id} onSelect={onSelectWallet} />
-    {profile.kind === "cryptape-trust" && signer ? <PaperButton mode="text" icon="tune-variant" style={styles.walletMenu} onPress={() => onNavigate("trust")}>{t("manageTrustDevice")}</PaperButton> : null}
     {profile.kind === "cryptape-trust" && !signer ? <PaperCard mode="elevated">
       <PaperCard.Title title="Cryptape Trust" subtitle={walletLabel(wallets, profile.id, t)} left={({ size }) => <CryptapeIcon color={theme.colors.onSurfaceVariant} size={size} />} />
       <PaperCard.Content><Text variant="bodyMedium">{t("trustDeviceHasNoKey")}</Text></PaperCard.Content>
-      <PaperCard.Actions style={styles.cardActions}><PaperButton mode="contained" icon="tune-variant" onPress={() => onNavigate("trust")}>{t("manageTrustDevice")}</PaperButton></PaperCard.Actions>
     </PaperCard> : <>
       <View style={styles.balanceBlock}>
         <Text variant="labelLarge">{network === "testnet" ? t("ckbTestnet") : t("ckbMainnet")}</Text>
