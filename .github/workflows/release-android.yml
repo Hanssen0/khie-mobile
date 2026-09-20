@@ -156,8 +156,7 @@ jobs:
             SECTION="## Commits"
             LIST="  (no previous release tag found)"
           fi
-          BODY_SECTION="${SECTION}
-${LIST}"
+          BODY_SECTION="$(printf '%s\n%s' "$SECTION" "$LIST")"
           # Multi-line env var via heredoc marker
           echo "COMMIT_SECTION<<EOMARK" >> "$GITHUB_ENV"
           printf '%s\n' "${BODY_SECTION}" >> "$GITHUB_ENV"
