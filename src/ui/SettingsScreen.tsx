@@ -30,7 +30,7 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
   const isFocused = useIsFocused();
   const revealController = useRef<AbortController | undefined>(undefined);
   const revealGeneration = useRef(0);
-  const [secret, setSecret] = useState<{ label: string; value: string }>();
+  const [secret, setSecret] = useState<{ kind: "mnemonic" | "privateKey"; label: string; value: string }>();
   const [rpcDraft, setRpcDraft] = useState<NetworkRpcUrls>(rpcUrls);
   const [savingRpcUrls, setSavingRpcUrls] = useState(false);
   const [updatingBiometrics, setUpdatingBiometrics] = useState(false);
@@ -66,6 +66,9 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
     const timeout = setTimeout(invalidateSecret, SECRET_REVEAL_TIMEOUT_MS);
     return () => clearTimeout(timeout);
   }, [invalidateSecret, secret]);
+  useEffect(() => {
+    if (!developerMode && secret?.kind === "privateKey") invalidateSecret();
+  }, [developerMode, invalidateSecret, secret?.kind]);
   useEffect(() => setRpcDraft(rpcUrls), [rpcUrls]);
   useEffect(() => {
     let active = true; setWalletAddresses({}); const client = clientForNetwork(network, rpcUrls[network]);
@@ -110,6 +113,7 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
         AppState.currentState !== "active"
       ) return;
       setSecret({
+        kind,
         label: kind === "mnemonic" ? t("mnemonic") : t("privateKey"),
         value,
       });
@@ -145,7 +149,7 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
         <WalletTextInput label={t("mainnetRpcUrl")} autoCapitalize="none" autoCorrect={false} keyboardType="url" value={rpcDraft.mainnet} error={!mainnetRpcValid} onChangeText={(mainnet) => setRpcDraft((current) => ({ ...current, mainnet }))} /><HelperText type="error" visible={!mainnetRpcValid}>{t("invalidRpcUrl")}</HelperText>
       </PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" disabled={savingRpcUrls} onPress={() => void applyRpcUrls({ ...DEFAULT_NETWORK_RPC_URLS })}>{t("restoreDefaults")}</PaperButton><PaperButton mode="contained" loading={savingRpcUrls} disabled={savingRpcUrls || !rpcUrlsChanged || !testnetRpcValid || !mainnetRpcValid} onPress={() => void applyRpcUrls(rpcDraft)}>{t("save")}</PaperButton></PaperCard.Actions></PaperCard> : null}
       {profile.kind === "mnemonic" && backend ? <PaperCard mode="elevated"><PaperCard.Title title={developerMode ? t("accountInformation") : t("mnemonic")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="account-key" />} /><PaperCard.Content style={styles.cardContent}>{developerMode ? <><View style={styles.metadataBlock}><Text variant="labelMedium">{t("derivationPath")}</Text><Text variant="bodyMedium" selectable style={styles.mono}>{profile.derivationPath}</Text></View><Divider /><View style={styles.metadataBlock}><Text variant="labelMedium">{t("publicKey")}</Text><Text variant="bodySmall" selectable style={styles.mono}>{profile.publicKey}</Text></View></> : <Text variant="bodyMedium">{t("backupWarning")}</Text>}</PaperCard.Content><PaperCard.Actions style={styles.cardActions}>{developerMode ? <PaperButton mode="text" icon="eye-lock" onPress={() => void reveal("privateKey")}>{t("viewPrivateKey")}</PaperButton> : null}<PaperButton mode="contained" icon="eye-lock" onPress={() => void reveal("mnemonic")}>{t("viewMnemonic")}</PaperButton></PaperCard.Actions></PaperCard> : null}
-      {profile.kind === "mnemonic" && secret ? <PaperCard mode="contained"><PaperCard.Title title={secret.label} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="shield-key" />} /><PaperCard.Content><Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="eye-off" onPress={invalidateSecret}>{t("hide")}</PaperButton></PaperCard.Actions></PaperCard> : null}
+      {profile.kind === "mnemonic" && secret && (developerMode || secret.kind !== "privateKey") ? <PaperCard mode="contained"><PaperCard.Title title={secret.label} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="shield-key" />} /><PaperCard.Content><Text variant="bodyMedium" selectable style={styles.mono}>{secret.value}</Text></PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="eye-off" onPress={invalidateSecret}>{t("hide")}</PaperButton></PaperCard.Actions></PaperCard> : null}
       {profile.kind === "mnemonic" ? <HelperText type="error" visible>{t("exportWarning")}</HelperText> : null}
       <PaperCard mode="elevated"><PaperCard.Title title={t("appInformation")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="information-outline" />} /><PaperCard.Content style={styles.cardContent}>
         <List.Item style={styles.appInformationLink} title={t("githubRepository")} description={GITHUB_REPOSITORY_URL} descriptionNumberOfLines={1} descriptionEllipsizeMode="middle" left={(props) => <List.Icon {...props} icon="github" />} right={(props) => <List.Icon {...props} icon="open-in-new" />} onPress={() => void Linking.openURL(GITHUB_REPOSITORY_URL)} /><Divider />
@@ -153,7 +157,7 @@ export function SettingsScreen({ backend, network, profile, wallets, rpcUrls, th
         {updateSettings.latestRelease ? <View style={styles.updateStatus}><Icon source={updateAvailable ? "arrow-up-circle-outline" : "check-circle-outline"} size={20} /><Text variant="bodyMedium" style={styles.updateStatusText}>{updateAvailable ? t("updateAvailableStatus", { version: updateSettings.latestRelease.tagName }) : t("appIsUpToDate")}</Text></View> : null}
         {developerMode && updateAvailable && updateAsset ? <Text variant="bodySmall" selectable style={styles.mono}>{updateAsset.name}</Text> : null}<Divider />
         <List.Item accessibilityRole="switch" accessibilityState={{ checked: updateSettings.automaticChecks }} style={styles.appInformationSwitch} title={t("automaticUpdateChecks")} right={() => <View pointerEvents="none"><Switch value={updateSettings.automaticChecks} /></View>} onPress={() => void onChangeAutomaticUpdateChecks(!updateSettings.automaticChecks).catch((cause) => appDialog.show(t("unableToSave"), errorMessage(cause, t)))} />
-        <List.Item accessibilityRole="switch" accessibilityState={{ checked: developerMode }} style={styles.appInformationSwitch} title={t("developerMode")} description={t("developerModeDescription")} right={() => <View pointerEvents="none"><Switch value={developerMode} /></View>} onPress={() => setDeveloperMode(!developerMode)} />
+        <List.Item accessibilityRole="switch" accessibilityState={{ checked: developerMode }} style={styles.appInformationSwitch} title={t("developerMode")} description={t("developerModeDescription")} right={(props) => <View pointerEvents="none" style={[props.style, styles.listItemCenteredAccessory]}><Switch value={developerMode} /></View>} onPress={() => setDeveloperMode(!developerMode)} />
       </PaperCard.Content><PaperCard.Actions style={styles.cardActions}><PaperButton mode="text" icon="refresh" loading={checkingForUpdates} disabled={checkingForUpdates} onPress={() => void onCheckForUpdates()}>{t("checkForUpdates")}</PaperButton><PaperButton mode="contained" icon="download" disabled={!updateAvailable} onPress={() => void onDownloadUpdate()}>{t("downloadUpdate")}</PaperButton></PaperCard.Actions></PaperCard>
     </KeyboardAwareScrollView>
     <ChangeMasterPasswordDialog visible={changePasswordOpen} onDismiss={() => setChangePasswordOpen(false)} onSubmit={onChangeMasterPassword} />

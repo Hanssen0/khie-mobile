@@ -28,7 +28,6 @@ export function HomeScreen({ signer, network, profile, wallets, onSelectWallet, 
   const { t } = useI18n();
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const [address, setAddress] = useState(() => t("addressGenerating"));
   const [balance, setBalance] = useState("—");
   const [refreshing, setRefreshing] = useState(false);
   const balanceParts = /^(-?\d+)(\.\d+)$/.exec(balance);
@@ -39,11 +38,8 @@ export function HomeScreen({ signer, network, profile, wallets, onSelectWallet, 
     if (!signer) return;
     setRefreshing(true);
     try {
-      const [nextAddress, nextBalance] = await Promise.all([signer.getRecommendedAddress(), signer.getBalance()]);
-      setAddress(nextAddress);
-      setBalance(fixedPointToString(nextBalance));
+      setBalance(fixedPointToString(await signer.getBalance()));
     } catch {
-      try { setAddress(await signer.getRecommendedAddress()); } catch { setAddress(t("addressReadFailed")); }
       setBalance(t("readFailed"));
     } finally { setRefreshing(false); }
   }, [signer, t]);
@@ -73,11 +69,10 @@ export function HomeScreen({ signer, network, profile, wallets, onSelectWallet, 
         </View></View>
         <Text variant="titleMedium">CKB</Text>
       </View>
-      <PaperCard mode="elevated">
-        <PaperCard.Title title={t("walletAddress")} leftStyle={styles.cardTitleLeft} left={(props) => <Icon {...props} source="identifier" />} />
-        <PaperCard.Content><CopyableAddress address={address} /></PaperCard.Content>
-        <PaperCard.Actions style={styles.cardActions}><PaperButton icon="qrcode" mode="contained-tonal" onPress={() => onNavigate("receive")}>{t("receive")}</PaperButton><PaperButton icon="send" mode="contained" onPress={() => onNavigate("send")}>{t("send")}</PaperButton></PaperCard.Actions>
-      </PaperCard>
+      <View style={styles.homeActions}>
+        <PaperButton icon="qrcode" mode="contained-tonal" style={styles.flexAction} onPress={() => onNavigate("receive")}>{t("receive")}</PaperButton>
+        <PaperButton icon="send" mode="contained" style={styles.flexAction} onPress={() => onNavigate("send")}>{t("send")}</PaperButton>
+      </View>
     </>}
     <View style={styles.recommendedSection}>
       <Text variant="titleLarge">{t("recommendedApps")}</Text>
