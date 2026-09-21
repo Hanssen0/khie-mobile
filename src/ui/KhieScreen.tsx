@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, LayoutChangeEvent, Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
-import { ActivityIndicator, Button as PaperButton, Card as PaperCard, Chip, Dialog, Divider, Icon, Portal, Text, TextInput as PaperTextInput, useTheme } from "react-native-paper";
+import { ActivityIndicator, Button as PaperButton, Card as PaperCard, Dialog, Divider, Icon, Portal, Text, TextInput as PaperTextInput, useTheme } from "react-native-paper";
 import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 
 import { InfoCard } from "../components/InfoCard";
@@ -27,7 +27,6 @@ export function KhieScreen({ state, pairing, approval, queuedApprovalCount, netw
   useEffect(() => { setEndpointCopied(false); if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current); }, [state.endpoint]); useEffect(() => () => { if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current); }, []);
   const copyEndpoint = async () => { if (!state.endpoint) return; await Clipboard.setStringAsync(state.endpoint); setEndpointCopied(true); if (endpointCopyTimer.current) clearTimeout(endpointCopyTimer.current); endpointCopyTimer.current = setTimeout(() => setEndpointCopied(false), 1600); };
   const pair = async () => { if (await onPair(endpoint)) setEndpoint(""); };
-  const connectionPath = !state.remotePeer?.active ? t("inactive") : state.remotePeer.direct ? t("direct") : t("relayed");
   return <KeyboardAwareScrollView ref={scrollRef} bottomOffset={16} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
     <Text variant="headlineMedium">Khie</Text>
     {state.paired ? null : <InfoCard title={t("khieIntroductionTitle")} description={t("khieIntroduction")} supportingText={t("khieNameMeaning")} icon={({ color, size }) => <KhieIcon size={size} color={color} />} />}
@@ -45,8 +44,43 @@ export function KhieScreen({ state, pairing, approval, queuedApprovalCount, netw
         <PaperButton mode="text" onPress={onCancelPairing}>{t("cancel")}</PaperButton>
       </View>
     ) : state.paired ? <View style={styles.khieContent} onLayout={(event) => { khieContentOffsetY.current = event.nativeEvent.layout.y; }}>
-      <View style={styles.peerOverview}>{state.remotePeer ? <><Chip compact>{connectionPath}</Chip><View style={styles.flex}><Text variant="titleMedium" numberOfLines={1}>{state.remotePeer.name ?? t("unknown")}</Text><Text variant="bodySmall" numberOfLines={1}>{state.remotePeer.agentVersion ?? t("unknownAgent")}</Text></View></> : <Text variant="bodyMedium" style={styles.flex}>{t("loadingRemotePeerDetails")}</Text>}<PaperButton compact textColor={theme.colors.error} onPress={() => void onUnpair()}>{t("unpair")}</PaperButton></View>
-      {state.remotePeer ? <View style={styles.peerMetadata}><View style={styles.metadataBlock}><Text variant="labelMedium">Peer ID</Text><Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>{state.remotePeer.id}</Text></View><View style={styles.metadataBlock}><Text variant="labelMedium">{t("lastSeen")}</Text><Text variant="bodySmall" style={styles.mono}>{state.remotePeer.active ? t("active") : state.remotePeer.lastSeenAt === undefined ? t("notAvailable") : <InactiveLastSeen timestamp={state.remotePeer.lastSeenAt} />}</Text></View></View> : null}
+      <View style={styles.peerOverview}>
+        <View style={styles.peerHeaderRow}>
+          <Text variant="titleLarge" numberOfLines={1} style={styles.flex}>
+            {state.remotePeer?.name ?? (state.remotePeer ? t("unknown") : t("loadingRemotePeerDetails"))}
+          </Text>
+          <PaperButton compact textColor={theme.colors.error} onPress={() => void onUnpair()}>
+            {t("unpair")}
+          </PaperButton>
+        </View>
+        {state.remotePeer ? (
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
+            {state.remotePeer.active ? (
+              `${state.remotePeer.direct ? t("direct") : t("relayed")} · ${t("active")}`
+            ) : (
+              <>
+                {t("inactive")}
+                {" · "}
+                {state.remotePeer.lastSeenAt === undefined ? (
+                  `${t("lastSeen")} ${t("notAvailable")}`
+                ) : (
+                  <InactiveLastSeen timestamp={state.remotePeer.lastSeenAt} />
+                )}
+              </>
+            )}
+          </Text>
+        ) : null}
+      </View>
+      {developerMode && state.remotePeer ? (
+        <View style={styles.peerMetadata}>
+          <View style={styles.metadataBlock}>
+            <Text variant="labelMedium">Peer ID</Text>
+            <Text variant="bodySmall" selectable numberOfLines={2} style={styles.mono}>
+              {state.remotePeer.id}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       <Divider /><ApprovalPanel item={approval} queuedCount={queuedApprovalCount} network={network} signer={signer} onRespond={onRespond} onLayout={scrollToApproval} onSummaryReady={scrollToApprovalAfterSummary} />
     </View> : <View style={styles.khieContent}>
       <View style={styles.khieMethod}><PaperButton mode="contained" icon="qrcode-scan" style={styles.scanConnectorButton} onPress={onScan}>{t("scanConnectorCode")}</PaperButton><FloatingLabelTextInput label={t("khieEndpoint")} placeholder={t("pastePairingCode")} autoCapitalize="none" autoCorrect={false} value={endpoint} onChangeText={setEndpoint} right={<PaperTextInput.Icon icon="arrow-right" disabled={!endpoint.trim()} onPress={() => void pair()} />} /></View>
@@ -94,6 +128,6 @@ function ApprovalDetails({ request, signer, onSummaryReady }: { request: SignerJ
 function approvalIcon(request: SignerJsonRpcConfirmation) { return request.method === "connect" ? "link-variant" : request.method === "sign_message" ? "message-text-lock" : "file-sign"; }
 export function approvalTitle(request: SignerJsonRpcConfirmation, t: Translate) { return request.method === "connect" ? t("webRequestsConnection") : request.method === "sign_message" ? t("confirmMessageSignature") : t("confirmTransactionSignature"); }
 export function approvalNetwork(request: SignerJsonRpcConfirmation, fallback: Network, t: Translate) { if (request.method === "connect") return request.networkId === "ckb-mainnet" ? t("ckbMainnet") : request.networkId === "ckb-testnet" ? t("ckbTestnet") : request.networkId; return fallback === "mainnet" ? t("ckbMainnet") : t("ckbTestnet"); }
-function InactiveLastSeen({ timestamp }: { timestamp: number }) { const { t } = useI18n(); const [now, setNow] = useState(Date.now); useEffect(() => { const timeout = setTimeout(() => setNow(Date.now()), nextElapsedDurationBoundary(timestamp, now)); return () => clearTimeout(timeout); }, [now, timestamp]); return formatElapsedDuration(timestamp, now, t); }
+function InactiveLastSeen({ timestamp }: { timestamp: number }) { const { t } = useI18n(); const [now, setNow] = useState(Date.now); useEffect(() => { const timeout = setTimeout(() => setNow(Date.now()), nextElapsedDurationBoundary(timestamp, now)); return () => clearTimeout(timeout); }, [now, timestamp]); return `${t("lastSeen")} ${formatElapsedDuration(timestamp, now, t)}`; }
 function formatElapsedDuration(timestamp: number, now: number, t: Translate) { const seconds = Math.max(0, Math.floor((now - timestamp) / 1_000)); if (seconds < 60) return seconds === 0 ? t("justNow") : t(seconds === 1 ? "secondAgo" : "secondsAgo", { count: seconds }); const minutes = Math.floor(seconds / 60); if (minutes < 60) return t(minutes === 1 ? "minuteAgo" : "minutesAgo", { count: minutes }); const hours = Math.floor(minutes / 60); if (hours < 24) return t(hours === 1 ? "hourAgo" : "hoursAgo", { count: hours }); const days = Math.floor(hours / 24); return t(days === 1 ? "dayAgo" : "daysAgo", { count: days }); }
 function nextElapsedDurationBoundary(timestamp: number, now: number) { const elapsed = Math.max(0, now - timestamp); const minute = 60_000; const hour = 60 * minute; const day = 24 * hour; const unit = elapsed < minute ? 1_000 : elapsed < hour ? minute : elapsed < day ? hour : day; const nextBoundary = timestamp + (Math.floor(elapsed / unit) + 1) * unit; return Math.max(1, nextBoundary - now); }
