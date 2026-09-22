@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
+import packageJson from "./package.json";
 import walletColors from "./src/colors.json";
 
 function buildCommit(): string {
@@ -20,6 +21,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: config.name ?? "Khie Wallet",
   slug: config.slug ?? "khie-wallet",
+  version: packageJson.version,
   android: {
     ...config.android,
     adaptiveIcon: {

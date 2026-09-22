@@ -2,7 +2,7 @@
   "expo": {
     "name": "Khie Wallet",
     "slug": "khie-wallet",
-    "version": "0.7.0",
+    "version": "0.8.2",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",

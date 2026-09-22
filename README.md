@@ -30,13 +30,13 @@ Android-first Expo Development Build wallet MVP for CKB and the standard CCC Khi
 - Create and manage multiple BIP-39 wallets, or restore 12/24-word English mnemonics, protected by one required master password and an Argon2id/AES-256-GCM master-key envelope.
 - Connect a Cryptape Trust/NKey hardware wallet over Android Bluetooth LE and use it as the active CKB signer.
 - Derive one CKB account at `m/44'/309'/0'/0/0` for each wallet.
-- Testnet/mainnet address and balance, receive QR, password-authenticated mnemonic/private-key export, optional biometric unlock, and transactional master-password changes.
+- Testnet/mainnet address, balance, in-app CKB transfer (Send flow) with fee estimation, receive QR, password-authenticated mnemonic/private-key export, optional biometric unlock, and transactional master-password changes.
 - Khie provider and connector QR directions, WSS relay fallback, WebRTC direct upgrade, single-peer authorization and per-request approval.
 - System-aware and manually selectable UI languages: English, 简体中文, 正體中文 and 客家語.
 - A deliberately small React Native Paper MD3 presentation layer, with wallet-specific theme tokens and replaceable wrapper components.
 - Replaceable internal `SigningBackend`; Khie never reads or exposes a private-key field.
 
-This MVP intentionally excludes in-app transfers, tokens, history, persistent dapp authorization and release signing.
+This MVP intentionally excludes tokens, transaction history and persistent dapp authorization.
 
 ## Cryptape Trust
 
@@ -97,9 +97,9 @@ The Trust/NKey bridge is adapted from the MIT-licensed [`cryptape/trust-android`
 - Default relay: `/dns4/relay.ckbccc.com/tcp/443/wss`
 - Pairing protocol: `/nervos-ckb/khie/pairing/0.0.1`
 - RPC protocol: `/nervos-ckb/khie/json-rpc/0.0.1`
-- 1 MiB request limit, 120 second approval timeout and 30 minute disconnected pairing expiry.
+- 1 MiB request limit. Pending approvals remain queued without an automated TTL until explicitly answered or canceled.
 - Pairings are process-scoped. Restarting the app requires pairing again.
-- Entering the background cancels pending approvals. Returning to the foreground performs one lightweight relay/direct-address check; the connector's retry and inbound dialing remain the main recovery path.
+- Entering the background preserves the logical pairing and pending approvals (surfaced via Android background notifications). Returning to the foreground resumes the transport session; the connector's retry and inbound dialing remain the main recovery path.
 
 ## Limitations and risk
 
