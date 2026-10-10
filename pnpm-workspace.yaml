@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@ckb-ccc/libp2p@0.2.1 || 0.3.0'
   - '@expo/cli@57.0.25'
