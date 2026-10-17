@@ -41,7 +41,7 @@
     "expo-camera": "57.0.6",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.18",
-    "expo-crypto": "57.0.3",
+    "expo-crypto": "58.0.6",
     "expo-device": "~57.0.2",
     "expo-localization": "57.0.2",
     "expo-navigation-bar": "~57.0.2",
