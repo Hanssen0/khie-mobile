@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import packageJson from "../../package.json";
+import bundledNativeModules from "expo/bundledNativeModules.json";
 
 const require = createRequire(import.meta.url);
 const webRtcRoot = dirname(require.resolve("react-native-webrtc/package.json"));
@@ -15,6 +16,26 @@ function installedVersion(name: string): string {
 }
 
 describe("native dependency compatibility", () => {
+  it("keeps React, React Native and worklet packages on the SDK-tested versions", () => {
+    for (const name of [
+      "react",
+      "react-native",
+      "react-native-reanimated",
+      "react-native-worklets",
+    ] as const) {
+      expect(packageJson.dependencies[name], name).toBe(bundledNativeModules[name]);
+      expect(installedVersion(name), name).toBe(bundledNativeModules[name]);
+    }
+  });
+
+  it("resolves Metro config from the same React Native release", () => {
+    const reactNativeRequire = createRequire(require.resolve("react-native/package.json"));
+    const metroConfig = JSON.parse(
+      readFileSync(reactNativeRequire.resolve("@react-native/metro-config/package.json"), "utf8"),
+    );
+    expect(metroConfig.version).toBe(installedVersion("react-native"));
+  });
+
   it("keeps direct Expo modules on the installed SDK major", () => {
     // Expo Doctor remains responsible for exact supported patch versions.
     const sdkMajor = installedVersion("expo").split(".")[0];

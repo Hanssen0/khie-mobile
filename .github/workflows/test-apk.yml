@@ -5,10 +5,28 @@ name: Test APK
 on:
   push:
     branches: ["ui/**"]
+  pull_request:
+    branches: ["dev"]
+    paths:
+      - ".github/workflows/test-apk.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "app.json"
+      - "app.config.ts"
+      - "metro.config.js"
+      - "index.ts"
+      - "modules/**"
+      - "patches/**"
+      - "plugins/**"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: test-apk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
