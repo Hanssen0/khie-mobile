@@ -194,26 +194,26 @@ importers:
         specifier: file:modules/trust-wallet
         version: file:modules/trust-wallet(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))
       '@libp2p/circuit-relay-v2':
-        specifier: 4.2.13
-        version: 4.2.13
+        specifier: 4.2.14
+        version: 4.2.14
       '@libp2p/identify':
-        specifier: 4.1.14
-        version: 4.1.14
+        specifier: 4.1.15
+        version: 4.1.15
       '@libp2p/interface':
-        specifier: 3.3.0
-        version: 3.3.0
+        specifier: 3.3.1
+        version: 3.3.1
       '@libp2p/interface-internal':
-        specifier: 3.1.13
-        version: 3.1.13
+        specifier: 3.1.14
+        version: 3.1.14
       '@libp2p/utils':
-        specifier: 7.4.1
-        version: 7.4.1
+        specifier: 7.4.2
+        version: 7.4.2
       '@libp2p/webrtc':
-        specifier: 6.0.33
-        version: 6.0.33(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
+        specifier: 6.1.0
+        version: 6.1.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)
       '@libp2p/websockets':
-        specifier: 10.1.21
-        version: 10.1.21
+        specifier: 10.1.22
+        version: 10.1.22
       '@multiformats/multiaddr':
         specifier: 13.0.3
         version: 13.0.3
@@ -221,17 +221,17 @@ importers:
         specifier: 2.4.0
         version: 2.4.0
       '@react-native-vector-icons/material-design-icons':
-        specifier: 13.1.4
-        version: 13.1.4(@expo/config-plugins@57.0.9(supports-color@10.2.2)(typescript@7.0.2))(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+        specifier: 13.1.5
+        version: 13.1.5(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       '@react-navigation/bottom-tabs':
         specifier: ^7.18.18
-        version: 7.20.0(b254226d1d0d87f40f17a482b91ca516)
+        version: 7.21.0(851dfd132696bff31e7f13be18c76bcb)
       '@react-navigation/native':
         specifier: ^7.3.18
-        version: 7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+        version: 7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       '@react-navigation/native-stack':
         specifier: ^7.18.10
-        version: 7.20.0(b254226d1d0d87f40f17a482b91ca516)
+        version: 7.21.0(851dfd132696bff31e7f13be18c76bcb)
       '@scure/bip32':
         specifier: 2.4.0
         version: 2.4.0
@@ -284,8 +284,8 @@ importers:
         specifier: 11.0.1
         version: 11.0.1
       libp2p:
-        specifier: 3.3.11
-        version: 3.3.11
+        specifier: 3.3.12
+        version: 3.3.12
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -293,8 +293,8 @@ importers:
         specifier: 0.86.3
         version: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
       react-native-keyboard-controller:
-        specifier: 1.22.6
-        version: 1.22.6(react-native-reanimated@4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+        specifier: 1.22.7
+        version: 1.22.7(react-native-reanimated@4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       react-native-nitro-modules:
         specifier: 0.37.1
         version: 0.37.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
@@ -993,53 +993,59 @@ packages:
   '@leichtgewicht/ip-codec@2.0.5':
     resolution: {integrity: sha512-Vo+PSpZG2/fmgmiNzYK9qWRh8h/CHrwD0mo1h1DzL4yzHNSfWYujGTYsWGreD000gcgmZ7K4Ys6Tx9TxtsKdDw==}
 
-  '@libp2p/circuit-relay-v2@4.2.13':
-    resolution: {integrity: sha512-AGEzj72W7Ae5eizaM+HeDzJBR28zK4yYp4BYvUOHQViT62W97FIITo/9Gc5rlkKti+gJJAurBm3cHV4A8Wcoxw==}
+  '@libp2p/circuit-relay-v2@4.2.14':
+    resolution: {integrity: sha512-5z4HRCXZDVH5q9u49+l/Ssmv0oW5hLNCDwM17PrG+kdLSFIc5r36JiyEBze+6b9YSvz2MM1fLWdHcZbIS1bmCQ==}
 
   '@libp2p/crypto@5.1.23':
     resolution: {integrity: sha512-u6XVMD1YpUJgjS5MAayrxlzi+hQcj3FHY0wS6/M/T93ntyCW13BmmRzFb2ESamk65PEuSCAChmQeSzRV2sh2rQ==}
 
-  '@libp2p/identify@4.1.14':
-    resolution: {integrity: sha512-c7oU0DSKzkMNsanruOQc4Zy6mSf3fq8/W+4E/I936HiHZc/LIbUuCWaxbgmQexdfKqECH1qH4q9IwaCUWmjPMQ==}
+  '@libp2p/crypto@5.1.24':
+    resolution: {integrity: sha512-iGRbgb8dLoN7z9nn7xDKZfF+m8pyGVIpNwjzBbzimx/tdfhVAFIYPY58kTRIntpvSvEqQn3lF16TTFbuhV3igQ==}
 
-  '@libp2p/interface-internal@3.1.13':
-    resolution: {integrity: sha512-+vjQzpQl+0uoWCyNwV5NDnv1RAK9LDeWGeMbx/Fl2ZWrndtuFUPa9LxwqHXrTly6YOhgUatSzVqZBWnrQ1PxGg==}
+  '@libp2p/identify@4.1.15':
+    resolution: {integrity: sha512-suX3WsebzlP7zDlM2NTGQ+NRWETvaQ0y33L6NkOgZXCtOVTn+qOs73pYAfLmuLh/aEvaNctcHGhKWFxYsXdtEA==}
 
-  '@libp2p/interface@3.3.0':
-    resolution: {integrity: sha512-SXahM/4IgpiFKTtocbXYSTA1wEUVjktmT1yBCzBbc2Vgsu1VBCg6SvsFmXo2Hbeyev3D8EU+y3uaCKDB43C/Vg==}
+  '@libp2p/interface-internal@3.1.14':
+    resolution: {integrity: sha512-vmik4OOWnYur7/LI/mJNOxfY9oztHnimFdcGEYQVKPSGyIiE5ryIzJeKJ9FoUFA9I+W1YeMOryilyd4qrnCBnA==}
 
-  '@libp2p/keychain@6.1.7':
-    resolution: {integrity: sha512-kemRM/37UXfkqmZsFFIsICX8iMX3TUShYGaRL7xXqNq3oIebm12e54DW1dtDuUnpNLctdF6zWPPelUHQm50Szg==}
+  '@libp2p/interface@3.3.1':
+    resolution: {integrity: sha512-o+C4OAW+7HWUDylczSxkX/67HRYtSyKj5wAwNXu3CZnfPBw7x2/mvKT7GoHgEvIpW/5VddsSFt+e8CpmldFkHA==}
 
-  '@libp2p/logger@6.2.13':
-    resolution: {integrity: sha512-+tkZuRPoiFdh+frG//3hQ3goV1uMzRblpZ+mwtezgLXkRNqB5YKBLl+c/rtrurwAUqjCuI/yoEPJBiCizg2z6w==}
+  '@libp2p/keychain@6.1.8':
+    resolution: {integrity: sha512-wC9C/DwJYRh60G1BGWejdh0U25MEQ2osuTXYe7csO7ZXkXj09yFp1h9vsuw0d+7Bc22tjubMmA5BUXxRrkJeKA==}
 
-  '@libp2p/multistream-select@7.0.28':
-    resolution: {integrity: sha512-X6rmxeAlFeTDHDc4IPujz+y9TdA8cSMFfWyGJfxdIbQpDc1PwZI/Ttt3YWp0LAT9sbSYVFaWA6cGTN9EnMWtGQ==}
+  '@libp2p/logger@6.2.14':
+    resolution: {integrity: sha512-bkKefJTuVWK350bsRHNasbBpQ2YPsSnIOQhv8/olsXNIUDrbNQg0vcdkc7/xTuClSqc2zzRjbwuayI2yecP92A==}
 
-  '@libp2p/noise@17.0.3':
-    resolution: {integrity: sha512-dUmOjqkkeyUm9NCaFiSEqif1vsLsRFmlZXEfIeREerKXB7sLBvRLbpGiglsLNu7BlA6mrnsQk4BMjZ8aEDqzdA==}
+  '@libp2p/multistream-select@7.0.29':
+    resolution: {integrity: sha512-OOF3mCpP7L0YfyFJyftZpI7zBc2kQuDOq1NJ8se5SuNKaWV66kskNFj0bM0u70cYBmj6GHxAwLXCs/O6uUbc+Q==}
 
-  '@libp2p/peer-collections@7.0.28':
-    resolution: {integrity: sha512-+evafZ5oSnGRfB7z+ycf09ehzNhCKoOZaiHgi6TpnDitpRQM5KQeN0H9Ep2uNJtzyW944HOG41BqcSaHbEHv7Q==}
+  '@libp2p/noise@17.0.4':
+    resolution: {integrity: sha512-THyMhh3UGDVMbFbEJIWAGufRXRtfOqyCNawsRwSiWH1rJOZ65egnIUZDwj/XlHkiFZJmc2p3b1mn3Bi+BUJXSg==}
+
+  '@libp2p/peer-collections@7.0.29':
+    resolution: {integrity: sha512-qpvXWeBmYC0neY9k3dEEpR2EaCTVO6TThHLDlsOB04d/nguC2W0rPPK31sVDeULkyoF9CN6IgbOoAtXsKr83Qg==}
 
   '@libp2p/peer-id@6.0.15':
     resolution: {integrity: sha512-aIbYJcldMNOIzmm9J57aESjZInYFdrQ9AY0ij+qn0Oam2vBxDfEIJZxJu+JzVkB2rVvT+FHDQXKWT2nAqNgB8w==}
 
-  '@libp2p/peer-record@9.0.16':
-    resolution: {integrity: sha512-J4QoPr0F1v6xqjHjAJ9KPbg4jdDlGutDk2K3Km6+o0nWzZCgCGeSEIDOO2UvPa2bFoZTL62cD73fn8tm5K06cg==}
+  '@libp2p/peer-id@6.0.16':
+    resolution: {integrity: sha512-HnoPT+DA4fGb19/iZrhmNvlyawFCavGNRK/WwM+hp3D+N02XKJ/E+IjB+13iABAzhnyBRk5DTZsl2iiGHpuc7A==}
 
-  '@libp2p/peer-store@12.0.28':
-    resolution: {integrity: sha512-dj4qRhN01kml/It5/4P4DVcjfEZXJ2uZVVItCrs2YBGG2HLEYfWQZYROVbTCXDOCWwZK46aJ8eSLt4orsefq7Q==}
+  '@libp2p/peer-record@9.0.17':
+    resolution: {integrity: sha512-GMDBabHAwpM604deTgA6c6iV0nH8EVDlHVCicM8/Wm4qQXAMb6jfEvKRtG6sQ4AGh5uBUsbLFD9V8nDIV6j0pA==}
 
-  '@libp2p/utils@7.4.1':
-    resolution: {integrity: sha512-e9cZeop+awI0rFczG4DvAwVeHqBhuCZfTyskvgONfKQrsT7L0BSlTlTTzZoFF8Dnb+QrzHsoIpnl0PrCr0h+Hg==}
+  '@libp2p/peer-store@12.0.29':
+    resolution: {integrity: sha512-QVTqOMjCoVbD2UAH6XiDdd8IjAlfAdoS+sSVyWiVwqEjMzfdg1QwBnZ13XDEiLcKG7B1YB2SqyDNk/2q1G898Q==}
 
-  '@libp2p/webrtc@6.0.33':
-    resolution: {integrity: sha512-vnjOnmUl7+0Cuy/khNjbDY0KUk/7JZ+fyf27lGmHHZas2mXJ5wzLZOS1b63/5yIq6EtIdouF0wpSdjLh1cvA7g==}
+  '@libp2p/utils@7.4.2':
+    resolution: {integrity: sha512-OWAhPCtvWXPwrkViNxnv8Tqwl5J+s65uGm0Hj6a6cft2lllMhjTEA2ZhR/m2XYMdHWSnjCbvHrqPvAjJX3GcsA==}
 
-  '@libp2p/websockets@10.1.21':
-    resolution: {integrity: sha512-2iItZGEfTlGFUEcFCghtlsIiQ+fBowopysBB/8ya0MvZkRic/6o9oSklWT5pWDmXtmqmbp1Dko/iLcBOhDOgFw==}
+  '@libp2p/webrtc@6.1.0':
+    resolution: {integrity: sha512-fEwM34KUzKHB3vvLhiExSG5ZtQFY6If8zRedt9JgNS1+Tcfgy0glN2WeqlGGjxOJUVnP3tqn7xTg7xJ9ebNPvA==}
+
+  '@libp2p/websockets@10.1.22':
+    resolution: {integrity: sha512-X2s3xfFnVW/uuPKfYsfbypN4Kzyqodpdj/Gtd8tEXPX5pmGAZyet65tEhRiJCD3DlDmMDyHn/S/TKvnPIjz3zw==}
 
   '@multiformats/dns@1.0.15':
     resolution: {integrity: sha512-W0zAMABtAn+3chgFcPGvllKND7M6GblMAAFcJQTy+iMmGiyFErZYPzAh2b50Y3SFf340iFV7+ckVgZkGfUyxzA==}
@@ -1197,12 +1203,12 @@ packages:
     resolution: {integrity: sha512-IYbg1R03CSQGWwl24kGyqrdVtixNSbRaDvBg1r5wyYjTP+VwPQkka1BzTgU5+vxiuwqg04OxdvdJ1xYYFIdUSA==}
     engines: {node: '>=20.0.0'}
 
-  '@react-native-vector-icons/common@13.0.3':
-    resolution: {integrity: sha512-Ty47I/INab3IjPonvo2xlRN1pB/sG5/jCuq49/Vq8Q4MchQ6jSh8vdq5KVcJer3XIyc0DJyC6fKVxN2CGx78YQ==}
+  '@react-native-vector-icons/common@13.0.4':
+    resolution: {integrity: sha512-1MvNyRf3KIW747rJsmka/+EdEwV92ccVHedEXFV2kQ0lo6D7uvrIBTtffeDidN4//l8+R4bN3IiQv0tXQzaRXQ==}
     engines: {node: '>=20.19.0 <21.0.0 || >=22.0.0'}
     hasBin: true
     peerDependencies:
-      '@react-native-vector-icons/get-image': ^13.0.1
+      '@react-native-vector-icons/get-image': ^13.0.2
       '@react-native/assets-registry': '*'
       expo-font: '*'
       react: '*'
@@ -1215,15 +1221,15 @@ packages:
       expo-font:
         optional: true
 
-  '@react-native-vector-icons/material-design-icons@13.1.4':
-    resolution: {integrity: sha512-e4TsGsh+iplLdK4JipUmezjSfqSGpEqMX0H0TsExGUib58nHuyBLnVm7ikN+NHWQSO0fos8X3VxgOzfbYIVLqg==}
+  '@react-native-vector-icons/material-design-icons@13.1.5':
+    resolution: {integrity: sha512-RuGQMy3/A+u+AOrP7uW/n1heGoOYdfreLJ9lKdxtbsyZHQ0QZBJVk9zqErCtQBglOjMPbnKZXjUdc0FI53lYgA==}
     engines: {node: '>= 18.0.0'}
     peerDependencies:
-      '@expo/config-plugins': '>=10.0.0'
+      expo: '*'
       react: '*'
       react-native: '*'
     peerDependenciesMeta:
-      '@expo/config-plugins':
+      expo:
         optional: true
 
   '@react-native/assets-registry@0.86.3':
@@ -1302,25 +1308,25 @@ packages:
       '@types/react':
         optional: true
 
-  '@react-navigation/bottom-tabs@7.20.0':
-    resolution: {integrity: sha512-5T+bmk9xzbRXA3XBvMf4O3UjVO8DzKwYsJczUX0QzC1EDNW3RMTN7Tbg2o+pY7ziK6uGX46RoxX+fXrnU05RYA==}
+  '@react-navigation/bottom-tabs@7.21.0':
+    resolution: {integrity: sha512-G3P88TPiHw9rxGhstwdeVgaBj3YQl8emiF8zLgyfXOF2AIk31myIrtDQeu2Mg5Ad7YWMs4W8zkXuD78xChlTHQ==}
     peerDependencies:
-      '@react-navigation/native': ^7.5.0
+      '@react-navigation/native': ^7.5.1
       react: '>= 18.2.0'
       react-native: '*'
       react-native-safe-area-context: '>= 4.0.0'
       react-native-screens: '>= 4.0.0'
 
-  '@react-navigation/core@7.23.0':
-    resolution: {integrity: sha512-eqj4kcxdFtaoRih4DxLZnPJt/u8aO/K8I4rwpiTx8qIA+TO3/2mScw3+JOE+FQHt2r++Yib7q0nyp0sNAtBcpQ==}
+  '@react-navigation/core@7.24.0':
+    resolution: {integrity: sha512-PPMHGSgLB65eqWOBHeD/nGyzGJV3rcZ5sZbsCXlaC37HnLmwTEjB4CaOQn8CBVVv/Sc0Kl/W5dpPLls9Stk2WA==}
     peerDependencies:
       react: '>= 18.2.0'
 
-  '@react-navigation/elements@2.9.44':
-    resolution: {integrity: sha512-mtngxVeRtB20yPu7AZiNNej0hw5FaKuFtYi3rhsQI2dxQOVgnQh9hi98DxLKrnJDQSiHXa0AX1t/evpywx6UbQ==}
+  '@react-navigation/elements@2.9.45':
+    resolution: {integrity: sha512-r64qCgjA6asQo4Zlv2lAl68ARkfPbV+BNRm3n9JlMoFr4Ma2A+92Z+sWT1coJRoSXkAwVNb70+LjpM6fo6/D4A==}
     peerDependencies:
       '@react-native-masked-view/masked-view': '>= 0.2.0'
-      '@react-navigation/native': ^7.5.0
+      '@react-navigation/native': ^7.5.1
       react: '>= 18.2.0'
       react-native: '*'
       react-native-safe-area-context: '>= 4.0.0'
@@ -1328,23 +1334,23 @@ packages:
       '@react-native-masked-view/masked-view':
         optional: true
 
-  '@react-navigation/native-stack@7.20.0':
-    resolution: {integrity: sha512-iBEABShlkvcQM/ALP+nu7bEtLaan2tQODOWXvYburmLzcXIjSB+6nNfWdY8PhwWDUZCCvU1Xn38YoXmtGJa4/A==}
+  '@react-navigation/native-stack@7.21.0':
+    resolution: {integrity: sha512-bYrNW87nDtbMXAJsosYwu59xwTqeuaurfCDA+62MQ6hY4+2Iv71+Sik3ulW92fOqg8s2SZinOJosHEWoi9Ayqw==}
     peerDependencies:
-      '@react-navigation/native': ^7.5.0
+      '@react-navigation/native': ^7.5.1
       react: '>= 18.2.0'
       react-native: '*'
       react-native-safe-area-context: '>= 4.0.0'
       react-native-screens: '>= 4.0.0'
 
-  '@react-navigation/native@7.5.0':
-    resolution: {integrity: sha512-D4fb1+HWv54re3XgU615pgtdHJa5OsQtypKEbqX10Eopj39tTj4RV/ww9mdzn4X0ZkiHfVos/ysAe5428P0uVA==}
+  '@react-navigation/native@7.5.1':
+    resolution: {integrity: sha512-p9xOvhG8q8rq0FPAoh0JC22ALbyRZt7U2uH8XrHRDjvqOEFrumME7szM6LaWW2WctolAVeZAfOTV+pUKULI/kQ==}
     peerDependencies:
       react: '>= 18.2.0'
       react-native: '*'
 
-  '@react-navigation/routers@7.6.4':
-    resolution: {integrity: sha512-GI7eJm8/KsZUQaYcXvEExikKurRZRgEsSzyZ7faENfi65yqJBCXjDMwyN1pF6pNW1MoLH1ErDwDivFxY6BzD3w==}
+  '@react-navigation/routers@7.6.5':
+    resolution: {integrity: sha512-hpvpVFt6wu3U014F/0Qy45VZCErlUvIV8kN1L6HovN5P9OpbXAzFTaRQmG7VW6czg2tSkUL5S3dZA0HIu5QirQ==}
 
   '@rolldown/binding-android-arm-eabi@1.2.8':
     resolution: {integrity: sha512-tN5aztYkKCte4i5SIrrz5yK/HMjEuCqCSCJa418jOV8tZ1cBY3YF2otxB1ktPxzsLA1BeTqwapK0bfjxNvHJVw==}
@@ -2709,8 +2715,8 @@ packages:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
 
-  libp2p@3.3.11:
-    resolution: {integrity: sha512-+J3Dw1RnGdcpQaPN1HD+Z6xVS3qY0vnsqE2Tu//pfoiJxabaZVkc2FBNnNQ1Sj+Th2qoloeJ11jvxuNXSa1gtA==}
+  libp2p@3.3.12:
+    resolution: {integrity: sha512-Hq0ii7m6VzaglA9bN9/9iD8mAwm+v8edDeHvTniIIQtA2TI2FK2AgVnprWbcoqGQQ/nAa0hhtHIPGzKsLdRhzg==}
 
   lighthouse-logger@1.4.2:
     resolution: {integrity: sha512-gPWxznF6TKmUHrOQjlVo2UbaL2EJ71mb2CCeRs/2qBpi4L/g4LUVc9+3lKQ6DTUZwJswfM7ainGrLO1+fOqa2g==}
@@ -3256,8 +3262,8 @@ packages:
       react: '*'
       react-native: '*'
 
-  react-native-keyboard-controller@1.22.6:
-    resolution: {integrity: sha512-gwJAI3Bhbqs/Ja3uaeBz7EFQSFcem8q4wsXkrC9sy1CL14gjWhBICLu2Ecn7HmezpIu33uhLbirLGyqSawxRtg==}
+  react-native-keyboard-controller@1.22.7:
+    resolution: {integrity: sha512-IBR9z6Nl/iDLRfiv1zN9QQroOXAwYMugeAjVDb+CFbRBNC8fayXlHTBbshVcWc4j95Itsv+1/FgwfxKnIn1Vmg==}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -4534,9 +4540,9 @@ snapshots:
       '@chainsafe/as-chacha20poly1305': 0.1.0
       '@chainsafe/as-sha256': 1.2.5
       '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
+      '@libp2p/interface': 3.3.1
       '@libp2p/peer-id': 6.0.15
-      '@libp2p/utils': 7.4.1
+      '@libp2p/utils': 7.4.2
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
@@ -4547,8 +4553,8 @@ snapshots:
 
   '@chainsafe/libp2p-yamux@8.0.1':
     dependencies:
-      '@libp2p/interface': 3.3.0
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@libp2p/utils': 7.4.2
       race-signal: 2.0.2
       uint8arraylist: 2.4.9
 
@@ -4578,9 +4584,9 @@ snapshots:
   '@ckb-ccc/libp2p@0.3.2(typescript@7.0.2)(zod@3.25.76)':
     dependencies:
       '@ckb-ccc/core': 1.23.0(typescript@7.0.2)(zod@3.25.76)
-      '@libp2p/interface': 3.3.0
-      '@libp2p/interface-internal': 3.1.13
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@libp2p/interface-internal': 3.1.14
+      '@libp2p/utils': 7.4.2
       '@multiformats/multiaddr': 13.0.3
       it-length-prefixed: 11.0.1
     transitivePeerDependencies:
@@ -5064,15 +5070,15 @@ snapshots:
 
   '@leichtgewicht/ip-codec@2.0.5': {}
 
-  '@libp2p/circuit-relay-v2@4.2.13':
+  '@libp2p/circuit-relay-v2@4.2.14':
     dependencies:
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/interface-internal': 3.1.13
-      '@libp2p/peer-collections': 7.0.28
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/peer-record': 9.0.16
-      '@libp2p/utils': 7.4.1
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/interface-internal': 3.1.14
+      '@libp2p/peer-collections': 7.0.29
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/peer-record': 9.0.17
+      '@libp2p/utils': 7.4.2
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
       any-signal: 4.2.0
@@ -5087,7 +5093,7 @@ snapshots:
 
   '@libp2p/crypto@5.1.23':
     dependencies:
-      '@libp2p/interface': 3.3.0
+      '@libp2p/interface': 3.3.1
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
       multiformats: 14.0.5
@@ -5095,14 +5101,24 @@ snapshots:
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/identify@4.1.14':
+  '@libp2p/crypto@5.1.24':
     dependencies:
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/interface-internal': 3.1.13
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/peer-record': 9.0.16
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@noble/curves': 2.4.0
+      '@noble/hashes': 2.4.0
+      multiformats: 14.0.5
+      protons-runtime: 7.1.1
+      uint8arraylist: 3.0.2
+      uint8arrays: 6.1.1
+
+  '@libp2p/identify@4.1.15':
+    dependencies:
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/interface-internal': 3.1.14
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/peer-record': 9.0.17
+      '@libp2p/utils': 7.4.2
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
       it-drain: 3.0.12
@@ -5112,14 +5128,14 @@ snapshots:
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/interface-internal@3.1.13':
+  '@libp2p/interface-internal@3.1.14':
     dependencies:
-      '@libp2p/interface': 3.3.0
-      '@libp2p/peer-collections': 7.0.28
+      '@libp2p/interface': 3.3.1
+      '@libp2p/peer-collections': 7.0.29
       '@multiformats/multiaddr': 13.0.3
       progress-events: 1.1.0
 
-  '@libp2p/interface@3.3.0':
+  '@libp2p/interface@3.3.1':
     dependencies:
       '@multiformats/dns': 1.0.15
       '@multiformats/multiaddr': 13.0.3
@@ -5128,10 +5144,10 @@ snapshots:
       progress-events: 1.1.0
       uint8arraylist: 3.0.2
 
-  '@libp2p/keychain@6.1.7':
+  '@libp2p/keychain@6.1.8':
     dependencies:
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
       '@noble/hashes': 2.4.0
       asn1js: 3.0.10
       interface-datastore: 10.0.1
@@ -5139,30 +5155,30 @@ snapshots:
       sanitize-filename: 1.6.4
       uint8arrays: 6.1.1
 
-  '@libp2p/logger@6.2.13':
+  '@libp2p/logger@6.2.14':
     dependencies:
-      '@libp2p/interface': 3.3.0
+      '@libp2p/interface': 3.3.1
       '@multiformats/multiaddr': 13.0.3
       interface-datastore: 10.0.1
       multiformats: 14.0.5
       weald: 1.1.3
 
-  '@libp2p/multistream-select@7.0.28':
+  '@libp2p/multistream-select@7.0.29':
     dependencies:
-      '@libp2p/interface': 3.3.0
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@libp2p/utils': 7.4.2
       it-length-prefixed: 11.0.1
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/noise@17.0.3':
+  '@libp2p/noise@17.0.4':
     dependencies:
       '@chainsafe/as-chacha20poly1305': 0.1.0
       '@chainsafe/as-sha256': 1.2.5
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/utils': 7.4.1
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/utils': 7.4.2
       '@noble/ciphers': 2.4.0
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
@@ -5171,25 +5187,32 @@ snapshots:
       uint8arrays: 6.1.1
       wherearewe: 2.0.1
 
-  '@libp2p/peer-collections@7.0.28':
+  '@libp2p/peer-collections@7.0.29':
     dependencies:
-      '@libp2p/interface': 3.3.0
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/utils': 7.4.2
       multiformats: 14.0.5
 
   '@libp2p/peer-id@6.0.15':
     dependencies:
       '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
+      '@libp2p/interface': 3.3.1
       multiformats: 14.0.5
       uint8arrays: 6.1.1
 
-  '@libp2p/peer-record@9.0.16':
+  '@libp2p/peer-id@6.0.16':
     dependencies:
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/peer-id': 6.0.15
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      multiformats: 14.0.5
+      uint8arrays: 6.1.1
+
+  '@libp2p/peer-record@9.0.17':
+    dependencies:
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/peer-id': 6.0.16
       '@multiformats/multiaddr': 13.0.3
       multiformats: 14.0.5
       protons-runtime: 7.1.1
@@ -5197,13 +5220,13 @@ snapshots:
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/peer-store@12.0.28':
+  '@libp2p/peer-store@12.0.29':
     dependencies:
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/peer-collections': 7.0.28
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/peer-record': 9.0.16
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/peer-collections': 7.0.29
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/peer-record': 9.0.17
       '@multiformats/multiaddr': 13.0.3
       interface-datastore: 10.0.1
       it-all: 3.0.11
@@ -5214,12 +5237,12 @@ snapshots:
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/utils@7.4.1':
+  '@libp2p/utils@7.4.2':
     dependencies:
       '@chainsafe/is-ip': 2.1.0
       '@chainsafe/netmask': 2.0.0
-      '@libp2p/interface': 3.3.0
-      '@libp2p/logger': 6.2.13
+      '@libp2p/interface': 3.3.1
+      '@libp2p/logger': 6.2.14
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
       '@sindresorhus/fnv1a': 3.1.0
@@ -5242,16 +5265,16 @@ snapshots:
       uint8arraylist: 3.0.2
       uint8arrays: 6.1.1
 
-  '@libp2p/webrtc@6.0.33(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)':
+  '@libp2p/webrtc@6.1.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@chainsafe/is-ip': 2.1.0
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/interface-internal': 3.1.13
-      '@libp2p/keychain': 6.1.7
-      '@libp2p/noise': 17.0.3
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/utils': 7.4.1
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/interface-internal': 3.1.14
+      '@libp2p/keychain': 6.1.8
+      '@libp2p/noise': 17.0.4
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/utils': 7.4.2
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
       '@peculiar/webcrypto': 1.7.1
@@ -5281,10 +5304,10 @@ snapshots:
       - react-native
       - supports-color
 
-  '@libp2p/websockets@10.1.21':
+  '@libp2p/websockets@10.1.22':
     dependencies:
-      '@libp2p/interface': 3.3.0
-      '@libp2p/utils': 7.4.1
+      '@libp2p/interface': 3.3.1
+      '@libp2p/utils': 7.4.2
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
       '@multiformats/multiaddr-to-uri': 12.0.0
@@ -5301,7 +5324,7 @@ snapshots:
   '@multiformats/dns@1.0.15':
     dependencies:
       '@dnsquery/dns-packet': 6.1.1
-      '@libp2p/interface': 3.3.0
+      '@libp2p/interface': 3.3.1
       hashlru: 2.3.0
       p-queue: 9.3.3
       progress-events: 1.1.0
@@ -5499,7 +5522,7 @@ snapshots:
       tslib: 2.8.1
       tsyringe: 4.10.0
 
-  '@react-native-vector-icons/common@13.0.3(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
+  '@react-native-vector-icons/common@13.0.4(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
     dependencies:
       find-up: 8.0.0
       picocolors: 1.1.1
@@ -5510,13 +5533,13 @@ snapshots:
       '@react-native/assets-registry': 0.86.3
       expo-font: 57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
 
-  '@react-native-vector-icons/material-design-icons@13.1.4(@expo/config-plugins@57.0.9(supports-color@10.2.2)(typescript@7.0.2))(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
+  '@react-native-vector-icons/material-design-icons@13.1.5(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
     dependencies:
-      '@react-native-vector-icons/common': 13.0.3(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-native-vector-icons/common': 13.0.4(@react-native/assets-registry@0.86.3)(expo-font@57.0.4(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
     optionalDependencies:
-      '@expo/config-plugins': 57.0.9(supports-color@10.2.2)(typescript@7.0.2)
+      expo: 57.0.27(@babel/core@7.29.7(supports-color@10.2.2))(@expo/dom-webview@57.0.1)(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2)(typescript@7.0.2)
     transitivePeerDependencies:
       - '@react-native-vector-icons/get-image'
       - '@react-native/assets-registry'
@@ -5661,10 +5684,10 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
 
-  '@react-navigation/bottom-tabs@7.20.0(b254226d1d0d87f40f17a482b91ca516)':
+  '@react-navigation/bottom-tabs@7.21.0(851dfd132696bff31e7f13be18c76bcb)':
     dependencies:
-      '@react-navigation/elements': 2.9.44(@react-navigation/native@7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      '@react-navigation/native': 7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-navigation/elements': 2.9.45(@react-navigation/native@7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-navigation/native': 7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       color: 4.2.3
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
@@ -5674,9 +5697,9 @@ snapshots:
     transitivePeerDependencies:
       - '@react-native-masked-view/masked-view'
 
-  '@react-navigation/core@7.23.0(react@19.2.3)':
+  '@react-navigation/core@7.24.0(react@19.2.3)':
     dependencies:
-      '@react-navigation/routers': 7.6.4
+      '@react-navigation/routers': 7.6.5
       escape-string-regexp: 4.0.0
       fast-deep-equal: 3.1.3
       react: 19.2.3
@@ -5684,9 +5707,9 @@ snapshots:
       use-latest-callback: 0.2.6(react@19.2.3)
       use-sync-external-store: 1.7.0(react@19.2.3)
 
-  '@react-navigation/elements@2.9.44(@react-navigation/native@7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
+  '@react-navigation/elements@2.9.45(@react-navigation/native@7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
     dependencies:
-      '@react-navigation/native': 7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-navigation/native': 7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       color: 4.2.3
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
@@ -5694,10 +5717,10 @@ snapshots:
       use-latest-callback: 0.2.6(react@19.2.3)
       use-sync-external-store: 1.7.0(react@19.2.3)
 
-  '@react-navigation/native-stack@7.20.0(b254226d1d0d87f40f17a482b91ca516)':
+  '@react-navigation/native-stack@7.21.0(851dfd132696bff31e7f13be18c76bcb)':
     dependencies:
-      '@react-navigation/elements': 2.9.44(@react-navigation/native@7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      '@react-navigation/native': 7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-navigation/elements': 2.9.45(@react-navigation/native@7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native-safe-area-context@5.7.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      '@react-navigation/native': 7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       color: 4.2.3
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
@@ -5708,9 +5731,9 @@ snapshots:
     transitivePeerDependencies:
       - '@react-native-masked-view/masked-view'
 
-  '@react-navigation/native@7.5.0(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
+  '@react-navigation/native@7.5.1(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
     dependencies:
-      '@react-navigation/core': 7.23.0(react@19.2.3)
+      '@react-navigation/core': 7.24.0(react@19.2.3)
       escape-string-regexp: 4.0.0
       fast-deep-equal: 3.1.3
       nanoid: 3.3.19
@@ -5719,7 +5742,7 @@ snapshots:
       standard-navigation: 0.0.8(react@19.2.3)
       use-latest-callback: 0.2.6(react@19.2.3)
 
-  '@react-navigation/routers@7.6.4':
+  '@react-navigation/routers@7.6.5':
     dependencies:
       nanoid: 3.3.19
 
@@ -6323,7 +6346,7 @@ snapshots:
 
   datastore-core@12.0.1:
     dependencies:
-      '@libp2p/logger': 6.2.13
+      '@libp2p/logger': 6.2.14
       abort-error: 1.0.2
       interface-datastore: 10.0.1
       interface-store: 8.0.0
@@ -7046,19 +7069,19 @@ snapshots:
 
   leven@3.1.0: {}
 
-  libp2p@3.3.11:
+  libp2p@3.3.12:
     dependencies:
       '@chainsafe/is-ip': 2.1.0
       '@chainsafe/netmask': 2.0.0
-      '@libp2p/crypto': 5.1.23
-      '@libp2p/interface': 3.3.0
-      '@libp2p/interface-internal': 3.1.13
-      '@libp2p/logger': 6.2.13
-      '@libp2p/multistream-select': 7.0.28
-      '@libp2p/peer-collections': 7.0.28
-      '@libp2p/peer-id': 6.0.15
-      '@libp2p/peer-store': 12.0.28
-      '@libp2p/utils': 7.4.1
+      '@libp2p/crypto': 5.1.24
+      '@libp2p/interface': 3.3.1
+      '@libp2p/interface-internal': 3.1.14
+      '@libp2p/logger': 6.2.14
+      '@libp2p/multistream-select': 7.0.29
+      '@libp2p/peer-collections': 7.0.29
+      '@libp2p/peer-id': 6.0.16
+      '@libp2p/peer-store': 12.0.29
+      '@libp2p/utils': 7.4.2
       '@multiformats/dns': 1.0.15
       '@multiformats/multiaddr': 13.0.3
       '@multiformats/multiaddr-matcher': 3.0.2
@@ -7655,7 +7678,7 @@ snapshots:
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
 
-  react-native-keyboard-controller@1.22.6(react-native-reanimated@4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
+  react-native-keyboard-controller@1.22.7(react-native-reanimated@4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
     dependencies:
       react: 19.2.3
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
