@@ -26,7 +26,7 @@
     "@libp2p/interface": "3.3.1",
     "@libp2p/interface-internal": "3.1.14",
     "@libp2p/utils": "7.4.2",
-    "@libp2p/webrtc": "6.1.0",
+    "@libp2p/webrtc": "7.0.2",
     "@libp2p/websockets": "10.1.22",
     "@multiformats/multiaddr": "13.0.3",
     "@noble/curves": "2.4.0",
