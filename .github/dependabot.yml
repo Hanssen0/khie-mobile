@@ -19,6 +19,11 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: react
       - dependency-name: react-native
+      - dependency-name: react-native-keyboard-controller
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
       - dependency-name: react-native-reanimated
       - dependency-name: react-native-worklets
       - dependency-name: react-native-safe-area-context
