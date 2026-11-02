@@ -16,10 +16,11 @@ function installedVersion(name: string): string {
 }
 
 describe("native dependency compatibility", () => {
-  it("keeps React, React Native and worklet packages on the SDK-tested versions", () => {
+  it("keeps React, React Native, keyboard and worklet packages on SDK-tested versions", () => {
     for (const name of [
       "react",
       "react-native",
+      "react-native-keyboard-controller",
       "react-native-reanimated",
       "react-native-worklets",
     ] as const) {
