@@ -92,3 +92,30 @@ the signing certificate fingerprint.
 The former development APK uses a different debug certificate. It cannot update
 to this release identity. Before uninstalling it, users must back up their
 mnemonic; uninstalling clears the app's local wallet data.
+
+## Release versions and preflight
+
+For each release, bump `package.json.version` and `app.json.expo.version`
+together and increment `app.json.expo.android.versionCode`. The dynamic Expo
+config reads the version from `package.json`; the dependency lockfile does not
+record the root package version.
+
+Before dependency installation, the verification job checks version consistency
+and uses read-only GitHub API calls to reject an existing release or exact tag
+for that version. It checks all release pages and ignores tag prefix matches.
+All API failures, including 404, authentication, rate-limit and network errors,
+fail the check; only successful lists can establish absence. Existing releases
+(including immutable releases and visible drafts) and tags are intentionally
+never reused, even at the same commit. Use a fresh version after a partial
+publication instead of rerunning against an occupied version.
+
+The protected release job repeats this check immediately after checkout, before
+installing dependencies or generating/building Android, to catch changes during
+verification or environment approval. Draft visibility depends on the token's
+access; the release job uses its existing contents-write token. These checks do
+not prove write permission, signing-secret availability or tag-rule compliance,
+and do not reserve a version or eliminate races with later publication. The
+publish step remains authoritative. No release or tag is created by preflight.
+
+Run the dependency-free preflight tests with
+`node --test scripts/release-preflight.test.cjs`; they also run in `pnpm test`.
