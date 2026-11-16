@@ -29,6 +29,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check release version availability
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const preflight = require('./scripts/release-preflight.cjs');
+            const tag = await preflight({ github, context });
+            core.info(`Release preflight passed for ${tag}; publication is not guaranteed.`);
+            core.exportVariable('RELEASE_VERSION', tag);
+
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@v3
         with:
@@ -60,6 +69,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Check release version availability
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const preflight = require('./scripts/release-preflight.cjs');
+            const tag = await preflight({ github, context });
+            core.info(`Release preflight passed for ${tag}; publication is not guaranteed.`);
+            core.exportVariable('RELEASE_VERSION', tag);
 
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@v3
@@ -128,8 +146,6 @@ jobs:
       - name: Prepare release assets
         shell: bash
         run: |
-          RELEASE_VERSION="v$(node --input-type=module --eval 'import pkg from "./package.json" with { type: "json" }; process.stdout.write(pkg.version)')"
-          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
           mkdir -p release
           cp android/app/build/outputs/apk/release/app-arm64-v8a-release.apk "release/khie-mobile-${RELEASE_VERSION}-arm64-v8a.apk"
           cp android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk "release/khie-mobile-${RELEASE_VERSION}-armeabi-v7a.apk"

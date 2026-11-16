@@ -1,6 +1,6 @@
 {
   "name": "khie-wallet",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": true,
   "main": "index.ts",
   "packageManager": "pnpm@12.4.2",
@@ -9,7 +9,7 @@
     "android": "expo run:android",
     "prebuild": "expo prebuild",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node --test scripts/release-preflight.test.cjs && vitest run",
     "test:watch": "vitest",
     "doctor:expo": "EXPO_NO_TELEMETRY=1 pnpm dlx expo-doctor@latest"
   },
