@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
 
       - name: Check release version availability
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const preflight = require('./scripts/release-preflight.cjs');
@@ -71,7 +71,7 @@ jobs:
           persist-credentials: false
 
       - name: Check release version availability
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const preflight = require('./scripts/release-preflight.cjs');
