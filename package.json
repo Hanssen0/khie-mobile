@@ -69,10 +69,10 @@
     "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
-    "@types/node": "26.6.6",
+    "@types/node": "26.6.11",
     "@types/react": "~19.3.0",
     "typescript": "7.0.2",
-    "vitest": "5.1.1"
+    "vitest": "5.1.2"
   },
   "expo": {
     "install": {
